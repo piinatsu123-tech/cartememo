@@ -2,1168 +2,1217 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>カルテメモ</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CarteMemo</title>
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: system-ui, sans-serif; background: #f5f5f5; color: #222; min-width: 820px; }
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap');
+:root{
+  --bg:#0f1117;--surface:#181c27;--surface2:#1e2335;--surface3:#252b40;
+  --border:#2d3452;--border2:#3d4570;
+  --accent:#4f8ef7;--accent2:#3b6fd4;--accent-glow:rgba(79,142,247,0.15);
+  --green:#3ecf8e;--green-glow:rgba(62,207,142,0.15);
+  --warn:#f5a623;--danger:#e74c5e;--discord:#5865f2;
+  --text:#e8eaf2;--text2:#9ca3c8;--text3:#5a6080;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Noto Sans JP',sans-serif;font-size:14px;min-height:100vh}
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 20px;height:52px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:200}
+.logo{font-size:17px;font-weight:700;color:var(--text)}.logo em{color:var(--accent);font-style:normal}
+header .spacer{flex:1}
+.hdr-pill{font-size:11px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px 10px;display:flex;align-items:center;gap:5px}
+.hdr-pill .dot{width:7px;height:7px;border-radius:50%;background:var(--text3)}
+.hdr-pill .dot.on{background:var(--green);box-shadow:0 0 6px var(--green)}
+.tab-bar{display:flex;background:var(--surface);border-bottom:1px solid var(--border);padding:0 20px;overflow-x:auto}
+.tab{padding:10px 16px;font-size:13px;font-weight:500;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.tab:hover{color:var(--text2)}.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tab .badge{background:var(--warn);color:#000;font-size:10px;font-weight:700;border-radius:10px;padding:1px 6px;min-width:18px;text-align:center}
+.layout{display:flex;min-height:calc(100vh - 97px)}
+.sidebar{width:260px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);overflow-y:auto;position:sticky;top:52px;height:calc(100vh - 97px)}
+.main{flex:1;min-width:0}
+.tab-page{display:none;padding:20px;flex-direction:column;gap:16px}
+.tab-page.active{display:flex}
+.s-section{padding:14px 16px;border-bottom:1px solid var(--border)}
+.s-title{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:10px}
+label{font-size:12px;color:var(--text2);display:block;margin-bottom:4px;margin-top:8px}
+label:first-of-type{margin-top:0}
+input,textarea,select{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'Noto Sans JP',sans-serif;font-size:13px;padding:7px 10px;outline:none;transition:border-color .2s}
+input:focus,textarea:focus{border-color:var(--accent)}
+input[type=password]{font-family:'JetBrains Mono',monospace;letter-spacing:.05em}
+input[type=checkbox]{width:auto;margin:0}
+.input-hint{font-size:11px;color:var(--text3);margin-top:4px;line-height:1.5}
+.dict-tags{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;max-height:160px;overflow-y:auto}
+.dict-tag{display:inline-flex;align-items:center;gap:3px;background:var(--surface2);border:1px solid var(--green);border-radius:20px;padding:2px 10px 2px 12px}
+.dt-word{color:var(--green);font-size:11px;font-family:'JetBrains Mono',monospace}
+.dt-del{background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;line-height:1}.dt-del:hover{color:var(--danger)}
+.master-list{max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
+.m-row{display:flex;justify-content:space-between;align-items:center;background:var(--surface2);border-radius:4px;padding:4px 8px;font-size:12px;cursor:pointer;transition:background .15s}
+.m-row:hover{background:var(--surface3)}.m-name{color:var(--text)}.m-price{color:var(--accent);font-family:'JetBrains Mono',monospace;font-size:11px}
+.btn{border:none;border-radius:6px;cursor:pointer;font-family:'Noto Sans JP',sans-serif;font-weight:500;font-size:13px;padding:8px 16px;transition:all .15s;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{background:var(--accent2)}.btn-primary:disabled{opacity:.4;cursor:not-allowed}
+.btn-ghost{background:var(--surface2);color:var(--text);border:1px solid var(--border)}.btn-ghost:hover{border-color:var(--border2)}
+.btn-green{background:var(--green);color:#0a1a12;font-weight:700}.btn-green:hover{filter:brightness(1.1)}.btn-green:disabled{opacity:.4;cursor:not-allowed}
+.btn-danger{background:var(--danger);color:#fff}.btn-discord{background:var(--discord);color:#fff}.btn-discord:hover{filter:brightness(1.15)}.btn-discord:disabled{opacity:.4;cursor:not-allowed}
+.btn-sm{padding:5px 10px;font-size:12px}.btn-xs{padding:3px 8px;font-size:11px}.btn-full{width:100%;justify-content:center}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.panel-hdr{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;background:var(--surface2)}
+.panel-hdr h2{font-size:13px;font-weight:600;flex:1}
+.step-badge{font-size:10px;font-family:'JetBrains Mono',monospace;background:var(--accent-glow);color:var(--accent);border:1px solid var(--accent);border-radius:20px;padding:2px 8px}
+.panel-body{padding:14px}
+.memo-queue{display:flex;flex-direction:column;gap:8px}
+.memo-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;position:relative;transition:border-color .2s}
+.memo-card:hover{border-color:var(--border2)}.memo-card.processing{border-color:var(--accent);animation:pulse 1.5s infinite}.memo-card.done{border-color:var(--green);opacity:.75}
+@keyframes pulse{0%,100%{box-shadow:none}50%{box-shadow:0 0 8px var(--accent-glow)}}
+.mc-header{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.mc-num{font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text3);background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 6px}
+.mc-time{font-size:11px;color:var(--text3)}.mc-status{margin-left:auto;font-size:11px;font-weight:500}
+.mc-status.pending{color:var(--warn)}.mc-status.processing{color:var(--accent)}.mc-status.done{color:var(--green)}
+.mc-patient{font-size:13px;font-weight:500;color:var(--text);margin-bottom:4px}
+.mc-text{font-size:12px;color:var(--text2);line-height:1.5;max-height:60px;overflow:hidden;position:relative}
+.mc-text::after{content:'';position:absolute;bottom:0;left:0;right:0;height:20px;background:linear-gradient(transparent,var(--surface2))}
+.mc-actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+.new-memo-form{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px}
+.new-memo-form textarea{min-height:100px;resize:vertical;font-size:14px;line-height:1.6}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.results-list{display:flex;flex-direction:column;gap:20px;padding-right:4px}
+.result-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.rc-header{background:var(--surface2);border-bottom:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;gap:10px}
+.rc-patient{font-size:13px;font-weight:600}.rc-time{font-size:11px;color:var(--text3)}
+.rc-total{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:var(--green)}
+.rc-body{padding:12px 14px;max-height:320px;overflow-y:auto}
+.items-table{width:100%;border-collapse:collapse;font-size:13px}
+.items-table th{text-align:left;padding:5px 8px;font-size:10px;font-weight:600;letter-spacing:.05em;color:var(--text3);text-transform:uppercase;border-bottom:1px solid var(--border)}
+.items-table td{padding:6px 8px;border-bottom:1px solid var(--border)}.items-table tr:last-child td{border-bottom:none}.items-table tr:hover td{background:var(--surface2)}
+.name-cell{color:var(--text);font-weight:500}.name-cell.unknown{color:var(--warn)}
+.num-cell{font-family:'JetBrains Mono',monospace;color:var(--text2);text-align:right}
+.price-cell{font-family:'JetBrains Mono',monospace;color:var(--text2);text-align:right}
+.sub-cell{font-family:'JetBrains Mono',monospace;color:var(--text);text-align:right;font-weight:500}
+.qty-input{width:55px;padding:2px 5px;font-size:12px;font-family:'JetBrains Mono',monospace;text-align:right}
+.del-row{background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 3px}.del-row:hover{color:var(--danger)}
+.formula-line{background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:6px 10px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);word-break:break-all;margin-top:8px}
+.formula-line span{color:var(--accent)}
+.rc-actions{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--border);flex-wrap:wrap}
+.batch-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px}
+.batch-bar .count{font-size:12px;color:var(--text2)}
+.batch-progress{flex:1;min-width:120px;height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+.batch-progress-bar{height:100%;background:var(--accent);border-radius:3px;transition:width .4s ease}
+.empty-state{text-align:center;padding:40px 20px;color:var(--text3);font-size:13px}
+.empty-state .es-icon{font-size:36px;margin-bottom:10px;opacity:.4}
+.toast-wrap{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:6px;z-index:9999}
+.toast{background:var(--surface3);border:1px solid var(--border2);border-radius:7px;padding:8px 14px;font-size:13px;color:var(--text);display:flex;align-items:center;gap:7px;animation:slideIn .2s ease;box-shadow:0 4px 16px rgba(0,0,0,.4)}
+.toast.success{border-color:var(--green);color:var(--green)}.toast.error{border-color:var(--danger);color:var(--danger)}
+@keyframes slideIn{from{transform:translateX(30px);opacity:0}to{transform:translateX(0);opacity:1}}
+.spinner{width:14px;height:14px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;display:inline-block;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
 
-/* Header */
-header {
-  background: #fff;
-  border-bottom: 1px solid #ddd;
-  padding: 12px 24px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-header h1 { font-size: 18px; font-weight: 700; color: #333; }
-.api-status { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #555; }
-.status-dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; flex-shrink: 0; }
-.status-dot.ok { background: #4caf50; }
-.api-key-wrap { display: flex; gap: 6px; margin-left: auto; align-items: center; }
-.api-key-wrap input {
-  width: 280px;
-  padding: 6px 10px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 13px;
-}
-.api-key-wrap button {
-  padding: 6px 14px;
-  background: #555;
-  color: #fff;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 13px;
-}
-.api-key-wrap button:hover { background: #333; }
+/* ===== KARTE ===== */
+.filter-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:14px}
+.filter-bar select,.filter-bar input[type=text]{width:auto;flex:none}
+.filter-bar label{margin:0;display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--text2);font-size:13px}
+.karte-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:10px}
+.karte-card.unclosed{border-color:var(--warn)}
+.karte-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px}
+.karte-title{font-size:14px;font-weight:700;color:var(--text)}
+.karte-badge{font-size:10px;padding:2px 8px;border-radius:10px;border:1px solid}
+.badge-unclosed{color:var(--warn);border-color:var(--warn)}
+.badge-closed{color:var(--green);border-color:var(--green)}
+.karte-records{margin-bottom:10px}
+.karte-rec{display:flex;gap:10px;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px}
+.karte-rec:last-child{border-bottom:none}
+.rec-date{color:var(--text3);width:48px;flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:12px}
+.rec-content{flex:1;color:var(--text2)}
+.rec-amt{text-align:right;width:90px;flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:12px}
+.karte-totals{border-top:1px solid var(--border);padding-top:10px}
+.total-row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:13px}
+.total-row.elec-row{gap:8px}
+.total-val{font-family:'JetBrains Mono',monospace}
+.diff-pos{color:var(--green);font-weight:700}
+.diff-neg{color:var(--danger);font-weight:700}
+.elec-input-wrap{display:flex;gap:6px;align-items:center}
+.elec-input-wrap input{width:120px;text-align:right;padding:4px 8px;font-size:12px;font-family:'JetBrains Mono',monospace}
 
-/* Tabs */
-nav.tabs {
-  background: #fff;
-  border-bottom: 1px solid #ddd;
-  display: flex;
-  padding: 0 24px;
-}
-.tab-btn {
-  padding: 12px 22px;
-  border: none;
-  background: none;
-  cursor: pointer;
-  font-size: 14px;
-  color: #666;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  transition: color 0.15s;
-}
-.tab-btn.active { color: #1976d2; border-bottom-color: #1976d2; font-weight: 600; }
-.tab-btn:hover:not(.active) { color: #333; }
+/* ===== STATS ===== */
+.stats-table{width:100%;border-collapse:collapse;font-size:13px}
+.stats-table th{background:var(--surface2);padding:8px 12px;text-align:right;border:1px solid var(--border);font-size:12px;white-space:nowrap}
+.stats-table th:first-child{text-align:left}
+.stats-table td{padding:7px 12px;text-align:right;border:1px solid var(--border)}
+.stats-table td:first-child{text-align:left;font-weight:600}
+.stats-table tr:nth-child(even) td{background:var(--surface2)}
 
-/* Main */
-main { padding: 24px; max-width: 1100px; }
-.tab-content { display: none; }
-.tab-content.active { display: block; }
+/* ===== MODAL ===== */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:500;display:flex;align-items:center;justify-content:center}
+.modal-box{background:var(--surface);border:1px solid var(--border2);border-radius:10px;padding:20px;width:400px;max-width:90vw;max-height:90vh;overflow-y:auto}
+.modal-title{font-size:14px;font-weight:700;margin-bottom:14px}
 
-/* Section card */
-.section {
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  padding: 20px;
-  margin-bottom: 16px;
+@media(max-width:768px){
+  .layout{flex-direction:column}
+  .sidebar{width:100%;height:auto;position:static;border-right:none;border-bottom:1px solid var(--border)}
+  .tab-page{padding:14px;gap:12px}
+  .form-row{grid-template-columns:1fr}
+  .new-memo-form textarea{font-size:16px}
+  .btn{padding:10px 14px;font-size:14px}
+  .tab{padding:8px 12px;font-size:12px}
 }
-.section-title {
-  font-size: 12px;
-  font-weight: 700;
-  color: #888;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  margin-bottom: 12px;
-}
-
-/* Form elements */
-textarea {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 14px;
-  font-family: inherit;
-  resize: vertical;
-  line-height: 1.6;
-}
-textarea:focus { outline: none; border-color: #1976d2; box-shadow: 0 0 0 2px rgba(25,118,210,0.1); }
-input[type="text"], input[type="number"], input[type="date"], input[type="password"] {
-  padding: 7px 10px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 14px;
-  font-family: inherit;
-}
-input:focus { outline: none; border-color: #1976d2; box-shadow: 0 0 0 2px rgba(25,118,210,0.1); }
-
-/* Buttons */
-.btn {
-  padding: 8px 16px;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-  font-family: inherit;
-  transition: background 0.15s;
-}
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-primary { background: #1976d2; color: #fff; }
-.btn-primary:hover:not(:disabled) { background: #1565c0; }
-.btn-success { background: #388e3c; color: #fff; }
-.btn-success:hover:not(:disabled) { background: #2e7d32; }
-.btn-secondary { background: #f0f0f0; color: #333; border: 1px solid #ddd; }
-.btn-secondary:hover:not(:disabled) { background: #e4e4e4; }
-.btn-danger { background: #e53935; color: #fff; }
-.btn-danger:hover:not(:disabled) { background: #c62828; }
-.btn-sm { padding: 4px 10px; font-size: 12px; }
-
-/* Result table */
-.result-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-.result-table th {
-  background: #f8f8f8;
-  text-align: left;
-  padding: 8px 10px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #666;
-  border-bottom: 2px solid #eee;
-}
-.result-table td { padding: 5px 8px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
-.result-table input[type="date"] { width: 140px; }
-.result-table input[type="text"] { width: 100%; }
-.result-table input[type="number"] { width: 100px; text-align: right; }
-
-/* Save form */
-.save-form { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
-.save-form .field { display: flex; flex-direction: column; gap: 4px; }
-.save-form .field label { font-size: 12px; color: #666; font-weight: 600; }
-.save-form .field input { width: 200px; }
-
-/* Karte cards */
-.karte-card {
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  padding: 16px;
-  margin-bottom: 10px;
-}
-.karte-card.unclosed {
-  background: #fffde7;
-  border-color: #ffca28;
-}
-.karte-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-.karte-title {
-  font-size: 15px;
-  font-weight: 700;
-  color: #222;
-}
-.karte-badge {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 10px;
-}
-.badge-unclosed { background: #fff3e0; color: #e65100; border: 1px solid #ffcc80; }
-.badge-closed { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
-
-.karte-records { margin-bottom: 10px; }
-.karte-record {
-  display: flex;
-  gap: 12px;
-  padding: 5px 0;
-  border-bottom: 1px solid #f0f0f0;
-  font-size: 14px;
-}
-.karte-record:last-child { border-bottom: none; }
-.rec-date { color: #777; width: 52px; flex-shrink: 0; }
-.rec-content { flex: 1; }
-.rec-amount { text-align: right; width: 90px; flex-shrink: 0; color: #333; }
-
-.karte-totals {
-  border-top: 2px solid #eee;
-  padding-top: 10px;
-  margin-top: 6px;
-}
-.total-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 5px 0;
-  font-size: 14px;
-}
-.total-row.paper { color: #555; }
-.total-row.diff-positive { color: #2e7d32; font-weight: 700; }
-.total-row.diff-negative { color: #c62828; font-weight: 700; }
-.total-row.diff-zero { color: #555; font-weight: 700; }
-.elec-input-row { display: flex; align-items: center; gap: 8px; }
-.elec-input-row input {
-  width: 130px;
-  text-align: right;
-  padding: 5px 8px;
-}
-
-/* Filter bar */
-.filter-bar {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  padding: 12px 16px;
-}
-.filter-bar select {
-  padding: 6px 10px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 14px;
-  background: #fff;
-}
-.filter-bar input[type="text"] { width: 140px; }
-.filter-bar label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 14px;
-  cursor: pointer;
-  user-select: none;
-}
-.filter-bar input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; }
-
-/* Stats table */
-.stats-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-.stats-table th {
-  background: #f5f5f5;
-  padding: 10px 14px;
-  text-align: right;
-  font-size: 13px;
-  border: 1px solid #ddd;
-  font-weight: 600;
-  white-space: nowrap;
-}
-.stats-table th:first-child { text-align: left; }
-.stats-table td { padding: 9px 14px; text-align: right; border: 1px solid #eee; }
-.stats-table td:first-child { text-align: left; font-weight: 600; }
-.stats-table tr:nth-child(even) td { background: #fafafa; }
-.diff-pos { color: #2e7d32; }
-.diff-neg { color: #c62828; }
-
-/* Month filter row */
-.stats-controls {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-.stats-controls label { font-size: 14px; color: #555; }
-.stats-controls select {
-  padding: 6px 10px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 14px;
-}
-
-/* Bookmarklet */
-.bookmarklet-block {
-  background: #f8f8f8;
-  border: 1px solid #e0e0e0;
-  border-radius: 4px;
-  padding: 12px 14px;
-  font-family: 'Courier New', monospace;
-  font-size: 11px;
-  color: #333;
-  word-break: break-all;
-  line-height: 1.5;
-  margin: 10px 0;
-}
-
-/* Messages */
-.msg {
-  padding: 9px 14px;
-  border-radius: 4px;
-  font-size: 13px;
-  margin-top: 8px;
-}
-.msg-success { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
-.msg-error { background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
-.msg-info { background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; }
-
-/* Spinner */
-.spinner {
-  display: inline-block;
-  width: 14px; height: 14px;
-  border: 2px solid #ccc;
-  border-top-color: #1976d2;
-  border-radius: 50%;
-  animation: spin 0.6s linear infinite;
-  vertical-align: middle;
-  margin-right: 6px;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* Empty state */
-.empty { color: #aaa; font-size: 14px; text-align: center; padding: 48px 0; }
-
-/* Divider */
-.divider { border: none; border-top: 1px solid #eee; margin: 16px 0; }
-
-.header-actions { display: flex; gap: 8px; align-items: center; }
-
-/* Karte delete confirmation */
-.karte-actions { display: flex; gap: 8px; align-items: center; }
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
 </style>
 </head>
 <body>
 
 <header>
-  <h1>カルテメモ</h1>
-  <div class="api-status">
-    <div class="status-dot" id="status-dot"></div>
-    <span id="status-text">未設定</span>
-  </div>
-  <div class="api-key-wrap">
-    <input type="password" id="api-key-input" placeholder="Claude APIキー (sk-ant-...)" autocomplete="off">
-    <button onclick="saveApiKey()">保存</button>
-  </div>
+  <div class="logo">Carte<em>Memo</em></div>
+  <div class="spacer"></div>
+  <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
 </header>
 
-<nav class="tabs">
-  <button class="tab-btn active" data-tab="analyze">解析</button>
-  <button class="tab-btn" data-tab="kartes">カルテ一覧</button>
-  <button class="tab-btn" data-tab="stats">集計</button>
-</nav>
+<div class="tab-bar">
+  <div class="tab active" onclick="switchTab('memo')" id="tab-memo">📝 往診メモ<span class="badge" id="pendingBadge" style="display:none">0</span></div>
+  <div class="tab" onclick="switchTab('calc')" id="tab-calc">🧮 一括計算</div>
+  <div class="tab" onclick="switchTab('karte')" id="tab-karte">📋 カルテ一覧</div>
+  <div class="tab" onclick="switchTab('stats')" id="tab-stats">📊 集計</div>
+  <div class="tab" onclick="switchTab('conv')" id="tab-conv">🔄 電カル変換</div>
+  <div class="tab" onclick="switchTab('settings')" id="tab-settings">⚙️ 設定</div>
+</div>
+
+<div class="layout">
+<aside class="sidebar">
+  <div class="s-section">
+    <div class="s-title">マスター一覧</div>
+    <input type="text" id="masterSearch" placeholder="品目を検索..." oninput="renderMasterList()" style="margin-bottom:8px">
+    <div class="master-list" id="masterList"></div>
+    <p class="input-hint" style="margin-top:5px">クリックで計算中の行に追加</p>
+  </div>
+</aside>
 
 <main>
 
-  <!-- ========== Tab 1: 解析 ========== -->
-  <div id="tab-analyze" class="tab-content active">
-
-    <div class="section">
-      <div class="section-title">音声テキスト入力</div>
-      <textarea id="voice-input" rows="7"
-        placeholder="音声メモを貼り付けてください（複数日分まとめてOK）&#10;例：&#10;1月13日 A牧場 0001番 初診 アンピシリン 100ml 筋注 3000円&#10;14日 再診 アンピ im 1500円"></textarea>
-      <div style="display:flex; gap:10px; align-items:center; margin-top:10px;">
-        <button class="btn btn-primary" id="analyze-btn" onclick="analyzeText()">AI解析</button>
-        <div id="analyze-msg"></div>
-      </div>
+<!-- ===== 往診メモ ===== -->
+<div class="tab-page active" id="page-memo">
+  <div class="new-memo-form">
+    <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:10px">🎤 新しいメモを追加</div>
+    <div class="form-row">
+      <div><label>患者番号（牛番号）</label><input type="text" id="newPatientNo" placeholder="例: 0001"></div>
+      <div><label>飼い主（農場）名</label><input type="text" id="newOwnerName" list="farmDatalist" placeholder="例: A牧場" autocomplete="off"></div>
     </div>
-
-    <div class="section" id="result-section" style="display:none;">
-      <div class="section-title">解析結果（編集可）</div>
-      <table class="result-table" id="result-table">
-        <thead>
-          <tr>
-            <th style="width:150px;">日付</th>
-            <th>診療内容</th>
-            <th style="width:120px;">金額（円）</th>
-            <th style="width:44px;"></th>
-          </tr>
-        </thead>
-        <tbody id="result-tbody"></tbody>
-      </table>
-      <button class="btn btn-secondary btn-sm" onclick="addResultRow()">＋ 行を追加</button>
-
-      <hr class="divider">
-
-      <div class="section-title">カルテに保存</div>
-      <div class="save-form">
-        <div class="field">
-          <label>農場名</label>
-          <input list="farm-datalist" id="farm-input" placeholder="A牧場" autocomplete="off">
-          <datalist id="farm-datalist"></datalist>
-        </div>
-        <div class="field">
-          <label>牛番号</label>
-          <input type="text" id="cow-input" placeholder="0001" style="width:140px;">
-        </div>
-        <div class="field" style="justify-content:flex-end;">
-          <button class="btn btn-success" onclick="saveKarte()">カルテに保存</button>
-        </div>
-      </div>
-      <div id="save-msg"></div>
+    <datalist id="farmDatalist"></datalist>
+    <label>音声メモ</label>
+    <textarea id="newMemoText" placeholder="iPhoneで音声入力→URLでインポート、またはここに直接貼り付け"></textarea>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn btn-ghost btn-sm" onclick="pasteFromClipboard()" style="white-space:nowrap;flex-shrink:0">📋 貼り付け</button>
+      <button class="btn btn-primary btn-full" onclick="addMemo()">＋ メモを保存</button>
     </div>
-
   </div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+    <div style="font-size:12px;font-weight:600;color:var(--text2)">保存済みメモ <span id="queueCount" style="color:var(--text3)">0件</span></div>
+    <button class="btn btn-ghost btn-xs" onclick="clearDoneMemos()">完了済みを削除</button>
+  </div>
+  <div class="memo-queue" id="memoQueue">
+    <div class="empty-state"><div class="es-icon">🐄</div>メモがありません</div>
+  </div>
+</div>
 
-  <!-- ========== Tab 2: カルテ一覧 ========== -->
-  <div id="tab-kartes" class="tab-content">
+<!-- ===== 一括計算 ===== -->
+<div class="tab-page" id="page-calc">
+  <div class="batch-bar">
+    <div class="count">未処理: <b id="pendingCount">0</b>件</div>
+    <div class="batch-progress"><div class="batch-progress-bar" id="batchBar" style="width:0%"></div></div>
+    <button class="btn btn-green" id="batchBtn" onclick="batchProcess()">
+      ⚡ まとめてAI解析
+    </button>
+    <button class="btn btn-discord btn-sm" id="sendAllBtn" onclick="sendAllToDiscord()" style="display:none">一括Discord送信</button>
+  </div>
+  <div class="results-list" id="resultsList">
+    <div class="empty-state"><div class="es-icon">📋</div>「往診メモ」タブでメモを追加してから<br>「まとめてAI解析」を押してください</div>
+  </div>
+</div>
 
-    <div class="filter-bar">
-      <select id="filter-farm" onchange="renderKartes()">
-        <option value="">全農場</option>
-      </select>
-      <input type="text" id="filter-cow" placeholder="牛番号で検索" oninput="renderKartes()">
-      <label>
-        <input type="checkbox" id="filter-unclosed" onchange="renderKartes()">
-        電子未入力のみ
-      </label>
-      <span id="karte-count" style="font-size:13px; color:#999; margin-left:auto;"></span>
+<!-- ===== カルテ一覧 ===== -->
+<div class="tab-page" id="page-karte">
+  <div class="filter-bar">
+    <select id="karte-filter-farm" onchange="renderKarteList()" style="width:140px">
+      <option value="">全農場</option>
+    </select>
+    <input type="text" id="karte-filter-cow" placeholder="牛番号" oninput="renderKarteList()" style="width:120px">
+    <label><input type="checkbox" id="karte-filter-unclosed" onchange="renderKarteList()"> 電子未入力のみ</label>
+    <span id="karte-count" style="font-size:12px;color:var(--text3);margin-left:auto"></span>
+  </div>
+  <div id="karteList"></div>
+</div>
+
+<!-- ===== 集計 ===== -->
+<div class="tab-page" id="page-stats">
+  <div class="batch-bar">
+    <label style="font-size:13px;color:var(--text2);margin:0">表示期間:</label>
+    <select id="stats-range" onchange="renderStats()" style="width:auto;flex:none">
+      <option value="3">直近3ヶ月</option>
+      <option value="6">直近6ヶ月</option>
+      <option value="12">直近12ヶ月</option>
+      <option value="0">全期間</option>
+    </select>
+    <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="exportCSV()">↓ CSVエクスポート</button>
+  </div>
+  <div id="statsContainer"></div>
+</div>
+
+<!-- ===== 電カル変換 ===== -->
+<div class="tab-page" id="page-conv">
+  <div class="panel">
+    <div class="panel-hdr"><h2>🔄 電子カルテレコード作成</h2><span class="step-badge">AI変換</span></div>
+    <div class="panel-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+        <div><label>日付（YYYYMMDD）</label><input type="text" id="convDate" placeholder="20260517" oninput="updateKartePreview()"></div>
+        <div><label>時間</label><input type="text" id="convTime" placeholder="例: 10:30" oninput="updateKartePreview()"></div>
+        <div><label>往診元</label><input type="text" id="convOwnerName" placeholder="例: A牧場" oninput="updateKartePreview()"></div>
+        <div><label>往診距離</label><input type="text" id="convDistance" placeholder="例: 5km" oninput="updateKartePreview()"></div>
+        <div><label>体温</label><input type="text" id="convTemp" placeholder="例: 38.5" oninput="updateKartePreview()"></div>
+        <div><label>症状/所見</label><input type="text" id="convSymptom" placeholder="例: 未消化軟便" oninput="updateKartePreview()"></div>
+      </div>
+      <label>VetMemo品目（B1形式）</label>
+      <textarea id="convInput" placeholder="例: ビオペア*2/ウルソ粉*1/po/直検" style="min-height:60px;resize:vertical;font-family:'JetBrains Mono',monospace;font-size:13px" oninput="updateKartePreview()"></textarea>
+      <p class="input-hint">計算タブの「電カル変換」ボタンで自動入力できます</p>
+      <button class="btn btn-primary btn-full" id="convBtn" onclick="convertToElectronic()" style="margin-top:8px">🤖 処置内容をAI予測</button>
+      <label style="margin-top:12px">処置内容（電カル形式）</label>
+      <textarea id="convResult" placeholder="AI予測結果、または直接入力" style="min-height:50px;resize:vertical;font-family:'JetBrains Mono',monospace;font-size:13px" oninput="updateKartePreview()"></textarea>
+      <div style="margin-top:14px">
+        <label>カルテレコード（プレビュー）</label>
+        <div id="kartePreview" style="background:var(--surface3);border:1px solid var(--border);border-radius:6px;padding:10px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text2);min-height:36px;word-break:break-all">—</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn btn-green btn-sm btn-full" onclick="copyKarteRecord()">📋 カルテレコードをコピー</button>
+        <button class="btn btn-ghost btn-sm" onclick="saveConvPairFromResult()" style="white-space:nowrap">学習データに保存</button>
+      </div>
     </div>
-
-    <div id="karte-list"></div>
-
-    <!-- Cloud sync -->
-    <div class="section" style="margin-top:8px;">
-      <div class="section-title">クラウド同期（jsonbin.io）</div>
-      <p style="font-size:13px; color:#666; line-height:1.7; margin-bottom:12px;">
-        スマホ・PC間でカルテデータを同期できます。<br>
-        ① <a href="https://jsonbin.io" target="_blank" rel="noopener" style="color:#1976d2;">jsonbin.io</a> で無料アカウントを作成しAPIキーを取得<br>
-        ② 両端末に同じAPIキーとBin IDを設定するだけ
-      </p>
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; max-width:560px;">
-        <div class="field">
-          <label style="font-size:12px;color:#666;font-weight:600;display:block;margin-bottom:4px;">jsonbin.io API Key</label>
-          <input type="password" id="jb-key" placeholder="$2a$10$..." style="width:100%;">
+  </div>
+  <div class="panel">
+    <div class="panel-hdr"><h2>📚 変換ペア（学習データ）</h2><span id="pairCountLabel" style="font-size:11px;color:var(--text3);margin-left:auto">0件</span></div>
+    <div class="panel-body">
+      <div id="pendingPairsSection" style="display:none;margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="font-size:12px;font-weight:600;color:var(--text2)">編集中のペア <span id="pendingPairCount" style="color:var(--text3)"></span></div>
+          <button class="btn btn-primary btn-sm" onclick="saveAllPendingPairs()">すべて保存</button>
         </div>
-        <div class="field">
-          <label style="font-size:12px;color:#666;font-weight:600;display:block;margin-bottom:4px;">
-            Bin ID <span style="font-weight:400;">（初回保存後に自動発行）</span>
-          </label>
-          <div style="display:flex;gap:6px;">
-            <input type="text" id="jb-id" placeholder="初回保存後に自動入力" style="flex:1;font-size:12px;font-family:monospace;">
-            <button class="btn btn-secondary btn-sm" onclick="copyBinId()">コピー</button>
+        <p class="input-hint" style="margin-bottom:8px">右列（電カル形式）を書き換えてから「すべて保存」を押してください。</p>
+        <div id="pendingPairsTable" style="display:flex;flex-direction:column;gap:4px"></div>
+      </div>
+      <details style="margin-bottom:12px">
+        <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text2);padding:4px 0;user-select:none">📥 一括インポート（Excel/CSV）</summary>
+        <div style="margin-top:8px">
+          <p class="input-hint">ExcelのA列:B1形式、B列:電カル形式をコピーして貼り付け</p>
+          <textarea id="bulkImportText" placeholder="Excelのセルをコピーして貼り付け..." style="min-height:80px;resize:vertical;font-family:'JetBrains Mono',monospace;font-size:12px;margin-top:6px"></textarea>
+          <div style="display:flex;gap:8px;margin-top:6px">
+            <button class="btn btn-primary btn-sm" onclick="bulkImportConvPairs()">インポート実行</button>
+            <label class="btn btn-ghost btn-sm" style="cursor:pointer">CSVファイル<input type="file" accept=".csv,.txt" style="display:none" onchange="handleCsvImport(this)"></label>
           </div>
         </div>
+      </details>
+      <details style="margin-bottom:12px">
+        <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text2);padding:4px 0;user-select:none">✏️ 手動で追加</summary>
+        <div style="margin-top:8px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+            <div><label>紙カルテ形式</label><input type="text" id="newPairPaper" placeholder="ビオペア*2/ウルソ粉*1"></div>
+            <div><label>電子カルテ形式</label><input type="text" id="newPairElectronic" placeholder="診断書/ビオペア成牛"></div>
+          </div>
+          <input type="text" id="newPairNote" placeholder="メモ（任意）" style="margin-top:6px;margin-bottom:8px">
+          <button class="btn btn-primary btn-sm" onclick="addConvPair()">ペアを追加</button>
+        </div>
+      </details>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:6px">確定済みペア</div>
+      <div id="pairsList" style="display:flex;flex-direction:column;gap:4px;max-height:400px;overflow-y:auto"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 設定 ===== -->
+<div class="tab-page" id="page-settings">
+  <div class="panel">
+    <div class="panel-hdr"><h2>🔑 APIキー設定</h2></div>
+    <div class="panel-body">
+      <label>Gemini API Key</label>
+      <input type="password" id="anthropicKey" placeholder="AIza..." oninput="checkKeys()">
+      <label>Discord Webhook URL</label>
+      <input type="password" id="discordUrl" placeholder="https://discord.com/api/webhooks/...">
+      <p class="input-hint">ブラウザにのみ保存されます。外部に送信されません。</p>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn btn-primary" onclick="saveKeys()">保存</button>
+        <button class="btn btn-ghost btn-sm" onclick="loadKeys()">再読込</button>
       </div>
-      <div style="display:flex;gap:8px;margin-top:12px;align-items:center;">
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-hdr"><h2>☁️ クラウド同期（jsonbin.io）</h2></div>
+    <div class="panel-body">
+      <p class="input-hint" style="margin-bottom:10px">スマホ↔PC間でメモ・カルテデータを同期できます。<br>① <b>jsonbin.io</b> で無料アカウントを作成しAPIキーを取得<br>② 両端末に同じAPIキーとBin IDを設定するだけ</p>
+      <label>jsonbin.io API Key</label>
+      <input type="password" id="jsonbinKey" placeholder="$2a$10$...">
+      <label style="margin-top:8px">Bin ID <span style="font-size:10px;color:var(--text3)">（初回保存後に自動発行。他の端末にはコピーして貼り付け）</span></label>
+      <div style="display:flex;gap:6px">
+        <input type="text" id="jsonbinId" placeholder="初回保存後に自動入力されます" style="font-family:'JetBrains Mono',monospace;font-size:12px">
+        <button class="btn btn-ghost btn-xs" onclick="copyBinId()">コピー</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
         <button class="btn btn-primary btn-sm" onclick="cloudSave()">↑ クラウドに保存</button>
-        <button class="btn btn-secondary btn-sm" onclick="cloudLoad()">↓ クラウドから読み込む</button>
-        <span id="cloud-status" style="font-size:12px;color:#999;margin-left:4px;"></span>
+        <button class="btn btn-ghost btn-sm" onclick="cloudLoad()">↓ クラウドから読み込む</button>
       </div>
+      <div id="cloudInfo" style="font-size:11px;color:var(--text3);margin-top:8px"></div>
     </div>
-
-    <!-- Bookmarklet -->
-    <div class="section" style="margin-top:8px;">
-      <div class="section-title">Bookmarklet — 電子カルテ金額自動取得</div>
-      <p style="font-size:13px; color:#666; line-height:1.6; margin-bottom:8px;">
-        以下のリンクをブラウザのお気に入りバーにドラッグ＆ドロップするか、新しいお気に入りを作成してURLに貼り付けてください。<br>
-        電子カルテ画面でクリックすると金額が自動入力されます。<br>
-        <span style="color:#e65100;">※ `.amount-selector-placeholder` のセレクタは電子カルテシステム確定後に差し替えが必要です。</span>
-      </p>
-      <div class="bookmarklet-block" id="bookmarklet-display"></div>
-      <button class="btn btn-secondary btn-sm" onclick="copyBookmarklet(this)">コピー</button>
-    </div>
-
   </div>
 
-  <!-- ========== Tab 3: 集計 ========== -->
-  <div id="tab-stats" class="tab-content">
-
-    <div class="stats-controls">
-      <label>表示期間:</label>
-      <select id="month-range" onchange="renderStats()">
-        <option value="3">直近3ヶ月</option>
-        <option value="6">直近6ヶ月</option>
-        <option value="12">直近12ヶ月</option>
-        <option value="0">全期間</option>
-      </select>
-      <div style="margin-left:auto;">
-        <button class="btn btn-secondary btn-sm" onclick="exportCSV()">CSVエクスポート</button>
+  <div class="panel">
+    <div class="panel-hdr"><h2>💾 バックアップ（JSONファイル）</h2></div>
+    <div class="panel-body">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" onclick="exportData()">↓ JSONをダウンロード</button>
+        <label class="btn btn-ghost btn-sm" style="cursor:pointer">↑ JSONを読み込む<input type="file" accept=".json" style="display:none" onchange="importData(this)"></label>
       </div>
     </div>
-
-    <div class="section">
-      <div id="stats-container"></div>
-    </div>
-
   </div>
+
+  <div class="panel">
+    <div class="panel-hdr"><h2>📋 マスターデータ管理</h2></div>
+    <div class="panel-body">
+      <details style="margin-bottom:12px">
+        <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text2);padding:4px 0;user-select:none">📥 一括インポート／エクスポート</summary>
+        <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
+          <p class="input-hint">ExcelのA列:品目名、B列:単価をコピーして貼り付け。既存と同名の品目は単価を上書き。</p>
+          <textarea id="masterImportText" placeholder="品目名&#9;単価&#10;アンピシリン注射液&#9;1200" style="min-height:80px;resize:vertical;font-family:'JetBrains Mono',monospace;font-size:12px"></textarea>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" onclick="bulkImportMaster()">インポート実行</button>
+            <label class="btn btn-ghost btn-sm" style="cursor:pointer">CSVファイル<input type="file" accept=".csv,.txt" style="display:none" onchange="handleMasterCsvImport(this)"></label>
+            <button class="btn btn-ghost btn-sm" onclick="exportMasterCsv()">↓ CSVエクスポート</button>
+          </div>
+        </div>
+      </details>
+      <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+        <input type="text" id="newMasterName" placeholder="品目名" style="flex:1;min-width:100px">
+        <input type="number" id="newMasterPrice" placeholder="単価(円)" style="width:90px" min="0" step="0.01">
+        <button class="btn btn-primary btn-sm" id="masterSaveBtn" onclick="saveMasterItem()">追加</button>
+        <button class="btn btn-ghost btn-sm" onclick="cancelMasterEdit()" id="masterCancelBtn" style="display:none">キャンセル</button>
+      </div>
+      <input type="text" id="masterEditSearch" placeholder="品目を検索..." oninput="renderMasterEditor()" style="margin-bottom:8px">
+      <div id="masterEditor" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:2px"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-hdr"><h2>📖 専門用語辞書</h2></div>
+    <div class="panel-body">
+      <p class="input-hint" style="margin-bottom:10px">✅ 正しい表記を登録するだけでOK。AIが音声誤変換を自動補正します。</p>
+      <div class="dict-tags" id="dictTags"></div>
+      <div style="display:flex;gap:6px">
+        <input type="text" id="dictWord" placeholder="正しい表記（例: マルボ）" style="font-size:13px">
+        <button class="btn btn-primary btn-sm" onclick="addDict()">追加</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-hdr"><h2>🔖 Bookmarklet（電子カルテ金額取得）</h2></div>
+    <div class="panel-body">
+      <p class="input-hint" style="margin-bottom:8px">電子カルテ画面でクリックすると金額がカルテ一覧に自動入力されます。<br>お気に入りバーにドラッグ＆ドロップしてください。<br><span style="color:var(--warn)">※ .amount-selector-placeholder のセレクタは電子カルテシステムに合わせて差し替えが必要です。</span></p>
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:10px;font-family:'JetBrains Mono',monospace;font-size:11px;word-break:break-all;color:var(--text2);line-height:1.5" id="bookmarkletDisplay"></div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="copyBookmarklet(this)">コピー</button>
+    </div>
+  </div>
+</div>
 
 </main>
+</div>
+
+<!-- ===== カルテ保存モーダル ===== -->
+<div id="karteModal" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <div class="modal-title">📋 カルテに保存</div>
+    <label>農場名</label>
+    <input type="text" id="modal-farm" list="farmDatalist" placeholder="A牧場" autocomplete="off">
+    <label>牛番号</label>
+    <input type="text" id="modal-cow" placeholder="0001">
+    <label>日付</label>
+    <input type="date" id="modal-date">
+    <label>診療内容（B1形式）</label>
+    <input type="text" id="modal-content">
+    <label>金額（円）</label>
+    <input type="number" id="modal-amount" min="0">
+    <p class="input-hint" style="margin-top:6px">※ 同じ農場名・牛番号の未確定カルテがある場合は自動的に追記されます。</p>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn btn-green" onclick="confirmKarteSave()">保存</button>
+      <button class="btn btn-ghost" onclick="closeKarteModal()">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<datalist id="masterNamesList"></datalist>
+<div class="toast-wrap" id="toastWrap"></div>
 
 <script>
 'use strict';
+// ==================== MASTER DATA ====================
+const MASTER_BUILTIN = [{"name":"バソラミン","price":10},{"name":"ペニシリン","price":8.4},{"name":"デキサ","price":25},{"name":"フルスル","price":8.24},{"name":"アンピ","price":335},{"name":"マルボ","price":206},{"name":"メトクロ","price":310},{"name":"パンカル","price":17.77},{"name":"ウルソ","price":564},{"name":"ネオアス","price":9.9},{"name":"OTC","price":11},{"name":"ビタミンK","price":179},{"name":"フルニキ","price":150},{"name":"トンキー","price":8.02},{"name":"フォルテ","price":29},{"name":"メンブトン","price":32.2},{"name":"バイトリル","price":94},{"name":"ダイメトン","price":6.7},{"name":"パドリン","price":54.9},{"name":"ザクトラン","price":230},{"name":"ベルパリン","price":6.25},{"name":"セフチオ","price":1755},{"name":"セファ","price":720},{"name":"NF","price":142},{"name":"PG","price":297},{"name":"エクセネル","price":92},{"name":"レバチオ","price":1.74},{"name":"オバ","price":111},{"name":"ガスナイン","price":240},{"name":"プロナルゴン","price":555},{"name":"ビクタス","price":40},{"name":"デポー","price":650},{"name":"ジメトキシン","price":8.5},{"name":"B1リンゲル","price":0.305},{"name":"Ca","price":1.422},{"name":"HSS","price":0.55},{"name":"酢酸リンゲル500","price":0.51},{"name":"酢酸リンゲル","price":0.315},{"name":"重曹","price":0.82},{"name":"5glu","price":0.464},{"name":"25glu","price":0.52},{"name":"40glu","price":0.702},{"name":"キシリット","price":0.938},{"name":"生食","price":0.472},{"name":"酢酸リンゲル糖1000","price":0.47},{"name":"酢酸リンゲル糖","price":0.58},{"name":"スタマー","price":80},{"name":"ウルソ粉","price":220},{"name":"ビオペア","price":369},{"name":"ミヤリサン","price":147},{"name":"カリウム","price":1.7},{"name":"ビスキノン","price":200},{"name":"ビオスリー","price":1.82},{"name":"獣医散","price":3.9},{"name":"im","price":720},{"name":"iv","price":980},{"name":"po","price":600},{"name":"pump","price":1370},{"name":"点滴1000","price":2880},{"name":"点滴2000","price":3200},{"name":"点滴3000","price":3520},{"name":"点滴4000","price":3840},{"name":"点滴5000","price":4160},{"name":"留置1000","price":3160},{"name":"留置2000","price":3480},{"name":"留置3000","price":3800},{"name":"吸入","price":2500},{"name":"ヴェトラップ","price":2020},{"name":"洗浄","price":740},{"name":"お灸","price":1080},{"name":"子宮内薬注","price":3100},{"name":"吸入本人","price":1500},{"name":"オペ","price":49790},{"name":"ルーメン","price":4760},{"name":"往診","price":1880},{"name":"初診","price":1440},{"name":"イーエスイー","price":119.9},{"name":"アミノ","price":1.64},{"name":"アミパ","price":2.75},{"name":"ミルカン","price":8.8},{"name":"モニラック","price":110},{"name":"ポリアクリル","price":150},{"name":"ルミナップ","price":1100},{"name":"イーサック","price":2.2},{"name":"ノイエル","price":20.9},{"name":"ボバクチン","price":2.42},{"name":"バリウム","price":1},{"name":"ジクロ","price":7.7},{"name":"レパミピド","price":13.2},{"name":"コクシックス","price":55},{"name":"ポルトラック","price":50},{"name":"オメプラゾール","price":44},{"name":"エクセーデ","price":605},{"name":"コクシ検査","price":1400},{"name":"生食1000ml","price":275},{"name":"オキシトシン冷蔵","price":2310},{"name":"タイニー","price":2448},{"name":"ピンク長針","price":5},{"name":"カナマイ","price":23.5},{"name":"硫マグ","price":250},{"name":"ワクチン注射","price":720},{"name":"スタートバック","price":1188},{"name":"セフロ","price":2256},{"name":"インタゲン","price":736},{"name":"ネオマイゾン","price":51},{"name":"フロロコール","price":55},{"name":"フジックス","price":390},{"name":"ガス抜き","price":1950},{"name":"オキシトシン輸入","price":55},{"name":"3ml針付き","price":3300},{"name":"20ml","price":28},{"name":"10ml","price":13.5},{"name":"5ml","price":14.4},{"name":"2.5ml","price":12.1},{"name":"50ml","price":84},{"name":"istat","price":2800},{"name":"再診","price":560},{"name":"薬","price":560},{"name":"直検","price":500},{"name":"油","price":100},{"name":"18G長針","price":600},{"name":"21G長針","price":600},{"name":"21G短針","price":600},{"name":"血検","price":580},{"name":"セファZ袋","price":636},{"name":"セファZ箱","price":12720}];
 
-// ================================================================
-// Storage helpers
-// ================================================================
-const KEY = { api: 'cm_apikey', kartes: 'cm_kartes', farms: 'cm_farms', jbk: 'cm_jbk', jbid: 'cm_jbid' };
+let MASTER = [...MASTER_BUILTIN];
 
-function loadKartes() {
-  try { return JSON.parse(localStorage.getItem(KEY.kartes) || '[]'); }
-  catch { return []; }
-}
-function saveKartes(arr) { localStorage.setItem(KEY.kartes, JSON.stringify(arr)); }
+// ==================== STATE ====================
+let memos = [];
+let DICT_WORDS = ["マルボ","アンピ","デキサ","ネオアス","イーエスイー","ザクトラン","セフチオ","バイトリル","フルニキ","メトクロ","パンカル","ウルソ","フルスル","バソラミン","ペニシリン","フォルテ","メンブトン","ダイメトン","パドリン","ベルパリン","セファ","エクセネル","ガスナイン","プロナルゴン","ビクタス","デポー","ジメトキシン","スタマー","ウルソ粉","ビオペア","ミヤリサン","ビスキノン","ビオスリー","獣医散","モニラック","ルミナップ","ノイエル","ボバクチン","ジクロ","レパミピド","コクシックス","ポルトラック","オメプラゾール","エクセーデ","タイニー","カナマイ","硫マグ","スタートバック","セフロ","インタゲン","ネオマイゾン","フロロコール","フジックス","ガス抜き"];
+let convPairs = [];
+let KARTES = [];
+let FARMS = [];
+let activeResultId = null;
+let karteSaveMemoId = null;
+let pendingPairs = [];
+let masterEditIndex = -1;
 
-function loadFarms() {
-  try { return JSON.parse(localStorage.getItem(KEY.farms) || '[]'); }
-  catch { return []; }
-}
-function saveFarms(arr) { localStorage.setItem(KEY.farms, JSON.stringify(arr)); }
-
-function getApiKey() { return localStorage.getItem(KEY.api) || ''; }
-
-// ================================================================
-// API key management
-// ================================================================
-function saveApiKey() {
-  const key = document.getElementById('api-key-input').value.trim();
-  localStorage.setItem(KEY.api, key);
-  updateApiStatus();
-}
-
-function updateApiStatus() {
-  const key = getApiKey();
-  const dot = document.getElementById('status-dot');
-  const txt = document.getElementById('status-text');
-  if (key.startsWith('sk-ant-')) {
-    dot.className = 'status-dot ok';
-    txt.textContent = 'API接続可';
-  } else if (key) {
-    dot.className = 'status-dot';
-    txt.textContent = 'キー確認中';
-  } else {
-    dot.className = 'status-dot';
-    txt.textContent = '未設定';
-  }
-}
-
-// ================================================================
-// Tab navigation
-// ================================================================
-document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    btn.classList.add('active');
-    const tab = btn.dataset.tab;
-    document.getElementById('tab-' + tab).classList.add('active');
-    if (tab === 'kartes') { updateFarmFilter(); renderKartes(); }
-    if (tab === 'stats') renderStats();
-  });
+// ==================== INIT ====================
+document.addEventListener('DOMContentLoaded', () => {
+  loadKeys();
+  loadJsonbinSettings();
+  loadFromStorage();
+  renderDict();
+  renderMasterList();
+  renderMasterEditor();
+  renderMemoQueue();
+  updateBadge();
+  renderConvPairs();
+  updateFarmDatalist();
+  initBookmarklet();
+  const dl = document.getElementById('masterNamesList');
+  MASTER.forEach(m => { const o = document.createElement('option'); o.value = m.name; dl.appendChild(o); });
+  handleUrlParams();
 });
+window.addEventListener('pageshow', e => { if(e.persisted) handleUrlParams(); });
 
-// ================================================================
-// Claude API
-// ================================================================
-const SYSTEM_PROMPT = `あなたは獣医診療記録の解析AIです。以下の音声メモ（牛の往診記録）から診療情報を抽出し、JSONの配列のみを返してください。説明文・マークダウンは不要です。
-
-【出力形式】
-[{"date":"YYYY-MM-DD","content":"診療内容","amount":金額(整数)}]
-
-【ルール】
-- dateは音声メモに日付があればそれを使用し、年が省略されていれば今日の年を補完する。日付記載なければ今日の日付を使う
-- contentは投薬・処置内容を簡潔に記述（例：「初診 / アンピ im」「再診 / セファ im」「直検 / 卵巣検査」「アンピシリン 100ml im」）
-- amountは円単位の整数。記載がなければ0
-- 同一日の診療は1レコードにまとめる
-- JSON配列のみ出力。コードブロック記号(\`\`\`)は使わない`;
-
-async function callClaude(voiceText) {
-  const apiKey = getApiKey();
-  if (!apiKey) throw new Error('APIキーが設定されていません');
-
-  const today = todayStr();
-  const system = SYSTEM_PROMPT + `\n\n今日の日付: ${today}`;
-
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-      'anthropic-dangerous-direct-browser-access': 'true'
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 2048,
-      system,
-      messages: [{ role: 'user', content: voiceText }]
-    })
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error?.message || `HTTP ${res.status}`);
-  }
-
-  const data = await res.json();
-  const rawText = data.content?.[0]?.text || '';
-  const cleaned = rawText
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/\s*```\s*$/, '')
-    .trim();
-  return JSON.parse(cleaned);
-}
-
-// ================================================================
-// Tab 1: Analyze
-// ================================================================
-async function analyzeText() {
-  const voice = document.getElementById('voice-input').value.trim();
-  if (!voice) { showMsg('analyze-msg', 'テキストを入力してください', 'info'); return; }
-
-  const btn = document.getElementById('analyze-btn');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span>解析中...';
-  clearMsg('analyze-msg');
-
-  try {
-    const records = await callClaude(voice);
-    if (!Array.isArray(records) || records.length === 0) {
-      throw new Error('解析結果が空です。テキストを確認してください。');
-    }
-    renderResultTable(records);
-    const sec = document.getElementById('result-section');
-    sec.style.display = 'block';
-    sec.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  } catch (e) {
-    showMsg('analyze-msg', 'エラー: ' + e.message, 'error');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'AI解析';
-  }
-}
-
-function renderResultTable(records) {
-  const tbody = document.getElementById('result-tbody');
-  tbody.innerHTML = '';
-  records.forEach(r => addResultRow(r));
-}
-
-function addResultRow(record) {
-  record = record || {};
-  const tbody = document.getElementById('result-tbody');
-  const tr = document.createElement('tr');
-  const date = record.date || todayStr();
-  const content = esc(record.content || '');
-  const amount = record.amount != null ? record.amount : 0;
-  tr.innerHTML =
-    `<td><input type="date" value="${date}"></td>` +
-    `<td><input type="text" value="${content}" placeholder="診療内容"></td>` +
-    `<td><input type="number" min="0" step="100" value="${amount}" style="text-align:right;width:110px;"></td>` +
-    `<td><button class="btn btn-danger btn-sm" onclick="this.closest('tr').remove()">×</button></td>`;
-  tbody.appendChild(tr);
-}
-
-function getResultRows() {
-  return Array.from(document.querySelectorAll('#result-tbody tr')).map(tr => {
-    const ins = tr.querySelectorAll('input');
-    return {
-      date: ins[0].value,
-      content: ins[1].value.trim(),
-      amount: parseInt(ins[2].value) || 0
-    };
-  }).filter(r => r.content && r.date);
-}
-
-function saveKarte() {
-  const farm = document.getElementById('farm-input').value.trim();
-  const cow = document.getElementById('cow-input').value.trim();
-
-  if (!farm) { showMsg('save-msg', '農場名を入力してください', 'error'); return; }
-  if (!cow)  { showMsg('save-msg', '牛番号を入力してください', 'error'); return; }
-
-  const records = getResultRows();
-  if (records.length === 0) { showMsg('save-msg', '診療記録がありません', 'error'); return; }
-
-  const sorted = [...records].sort((a, b) => a.date.localeCompare(b.date));
-  const paper_total = sorted.reduce((s, r) => s + r.amount, 0);
-  const month = sorted[0].date.slice(0, 7);
-
-  const karte = {
-    id: String(Date.now()),
-    farm,
-    cow,
-    records: sorted,
-    paper_total,
-    electronic_amount: null,
-    diff: null,
-    month,
-    closed: false
-  };
-
-  const kartes = loadKartes();
-  kartes.unshift(karte);
-  saveKartes(kartes);
-
-  // Update farm master
-  const farms = loadFarms();
-  if (!farms.includes(farm)) {
-    farms.push(farm);
-    farms.sort((a, b) => a.localeCompare(b, 'ja'));
-    saveFarms(farms);
-    updateFarmDatalist();
-  }
-
-  showMsg('save-msg', `【${esc(farm)} / ${esc(cow)}】を保存しました`, 'success');
-  document.getElementById('voice-input').value = '';
-  document.getElementById('result-section').style.display = 'none';
-  document.getElementById('farm-input').value = '';
-  document.getElementById('cow-input').value = '';
-}
-
-// ================================================================
-// Tab 2: Karte list
-// ================================================================
-function renderKartes() {
-  const farmFilter   = document.getElementById('filter-farm').value;
-  const cowFilter    = document.getElementById('filter-cow').value.trim().toLowerCase();
-  const unclosedOnly = document.getElementById('filter-unclosed').checked;
-
-  let list = loadKartes();
-  if (farmFilter)    list = list.filter(k => k.farm === farmFilter);
-  if (cowFilter)     list = list.filter(k => k.cow.toLowerCase().includes(cowFilter));
-  if (unclosedOnly)  list = list.filter(k => !k.closed);
-
-  document.getElementById('karte-count').textContent = list.length + '件';
-
-  const container = document.getElementById('karte-list');
-  if (list.length === 0) {
-    container.innerHTML = '<div class="empty">該当するカルテがありません</div>';
-    return;
-  }
-  container.innerHTML = list.map(karteCardHTML).join('');
-}
-
-function karteCardHTML(k) {
-  const records = k.records.map(r =>
-    `<div class="karte-record">` +
-    `<span class="rec-date">${fmtDate(r.date)}</span>` +
-    `<span class="rec-content">${esc(r.content)}</span>` +
-    `<span class="rec-amount">${fmtAmt(r.amount)}</span>` +
-    `</div>`
-  ).join('');
-
-  let diffClass = '';
-  let diffText = '—';
-  if (k.diff !== null) {
-    diffClass = k.diff > 0 ? 'diff-positive' : k.diff < 0 ? 'diff-negative' : 'diff-zero';
-    diffText = (k.diff >= 0 ? '+' : '') + fmtAmt(k.diff);
-  }
-
-  const electronicRow = k.closed
-    ? `<div class="total-row">
-         <span>電子カルテ</span>
-         <span>${fmtAmt(k.electronic_amount)}</span>
-       </div>`
-    : `<div class="total-row">
-         <span>電子カルテ</span>
-         <div class="elec-input-row">
-           <input type="number" id="elec-${k.id}" min="0" step="100"
-             value="${k.electronic_amount !== null ? k.electronic_amount : ''}"
-             placeholder="金額入力"
-             onkeydown="if(event.key==='Enter')confirmElectronic('${k.id}')">
-           <button class="btn btn-secondary btn-sm" onclick="confirmElectronic('${k.id}')">確定</button>
-         </div>
-       </div>`;
-
-  const badge = k.closed
-    ? '<span class="karte-badge badge-closed">確定済</span>'
-    : '<span class="karte-badge badge-unclosed">電子未入力</span>';
-
-  return `<div class="karte-card ${k.closed ? '' : 'unclosed'}" id="card-${k.id}">
-    <div class="karte-header">
-      <span class="karte-title">【${esc(k.farm)} / ${esc(k.cow)}】</span>
-      <div class="karte-actions">
-        ${badge}
-        <button class="btn btn-danger btn-sm" onclick="deleteKarte('${k.id}')">削除</button>
-      </div>
-    </div>
-    <div class="karte-records">${records}</div>
-    <div class="karte-totals">
-      <div class="total-row paper">
-        <span>紙カルテ合計</span>
-        <span>${fmtAmt(k.paper_total)}</span>
-      </div>
-      ${electronicRow}
-      <div class="total-row ${diffClass}">
-        <span>差額（電子 − 紙）</span>
-        <span>${diffText}</span>
-      </div>
-    </div>
-  </div>`;
-}
-
-function confirmElectronic(id) {
-  const input = document.getElementById('elec-' + id);
-  if (!input) return;
-  const val = parseInt(input.value);
-  if (isNaN(val) || val < 0) { alert('正しい金額（0以上の整数）を入力してください'); return; }
-
-  const kartes = loadKartes();
-  const k = kartes.find(x => x.id === id);
-  if (!k) return;
-  k.electronic_amount = val;
-  k.diff = val - k.paper_total;
-  k.closed = true;
-  saveKartes(kartes);
-  renderKartes();
-}
-
-function deleteKarte(id) {
-  if (!confirm('このカルテを削除しますか？')) return;
-  saveKartes(loadKartes().filter(k => k.id !== id));
-  renderKartes();
-}
-
-function updateFarmFilter() {
-  const farms = loadFarms();
-  const sel = document.getElementById('filter-farm');
-  const cur = sel.value;
-  sel.innerHTML = '<option value="">全農場</option>' +
-    farms.map(f => `<option value="${esc(f)}"${f === cur ? ' selected' : ''}>${esc(f)}</option>`).join('');
-}
-
-function updateFarmDatalist() {
-  const farms = loadFarms();
-  document.getElementById('farm-datalist').innerHTML =
-    farms.map(f => `<option value="${esc(f)}">`).join('');
-}
-
-// ================================================================
-// Bookmarklet
-// ================================================================
-const BOOKMARKLET = `javascript:(function(){var el=document.querySelector('.amount-selector-placeholder');var amt=el?parseInt(el.textContent.replace(/[^0-9]/g,'')):null;if(!amt){alert('金額を取得できませんでした。\\nセレクタの差し替えが必要です。');return;}var w=window.open('','cartememo');if(w&&w.postMessage){w.postMessage({type:'electronic_amount',amount:amt},'*');}else{prompt('カルテメモを開いてから再試行してください。手動入力用の金額:',amt);}})();`;
-
-function initBookmarklet() {
-  document.getElementById('bookmarklet-display').textContent = BOOKMARKLET;
-}
-
-function copyBookmarklet(btn) {
-  navigator.clipboard.writeText(BOOKMARKLET).then(() => {
-    btn.textContent = 'コピー完了!';
-    setTimeout(() => { btn.textContent = 'コピー'; }, 1800);
-  }).catch(() => {
-    alert('コピーに失敗しました。手動でテキストをコピーしてください。');
-  });
-}
-
-// Receive postMessage from bookmarklet
-window.name = 'cartememo';
-window.addEventListener('message', e => {
-  if (!e.data || e.data.type !== 'electronic_amount') return;
-  const amt = e.data.amount;
-  if (typeof amt !== 'number') return;
-
-  // Switch to karte tab
-  document.querySelector('[data-tab="kartes"]').click();
-  setTimeout(() => {
-    const inputs = document.querySelectorAll('[id^="elec-"]');
-    if (inputs.length > 0) {
-      inputs[0].value = amt;
-      inputs[0].style.borderColor = '#1976d2';
-      inputs[0].focus();
-    } else {
-      alert('電子金額未入力のカルテが見つかりません。\n金額: ' + amt.toLocaleString('ja-JP') + '円');
-    }
-  }, 350);
-});
-
-// ================================================================
-// Tab 3: Stats
-// ================================================================
-function renderStats() {
-  const rangeN = parseInt(document.getElementById('month-range').value);
-  const kartes = loadKartes().filter(k => k.closed && k.diff !== null);
-
-  let months = [...new Set(kartes.map(k => k.month))].sort();
-  if (rangeN > 0) {
-    const cutoff = monthOffset(-rangeN);
-    months = months.filter(m => m >= cutoff);
-  }
-
-  const farms = [...new Set(kartes.map(k => k.farm))].sort((a, b) => a.localeCompare(b, 'ja'));
-  const container = document.getElementById('stats-container');
-
-  if (months.length === 0 || farms.length === 0) {
-    container.innerHTML = '<div class="empty">差額確定済みのデータがありません</div>';
-    return;
-  }
-
-  // Build farm × month sum
-  const table = {};
-  farms.forEach(f => { table[f] = {}; });
-  kartes.forEach(k => {
-    if (!months.includes(k.month) || !farms.includes(k.farm)) return;
-    table[k.farm][k.month] = (table[k.farm][k.month] || 0) + k.diff;
-  });
-
-  const ths = months.map(m => {
-    const [y, mo] = m.split('-');
-    return `<th>${y}年${parseInt(mo)}月</th>`;
-  }).join('');
-
-  const rows = farms.map(f => {
-    const cells = months.map(m => {
-      const v = table[f][m];
-      if (v === undefined) return '<td style="color:#ccc;">—</td>';
-      const cls = v > 0 ? 'diff-pos' : v < 0 ? 'diff-neg' : '';
-      return `<td class="${cls}">${(v >= 0 ? '+' : '') + fmtAmt(v)}</td>`;
-    }).join('');
-    return `<tr><td>${esc(f)}</td>${cells}</tr>`;
-  }).join('');
-
-  container.innerHTML =
-    `<table class="stats-table">` +
-    `<thead><tr><th>農場名</th>${ths}</tr></thead>` +
-    `<tbody>${rows}</tbody>` +
-    `</table>`;
-}
-
-function exportCSV() {
-  const rangeN = parseInt(document.getElementById('month-range').value);
-  const kartes = loadKartes().filter(k => k.closed && k.diff !== null);
-
-  let months = [...new Set(kartes.map(k => k.month))].sort();
-  if (rangeN > 0) {
-    const cutoff = monthOffset(-rangeN);
-    months = months.filter(m => m >= cutoff);
-  }
-
-  const farms = [...new Set(kartes.map(k => k.farm))].sort((a, b) => a.localeCompare(b, 'ja'));
-
-  const table = {};
-  farms.forEach(f => { table[f] = {}; });
-  kartes.forEach(k => {
-    if (!months.includes(k.month) || !farms.includes(k.farm)) return;
-    table[k.farm][k.month] = (table[k.farm][k.month] || 0) + k.diff;
-  });
-
-  // BOM for Excel
-  let csv = '﻿農場名,' + months.join(',') + '\n';
-  farms.forEach(f => {
-    const cells = months.map(m => table[f][m] !== undefined ? table[f][m] : '');
-    csv += f + ',' + cells.join(',') + '\n';
-  });
-
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = '差額集計_' + todayStr() + '.csv';
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-// ================================================================
-// Utilities
-// ================================================================
-function todayStr() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function monthOffset(n) {
-  const d = new Date();
-  d.setMonth(d.getMonth() + n);
-  return d.toISOString().slice(0, 7);
-}
-
-function fmtAmt(n) {
-  if (n === null || n === undefined) return '—';
-  return n.toLocaleString('ja-JP') + '円';
-}
-
-function fmtDate(dateStr) {
-  if (!dateStr) return '';
-  const parts = dateStr.split('-');
-  return parseInt(parts[1]) + '/' + parseInt(parts[2]);
-}
-
-function esc(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-function showMsg(id, text, type) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.className = 'msg msg-' + type;
-  el.textContent = text;
-}
-
-function clearMsg(id) {
-  const el = document.getElementById(id);
-  if (el) { el.className = ''; el.textContent = ''; }
-}
-
-// ================================================================
-// Cloud sync (jsonbin.io)
-// ================================================================
-function loadCloudSettings() {
-  const key = localStorage.getItem(KEY.jbk) || '';
-  const id  = localStorage.getItem(KEY.jbid) || '';
-  if (key) document.getElementById('jb-key').value = key;
-  if (id)  document.getElementById('jb-id').value  = id;
-}
-
-function saveCloudSettings() {
-  localStorage.setItem(KEY.jbk,  document.getElementById('jb-key').value.trim());
-  localStorage.setItem(KEY.jbid, document.getElementById('jb-id').value.trim());
-}
-
-async function cloudSave() {
-  const key   = document.getElementById('jb-key').value.trim();
-  const binId = document.getElementById('jb-id').value.trim();
-  if (!key) { showToast('jsonbin.io APIキーを入力してください'); return; }
-
-  const payload = {
-    version: 1,
-    savedAt: new Date().toISOString(),
-    kartes: loadKartes(),
-    farms:  loadFarms()
-  };
-
-  try {
-    let resp;
-    if (binId) {
-      resp = await fetch(`https://api.jsonbin.io/v3/b/${binId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'X-Master-Key': key },
-        body: JSON.stringify(payload)
-      });
-    } else {
-      resp = await fetch('https://api.jsonbin.io/v3/b', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Master-Key': key,
-          'X-Bin-Name': 'CarteMemo',
-          'X-Bin-Private': 'true'
-        },
-        body: JSON.stringify(payload)
-      });
-    }
-    const result = await resp.json();
-    if (!resp.ok) throw new Error(result.message || 'HTTP ' + resp.status);
-
-    if (!binId) {
-      const newId = result.metadata.id;
-      document.getElementById('jb-id').value = newId;
-      localStorage.setItem(KEY.jbid, newId);
-    }
-    saveCloudSettings();
-    document.getElementById('cloud-status').textContent =
-      '最終保存: ' + new Date().toLocaleString('ja-JP') + '（' + payload.kartes.length + '件）';
-    showToast('クラウドに保存しました');
-  } catch (e) {
-    showToast('保存エラー: ' + e.message);
-  }
-}
-
-async function cloudLoad() {
-  const key   = document.getElementById('jb-key').value.trim();
-  const binId = document.getElementById('jb-id').value.trim();
-  if (!key)   { showToast('jsonbin.io APIキーを入力してください'); return; }
-  if (!binId) { showToast('Bin IDを入力してください（保存端末でコピーして貼り付け）'); return; }
-
-  try {
-    const resp = await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`, {
-      headers: { 'X-Master-Key': key }
-    });
-    const result = await resp.json();
-    if (!resp.ok) throw new Error(result.message || 'HTTP ' + resp.status);
-
-    const data = result.record;
-    if (!Array.isArray(data.kartes)) throw new Error('カルテデータが見つかりません');
-
-    // Merge kartes (dedup by id)
-    const local = loadKartes();
-    const existingIds = new Set(local.map(k => k.id));
-    const added = data.kartes.filter(k => !existingIds.has(k.id));
-    saveKartes([...local, ...added]);
-
-    // Merge farms (dedup)
-    if (Array.isArray(data.farms)) {
-      const farms = loadFarms();
-      data.farms.forEach(f => { if (!farms.includes(f)) farms.push(f); });
-      farms.sort((a, b) => a.localeCompare(b, 'ja'));
-      saveFarms(farms);
-      updateFarmDatalist();
-      updateFarmFilter();
-    }
-
-    saveCloudSettings();
-    document.getElementById('cloud-status').textContent =
-      '最終読み込み: ' + new Date().toLocaleString('ja-JP') + '（' + added.length + '件追加）';
-    showToast(added.length + '件の新しいカルテを追加しました');
-    renderKartes();
-  } catch (e) {
-    showToast('読み込みエラー: ' + e.message);
-  }
-}
-
-function copyBinId() {
-  const id = document.getElementById('jb-id').value.trim();
-  if (!id) { showToast('Bin IDがありません。先に「クラウドに保存」してください'); return; }
-  navigator.clipboard.writeText(id).then(() => showToast('Bin IDをコピーしました'));
-}
-
-// ================================================================
-// URL parameter import (iPhone Shortcuts integration)
-// URL format: cartememo.html?memo=テキスト&farm=A牧場&cow=0001&autosave=1
-// ================================================================
+// ==================== URL PARAMS (iPhone Shortcuts) ====================
 function handleUrlParams() {
   const params = new URLSearchParams(window.location.search);
   const memoText = params.get('memo');
-  if (!memoText) return;
-
-  document.getElementById('voice-input').value = memoText;
-  if (params.get('farm')) document.getElementById('farm-input').value = params.get('farm');
-  if (params.get('cow'))  document.getElementById('cow-input').value  = params.get('cow');
-
-  // Remove params from URL so reload doesn't re-trigger
+  if(!memoText) return;
+  document.getElementById('newMemoText').value = memoText;
+  const no = params.get('no') || params.get('cow') || '';
+  const owner = params.get('owner') || params.get('farm') || '';
+  if(no) document.getElementById('newPatientNo').value = no;
+  if(owner) document.getElementById('newOwnerName').value = owner;
   history.replaceState({}, '', window.location.pathname);
-
-  if (params.get('autosave') === '1') {
-    // Auto-analyze immediately
-    showToast('音声メモを受信しました。AI解析を開始します…');
-    setTimeout(analyzeText, 600);
+  if(params.get('autosave') === '1') {
+    addMemo(true);
+    toast('メモを自動保存しました', 'success');
   } else {
-    document.getElementById('voice-input').focus();
-    showToast('音声メモを受信しました。内容を確認して「AI解析」を押してください。');
+    switchTab('memo');
+    document.getElementById('newMemoText').focus();
+    toast('音声メモを受け取りました。内容を確認して「保存」を押してください', 'success');
   }
 }
 
-// Simple toast notification
-function showToast(msg) {
-  let el = document.getElementById('toast');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'toast';
-    el.style.cssText =
-      'position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);' +
-      'background:#323232;color:#fff;padding:12px 20px;border-radius:6px;font-size:14px;' +
-      'opacity:0;transition:opacity 0.25s,transform 0.25s;z-index:9999;max-width:500px;text-align:center;';
-    document.body.appendChild(el);
-  }
-  el.textContent = msg;
-  el.style.opacity = '1';
-  el.style.transform = 'translateX(-50%) translateY(0)';
-  clearTimeout(el._timer);
-  el._timer = setTimeout(() => {
-    el.style.opacity = '0';
-    el.style.transform = 'translateX(-50%) translateY(20px)';
-  }, 3500);
+// ==================== TABS ====================
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-page').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  document.getElementById('page-'+name).classList.add('active');
+  if(name === 'calc') renderResultsList();
+  if(name === 'karte') { updateKarteFarmFilter(); renderKarteList(); }
+  if(name === 'stats') renderStats();
 }
 
-// ================================================================
-// Init
-// ================================================================
-(function init() {
-  const key = getApiKey();
-  if (key) document.getElementById('api-key-input').value = key;
-  updateApiStatus();
-  updateFarmDatalist();
-  updateFarmFilter();
-  initBookmarklet();
-  loadCloudSettings();
-  handleUrlParams();
-})();
+// ==================== STORAGE ====================
+function saveToStorage() {
+  try {
+    localStorage.setItem('vetmemo_memos', JSON.stringify(memos));
+    localStorage.setItem('vetmemo_dict', JSON.stringify(DICT_WORDS));
+    localStorage.setItem('vetmemo_master', JSON.stringify(MASTER));
+    localStorage.setItem('vetmemo_convPairs', JSON.stringify(convPairs));
+    localStorage.setItem('cm_kartes', JSON.stringify(KARTES));
+    localStorage.setItem('cm_farms', JSON.stringify(FARMS));
+  } catch(e){}
+}
+function loadFromStorage() {
+  try {
+    const m = localStorage.getItem('vetmemo_memos'); if(m) memos = JSON.parse(m);
+    const d = localStorage.getItem('vetmemo_dict'); if(d) DICT_WORDS = JSON.parse(d);
+    const ms = localStorage.getItem('vetmemo_master'); if(ms) MASTER = JSON.parse(ms);
+    const cp = localStorage.getItem('vetmemo_convPairs'); if(cp) convPairs = JSON.parse(cp);
+    const k = localStorage.getItem('cm_kartes'); if(k) KARTES = JSON.parse(k);
+    const f = localStorage.getItem('cm_farms'); if(f) FARMS = JSON.parse(f);
+  } catch(e){}
+}
+
+// ==================== KEYS ====================
+function saveKeys() {
+  try { localStorage.setItem('ak', document.getElementById('anthropicKey').value); localStorage.setItem('dw', document.getElementById('discordUrl').value); } catch(e){}
+  checkKeys(); toast('設定を保存しました', 'success');
+}
+function loadKeys() {
+  try {
+    const ak = localStorage.getItem('ak')||''; const dw = localStorage.getItem('dw')||'';
+    if(ak) document.getElementById('anthropicKey').value = ak;
+    if(dw) document.getElementById('discordUrl').value = dw;
+  } catch(e){}
+  checkKeys();
+}
+function checkKeys() {
+  const ak = document.getElementById('anthropicKey').value.trim();
+  const dot = document.getElementById('apiDot'); const status = document.getElementById('apiStatus');
+  if(ak.startsWith('AIza')) { dot.className='dot on'; status.textContent='API接続可'; }
+  else { dot.className='dot'; status.textContent=ak?'キー確認中':'未設定'; }
+}
+
+// ==================== DICT ====================
+function renderDict() {
+  const el = document.getElementById('dictTags');
+  el.innerHTML = DICT_WORDS.length === 0
+    ? '<span style="font-size:11px;color:var(--text3)">登録なし</span>'
+    : DICT_WORDS.map((w,i) => `<div class="dict-tag"><span class="dt-word">${w}</span><button class="dt-del" onclick="removeDict(${i})">×</button></div>`).join('');
+}
+function addDict() {
+  const w = document.getElementById('dictWord').value.trim();
+  if(!w) return; if(DICT_WORDS.includes(w)) return toast('すでに登録済みです');
+  DICT_WORDS.push(w); document.getElementById('dictWord').value='';
+  renderDict(); saveToStorage(); toast(`辞書に追加: ${w}`, 'success');
+}
+function removeDict(i) { DICT_WORDS.splice(i,1); renderDict(); saveToStorage(); }
+function getDictPrompt() {
+  if(!DICT_WORDS.length) return '';
+  return `\n\n【専門用語辞書（音声誤変換の補正に使用）】\n以下は正しい表記です。音声認識で似た読みの誤変換があった場合、この正式名称に置き換えてください：\n${DICT_WORDS.join('、')}`;
+}
+
+// ==================== MASTER ====================
+function renderMasterEditor() {
+  const el = document.getElementById('masterEditor'); if(!el) return;
+  const q = (document.getElementById('masterEditSearch').value||'').trim().toLowerCase();
+  const list = q ? MASTER.filter(m=>m.name.toLowerCase().includes(q)) : MASTER;
+  el.innerHTML = list.map(m => {
+    const i = MASTER.indexOf(m);
+    return `<div style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:5px;background:var(--surface2);font-size:12px">
+      <span style="flex:1;font-weight:500">${m.name}</span>
+      <span style="font-family:'JetBrains Mono',monospace;color:var(--text2);min-width:60px;text-align:right">¥${m.price.toLocaleString()}</span>
+      <button class="btn btn-ghost btn-xs" onclick="startMasterEdit(${i})">✏️</button>
+      <button class="del-row" onclick="deleteMasterItem(${i})">×</button>
+    </div>`;
+  }).join('');
+}
+function startMasterEdit(i) {
+  masterEditIndex = i;
+  document.getElementById('newMasterName').value = MASTER[i].name;
+  document.getElementById('newMasterPrice').value = MASTER[i].price;
+  document.getElementById('masterSaveBtn').textContent = '更新';
+  document.getElementById('masterCancelBtn').style.display = '';
+  document.getElementById('newMasterName').focus();
+}
+function cancelMasterEdit() {
+  masterEditIndex = -1;
+  document.getElementById('newMasterName').value = '';
+  document.getElementById('newMasterPrice').value = '';
+  document.getElementById('masterSaveBtn').textContent = '追加';
+  document.getElementById('masterCancelBtn').style.display = 'none';
+}
+function saveMasterItem() {
+  const name = document.getElementById('newMasterName').value.trim();
+  const price = parseFloat(document.getElementById('newMasterPrice').value);
+  if(!name) return toast('品目名を入力してください', 'error');
+  if(isNaN(price)||price<0) return toast('単価を正しく入力してください', 'error');
+  if(masterEditIndex >= 0) { MASTER[masterEditIndex] = {name, price}; toast(`「${name}」を更新しました`, 'success'); }
+  else { if(MASTER.find(m=>m.name===name)) return toast('同じ品目名がすでに存在します', 'error'); MASTER.push({name, price}); toast(`「${name}」を追加しました`, 'success'); }
+  saveToStorage(); cancelMasterEdit(); renderMasterEditor(); renderMasterList();
+  const dl = document.getElementById('masterNamesList');
+  if(dl) { dl.innerHTML=''; MASTER.forEach(m=>{const o=document.createElement('option');o.value=m.name;dl.appendChild(o);}); }
+}
+function deleteMasterItem(i) {
+  if(!confirm(`「${MASTER[i].name}」を削除しますか？`)) return;
+  MASTER.splice(i,1); saveToStorage(); renderMasterEditor(); renderMasterList(); toast('削除しました');
+}
+function bulkImportMaster() {
+  const text = document.getElementById('masterImportText').value.trim();
+  if(!text) return toast('データを貼り付けてください', 'error');
+  let updated=0, added=0;
+  for(const line of text.split('\n').filter(l=>l.trim())) {
+    const sep = line.includes('\t') ? '\t' : ',';
+    const [name, priceStr] = line.split(sep).map(c=>c.trim().replace(/^"|"$/g,''));
+    if(!name) continue; const price = parseFloat(priceStr); if(isNaN(price)||price<0) continue;
+    const ex = MASTER.find(m=>m.name===name);
+    if(ex) { ex.price=price; updated++; } else { MASTER.push({name,price}); added++; }
+  }
+  saveToStorage(); renderMasterEditor(); renderMasterList();
+  const dl = document.getElementById('masterNamesList');
+  if(dl) { dl.innerHTML=''; MASTER.forEach(m=>{const o=document.createElement('option');o.value=m.name;dl.appendChild(o);}); }
+  toast(`更新: ${updated}件　追加: ${added}件`, 'success');
+  document.getElementById('masterImportText').value = '';
+}
+function handleMasterCsvImport(input) {
+  const file = input.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => { document.getElementById('masterImportText').value = e.target.result; bulkImportMaster(); };
+  reader.readAsText(file, 'UTF-8'); input.value = '';
+}
+function exportMasterCsv() {
+  const csv = MASTER.map(m=>`${m.name},${m.price}`).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'}));
+  a.download = `vetmemo_master_${new Date().toISOString().slice(0,10)}.csv`; a.click();
+  toast('マスターデータをエクスポートしました', 'success');
+}
+function renderMasterList() {
+  const q = document.getElementById('masterSearch').value.trim().toLowerCase();
+  const filtered = q ? MASTER.filter(m=>m.name.toLowerCase().includes(q)) : MASTER;
+  document.getElementById('masterList').innerHTML = filtered.slice(0,60).map(m =>
+    `<div class="m-row" onclick="addMasterToActive('${m.name}')"><span class="m-name">${m.name}</span><span class="m-price">¥${m.price.toLocaleString()}</span></div>`).join('');
+}
+function addMasterToActive(name) {
+  if(!activeResultId) return toast('先に計算タブで対象メモを選んでください');
+  const memo = memos.find(m=>m.id===activeResultId); if(!memo||!memo.items) return;
+  const master = MASTER.find(x=>x.name===name);
+  memo.items.push({name,qty:1,price:master?master.price:0,unit:'',unknown:!master});
+  renderResultsList(); saveToStorage(); toast(`${name} を追加`, 'success');
+}
+
+// ==================== CLIPBOARD ====================
+async function pasteFromClipboard() {
+  try {
+    const text = await navigator.clipboard.readText();
+    if(!text) return toast('クリップボードにテキストがありません');
+    document.getElementById('newMemoText').value = text;
+    document.getElementById('newMemoText').focus();
+    toast('クリップボードから貼り付けました', 'success');
+  } catch(e) { toast('クリップボードの読み取りに失敗しました（権限が必要です）', 'error'); }
+}
+
+// ==================== MEMO QUEUE ====================
+function addMemo(silent=false) {
+  const text = document.getElementById('newMemoText').value.trim();
+  if(!text) return toast('メモを入力してください');
+  const memo = {
+    id: Date.now().toString(),
+    time: new Date().toLocaleString('ja-JP',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}),
+    patientNo: document.getElementById('newPatientNo').value.trim(),
+    ownerName: document.getElementById('newOwnerName').value.trim(),
+    text, status:'pending', items:[], temp:'', symptom:''
+  };
+  memos.push(memo);
+  document.getElementById('newMemoText').value='';
+  document.getElementById('newPatientNo').value='';
+  document.getElementById('newOwnerName').value='';
+  saveToStorage(); renderMemoQueue(); updateBadge();
+  if(!silent) toast('メモを保存しました', 'success');
+}
+function renderMemoQueue() {
+  const el = document.getElementById('memoQueue');
+  if(!memos.length) { el.innerHTML='<div class="empty-state"><div class="es-icon">🐄</div>メモがありません<br>往診先で音声入力して追加してください</div>'; document.getElementById('queueCount').textContent='0件'; return; }
+  document.getElementById('queueCount').textContent=`${memos.length}件`;
+  el.innerHTML=[...memos].reverse().map(m=>`
+    <div class="memo-card ${m.status}" id="mc-${m.id}">
+      <div class="mc-header">
+        <span class="mc-num">#${memos.indexOf(m)+1}</span>
+        <span class="mc-time">${m.time}</span>
+        <span class="mc-status ${m.status}">${m.status==='pending'?'⏳ 未処理':m.status==='processing'?'⚡ 処理中':'✅ 完了'}</span>
+      </div>
+      ${(m.patientNo||m.ownerName)?`<div class="mc-patient">🐮 ${m.patientNo?'['+m.patientNo+'] ':''}${m.ownerName||''}</div>`:''}
+      <div class="mc-text">${m.text}</div>
+      <div class="mc-actions">
+        <button class="btn btn-ghost btn-xs" onclick="deleteMemo('${m.id}')">削除</button>
+        ${m.status==='pending'?`<button class="btn btn-primary btn-xs" onclick="processSingle('${m.id}')">この1件を解析</button>`:''}
+        ${m.status==='done'?`<button class="btn btn-xs" style="background:var(--surface3);color:var(--text2);border:1px solid var(--border)" onclick="switchTab('calc')">結果を見る →</button>`:''}
+      </div>
+    </div>`).join('');
+}
+function deleteMemo(id) { memos=memos.filter(m=>m.id!==id); saveToStorage(); renderMemoQueue(); updateBadge(); renderResultsList(); }
+function clearDoneMemos() { memos=memos.filter(m=>m.status!=='done'); saveToStorage(); renderMemoQueue(); updateBadge(); renderResultsList(); toast('完了済みを削除しました'); }
+function updateBadge() {
+  const count = memos.filter(m=>m.status==='pending').length;
+  const badge = document.getElementById('pendingBadge');
+  badge.textContent=count; badge.style.display=count>0?'':'none';
+  document.getElementById('pendingCount').textContent=count;
+  document.getElementById('sendAllBtn').style.display=memos.some(m=>m.status==='done')?'':'none';
+}
+
+// ==================== AI PARSE ====================
+async function parseMemo(memo) {
+  const ak = document.getElementById('anthropicKey').value.trim();
+  if(!ak) throw new Error('APIキーが設定されていません');
+  const masterNames = MASTER.map(m=>m.name).join('、');
+  const prompt = `あなたは獣医診療記録の解析AIです。以下の診療メモから情報を抽出し、JSONオブジェクトのみを返してください。他の文字は一切不要です。
+
+【マスター品目リスト（品目名はこれらと完全一致させる）】
+${masterNames}${getDictPrompt()}
+
+【診療メモ】
+${memo.text}
+
+【出力形式】
+{"patientNo":"患者番号(耳標・個体識別番号等、不明は空文字)","ownerName":"飼い主・農場名(不明は空文字)","temp":"体温(数値のみ、例:38.5。記載なければ空文字)","symptom":"主訴・症状・所見(簡潔に。記載なければ空文字)","items":[{"name":"品目名","qty":数量,"unit":"単位(ml/錠/本/個/回など、不明は空)"}]}
+
+【ルール】
+- 品目名はマスターリストと完全一致させる。数量不明は1。ml数や個数があれば反映。同一品目は数量合計。処置(再診/初診/直検等)も含める。
+- ownerNameは農場名・飼い主の氏名のみ。メモに明記されていない場合は必ず空文字にする。
+- 診療内容（投薬・処置）とownerNameを混同しない。判断に迷う場合は空文字にする。
+- tempは数値のみ（単位なし）。symptomは診断名・主訴を短く。`;
+
+  const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${ak}`,{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})
+  });
+  const data = await resp.json();
+  if(data.error) throw new Error(data.error.message);
+  let text = (data.candidates[0].content.parts||[]).map(b=>b.text||'').join('');
+  text = text.replace(/```json\s*/g,'').replace(/```\s*/g,'').trim();
+  const parsed = JSON.parse(text);
+  const items = (parsed.items||[]).map(p=>{
+    const m = MASTER.find(x=>x.name===p.name);
+    return {name:p.name,qty:parseFloat(p.qty)||1,unit:p.unit||'',price:m?m.price:0,unknown:!m};
+  });
+  const masterNameSet = new Set(MASTER.map(m=>m.name));
+  const ownerName = masterNameSet.has(parsed.ownerName) ? '' : (parsed.ownerName||'');
+  return {patientNo:parsed.patientNo||'',ownerName,temp:parsed.temp||'',symptom:parsed.symptom||'',items};
+}
+
+async function processSingle(id) {
+  const memo = memos.find(m=>m.id===id); if(!memo) return;
+  memo.status='processing'; renderMemoQueue();
+  try {
+    const result = await parseMemo(memo);
+    memo.items=result.items;
+    if(!memo.patientNo&&result.patientNo) memo.patientNo=result.patientNo;
+    if(!memo.ownerName&&result.ownerName) memo.ownerName=result.ownerName;
+    if(!memo.temp&&result.temp) memo.temp=result.temp;
+    if(!memo.symptom&&result.symptom) memo.symptom=result.symptom;
+    memo.status='done'; toast(`${memo.ownerName||'メモ'} の解析完了`, 'success');
+  } catch(e) { memo.status='pending'; toast('エラー: '+e.message,'error'); }
+  saveToStorage(); renderMemoQueue(); updateBadge();
+}
+
+// ==================== BATCH PROCESS ====================
+async function batchProcess() {
+  const pending = memos.filter(m=>m.status==='pending');
+  if(!pending.length) return toast('未処理のメモがありません');
+  if(!document.getElementById('anthropicKey').value.trim()) return toast('APIキーを設定してください（設定タブ）');
+  const btn = document.getElementById('batchBtn');
+  btn.disabled=true; btn.innerHTML='<span class="spinner"></span> 解析中...';
+  switchTab('calc');
+  for(let i=0;i<pending.length;i++){
+    const memo=pending[i];
+    document.getElementById('batchBar').style.width=Math.round((i/pending.length)*100)+'%';
+    memo.status='processing'; renderResultsList();
+    try {
+      const result = await parseMemo(memo);
+      memo.items=result.items;
+      if(!memo.patientNo&&result.patientNo) memo.patientNo=result.patientNo;
+      if(!memo.ownerName&&result.ownerName) memo.ownerName=result.ownerName;
+      if(!memo.temp&&result.temp) memo.temp=result.temp;
+      if(!memo.symptom&&result.symptom) memo.symptom=result.symptom;
+      memo.status='done';
+    } catch(e) { memo.status='pending'; toast(`エラー: `+e.message,'error'); }
+    saveToStorage(); renderResultsList(); renderMemoQueue(); updateBadge();
+    if(i<pending.length-1) await new Promise(r=>setTimeout(r,500));
+  }
+  document.getElementById('batchBar').style.width='100%';
+  btn.disabled=false; btn.innerHTML='⚡ まとめてAI解析';
+  toast('全件の解析が完了しました！', 'success');
+}
+
+// ==================== RESULTS LIST ====================
+function renderResultsList() {
+  const el = document.getElementById('resultsList');
+  const done = [...memos].reverse().filter(m=>m.status==='done'||m.status==='processing');
+  if(!done.length) { el.innerHTML='<div class="empty-state"><div class="es-icon">📋</div>「往診メモ」タブでメモを追加してから<br>「まとめてAI解析」を押してください</div>'; return; }
+  el.innerHTML = done.map(m => {
+    const total = (m.items||[]).reduce((s,it)=>s+it.price*it.qty,0);
+    const formula = (m.items||[]).filter(it=>it.price>0).map(it=>`${it.name}*${it.qty}`).join('/');
+    const rows = (m.items||[]).map((it,i)=>{
+      const sub=Math.round(it.price*it.qty);
+      return `<tr>
+        <td><input type="text" class="name-input" value="${it.name.replace(/"/g,'&quot;')}" list="masterNamesList" onchange="updateItemName('${m.id}',${i},this.value)" style="width:100%;min-width:80px;border:1px solid ${it.unknown?'var(--warn)':'transparent'};border-radius:4px;padding:2px 6px;font-size:12px;background:${it.unknown?'rgba(255,165,0,0.1)':'transparent'};color:var(--text);cursor:text"></td>
+        <td class="num-cell"><input class="qty-input" type="text" inputmode="decimal" value="${it.qty}" onchange="updateItemQty('${m.id}',${i},this.value)"></td>
+        <td class="price-cell">${it.price>0?'¥'+it.price.toLocaleString():'<span style="color:var(--warn)">未登録</span>'}</td>
+        <td class="sub-cell">${sub>0?'¥'+sub.toLocaleString():'—'}</td>
+        <td><button class="del-row" onclick="removeItemFromMemo('${m.id}',${i})">×</button></td>
+      </tr>`;
+    }).join('');
+    return `
+    <div class="result-card" id="rc-${m.id}" onclick="activeResultId='${m.id}'">
+      <div class="rc-header">
+        <div>
+          <div class="rc-patient">${m.status==='processing'?'<span class="spinner" style="width:10px;height:10px;margin-right:4px"></span>':''}${m.patientNo?'['+m.patientNo+'] ':''}${m.ownerName?'🐮 '+m.ownerName:'（農場名なし）'}</div>
+          <div class="rc-time">${m.time}</div>
+        </div>
+        <div class="rc-total">${m.status==='processing'?'解析中...':'¥'+Math.round(total).toLocaleString()}</div>
+      </div>
+      ${m.status==='done'?`
+      <div class="rc-body">
+        <table class="items-table">
+          <thead><tr><th>品目</th><th style="text-align:right">数量</th><th style="text-align:right">単価</th><th style="text-align:right">小計</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <div class="formula-line">${formula?formula.split('/').map(p=>`<span>${p}</span>`).join('<span style="color:var(--text3)">/</span>'):'—'}</div>
+      </div>
+      <div style="padding:4px 14px;border-top:1px solid var(--border)">
+        <button class="btn btn-ghost btn-xs" style="width:100%;justify-content:center" onclick="addItemToMemo('${m.id}')">＋ 品目を追加</button>
+      </div>
+      <div class="rc-actions">
+        <button class="btn btn-green btn-sm" onclick="openKarteModal('${m.id}')">📋 カルテに保存</button>
+        <button class="btn btn-discord btn-sm" onclick="sendOneToDiscord('${m.id}')">Discord送信</button>
+        <button class="btn btn-ghost btn-sm" onclick="copyMemoFormula('${m.id}')">B1形式コピー</button>
+        <button class="btn btn-ghost btn-sm" onclick="fillConvInput(\`${formula}\`,\`${(m.ownerName||'').replace(/`/g,"'")}\`,\`${(m.temp||'').replace(/`/g,"'")}\`,\`${(m.symptom||'').replace(/`/g,"'")}\`)">🔄 電カル変換</button>
+        <button class="btn btn-ghost btn-sm" onclick="reparse('${m.id}')">再解析</button>
+      </div>`:''}</div>`;
+  }).join('');
+}
+
+function updateItemQty(memoId,idx,val){const m=memos.find(x=>x.id===memoId);if(!m||!m.items)return;m.items[idx].qty=parseFloat(val)||0;saveToStorage();renderResultsList();}
+function updateItemName(memoId,idx,val){const m=memos.find(x=>x.id===memoId);if(!m||!m.items)return;const name=val.trim();const master=MASTER.find(x=>x.name===name);m.items[idx].name=name;m.items[idx].price=master?master.price:0;m.items[idx].unknown=!master;saveToStorage();renderResultsList();}
+function addItemToMemo(memoId){const m=memos.find(x=>x.id===memoId);if(!m)return;if(!m.items)m.items=[];m.items.push({name:'',qty:1,unit:'',price:0,unknown:true});saveToStorage();renderResultsList();}
+function removeItemFromMemo(memoId,idx){const m=memos.find(x=>x.id===memoId);if(!m||!m.items)return;m.items.splice(idx,1);saveToStorage();renderResultsList();}
+async function reparse(id){const memo=memos.find(m=>m.id===id);if(!memo)return;memo.status='pending';await processSingle(id);renderResultsList();}
+
+// ==================== DISCORD ====================
+function buildDiscordMsg(memo) {
+  const items=memo.items||[],total=items.reduce((s,it)=>s+it.price*it.qty,0);
+  const formula=items.filter(it=>it.price>0).map(it=>`${it.name}*${it.qty}`).join('/');
+  const lines=items.map(it=>`  ${it.name.padEnd(10,'　')}¥${it.price.toLocaleString()} × ${it.qty}${it.unit?'('+it.unit+')':''} = ¥${Math.round(it.price*it.qty).toLocaleString()}`).join('\n');
+  return `📋 診療記録  ${memo.time}\n患者番号: ${memo.patientNo||'—'}　農場: ${memo.ownerName||'—'}\n──────────────────────\n${lines||'  （品目なし）'}\n──────────────────────\n合計: ¥${Math.round(total).toLocaleString()}\n📝 B1形式: ${formula||'—'}`;
+}
+async function sendOneToDiscord(id) {
+  const memo=memos.find(m=>m.id===id);if(!memo)return;
+  const url=document.getElementById('discordUrl').value.trim();if(!url)return toast('Discord Webhook URLを設定してください（設定タブ）');
+  try{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:'```\n'+buildDiscordMsg(memo)+'\n```'})});if(r.ok)toast(`${memo.ownerName||'メモ'} をDiscordに送信しました`,'success');else throw new Error('HTTP '+r.status);}catch(e){toast('送信エラー: '+e.message,'error');}
+}
+async function sendAllToDiscord() {
+  const done=memos.filter(m=>m.status==='done');if(!done.length)return toast('完了済みのメモがありません');
+  const url=document.getElementById('discordUrl').value.trim();if(!url)return toast('Discord Webhook URLを設定してください（設定タブ）');
+  const btn=document.getElementById('sendAllBtn');btn.disabled=true;let ok=0;
+  for(const memo of done){try{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:'```\n'+buildDiscordMsg(memo)+'\n```'})});if(r.ok)ok++;await new Promise(r=>setTimeout(r,400));}catch(e){}}
+  btn.disabled=false;toast(`${ok}件をDiscordに送信しました`,'success');
+}
+
+// ==================== CLOUD SYNC ====================
+function loadJsonbinSettings() {
+  try {
+    const key=localStorage.getItem('jbk')||'', id=localStorage.getItem('jbid')||'';
+    if(key) document.getElementById('jsonbinKey').value=key;
+    if(id) document.getElementById('jsonbinId').value=id;
+  } catch(e){}
+}
+function saveJsonbinSettings() {
+  try { localStorage.setItem('jbk',document.getElementById('jsonbinKey').value.trim()); localStorage.setItem('jbid',document.getElementById('jsonbinId').value.trim()); } catch(e){}
+}
+function copyBinId() {
+  const id=document.getElementById('jsonbinId').value.trim();
+  if(!id) return toast('Bin IDがありません。先に「クラウドに保存」してください');
+  navigator.clipboard.writeText(id).then(()=>toast('Bin IDをコピーしました','success'));
+}
+async function cloudSave() {
+  const key=document.getElementById('jsonbinKey').value.trim();
+  if(!key) return toast('jsonbin.io APIキーを入力してください','error');
+  const data={version:2,savedAt:new Date().toISOString(),memos,dictWords:DICT_WORDS,convPairs,kartes:KARTES,farms:FARMS};
+  const binId=document.getElementById('jsonbinId').value.trim();
+  try {
+    let resp;
+    if(binId) { resp=await fetch(`https://api.jsonbin.io/v3/b/${binId}`,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':key},body:JSON.stringify(data)}); }
+    else { resp=await fetch('https://api.jsonbin.io/v3/b',{method:'POST',headers:{'Content-Type':'application/json','X-Master-Key':key,'X-Bin-Name':'CarteMemo','X-Bin-Private':'true'},body:JSON.stringify(data)}); }
+    const result=await resp.json();
+    if(!resp.ok) throw new Error(result.message||'HTTP '+resp.status);
+    if(!binId) { const newId=result.metadata.id; document.getElementById('jsonbinId').value=newId; localStorage.setItem('jbid',newId); }
+    saveJsonbinSettings();
+    document.getElementById('cloudInfo').textContent=`最終保存: ${new Date().toLocaleString('ja-JP')}（メモ${memos.length}件・カルテ${KARTES.length}件）`;
+    toast('クラウドに保存しました','success');
+  } catch(e) { toast('保存エラー: '+e.message,'error'); }
+}
+async function cloudLoad() {
+  const key=document.getElementById('jsonbinKey').value.trim(), binId=document.getElementById('jsonbinId').value.trim();
+  if(!key) return toast('jsonbin.io APIキーを入力してください','error');
+  if(!binId) return toast('Bin IDを入力してください','error');
+  try {
+    const resp=await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`,{headers:{'X-Master-Key':key}});
+    const result=await resp.json();
+    if(!resp.ok) throw new Error(result.message||'HTTP '+resp.status);
+    const data=result.record;
+    if(!Array.isArray(data.memos)) throw new Error('メモデータが見つかりません');
+    const existingIds=new Set(memos.map(m=>m.id));
+    const newMemos=data.memos.filter(m=>!existingIds.has(m.id));
+    memos=[...memos,...newMemos];
+    if(Array.isArray(data.dictWords)) data.dictWords.forEach(w=>{if(!DICT_WORDS.includes(w))DICT_WORDS.push(w);});
+    if(Array.isArray(data.convPairs)){const eIds=new Set(convPairs.map(p=>p.id));data.convPairs.forEach(p=>{if(!eIds.has(p.id))convPairs.push(p);});}
+    let newKartes=0;
+    if(Array.isArray(data.kartes)){const eIds=new Set(KARTES.map(k=>k.id));const added=data.kartes.filter(k=>!eIds.has(k.id));KARTES=[...KARTES,...added];newKartes=added.length;}
+    if(Array.isArray(data.farms)){data.farms.forEach(f=>{if(!FARMS.includes(f))FARMS.push(f);});FARMS.sort((a,b)=>a.localeCompare(b,'ja'));updateFarmDatalist();}
+    saveToStorage(); saveJsonbinSettings();
+    renderMemoQueue();renderResultsList();renderDict();renderConvPairs();updateBadge();
+    document.getElementById('cloudInfo').textContent=`最終読み込み: ${new Date().toLocaleString('ja-JP')}（メモ${newMemos.length}件・カルテ${newKartes}件追加）`;
+    toast(`メモ${newMemos.length}件・カルテ${newKartes}件を追加しました`,'success');
+  } catch(e) { toast('読み込みエラー: '+e.message,'error'); }
+}
+
+// ==================== JSON BACKUP ====================
+function exportData() {
+  const data={version:2,exportedAt:new Date().toISOString(),memos,dictWords:DICT_WORDS,convPairs,kartes:KARTES,farms:FARMS};
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+  a.download=`cartememo_${new Date().toISOString().slice(0,10)}.json`;a.click();
+  toast('JSONをダウンロードしました','success');
+}
+function importData(input) {
+  const file=input.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try {
+      const data=JSON.parse(e.target.result);
+      if(!Array.isArray(data.memos)) throw new Error('メモデータが見つかりません');
+      const eIds=new Set(memos.map(m=>m.id));const newMemos=data.memos.filter(m=>!eIds.has(m.id));memos=[...memos,...newMemos];
+      if(Array.isArray(data.dictWords))data.dictWords.forEach(w=>{if(!DICT_WORDS.includes(w))DICT_WORDS.push(w);});
+      if(Array.isArray(data.convPairs)){const eIds2=new Set(convPairs.map(p=>p.id));data.convPairs.forEach(p=>{if(!eIds2.has(p.id))convPairs.push(p);});}
+      let newKartes=0;
+      if(Array.isArray(data.kartes)){const eIds3=new Set(KARTES.map(k=>k.id));const added=data.kartes.filter(k=>!eIds3.has(k.id));KARTES=[...KARTES,...added];newKartes=added.length;}
+      if(Array.isArray(data.farms)){data.farms.forEach(f=>{if(!FARMS.includes(f))FARMS.push(f);});FARMS.sort((a,b)=>a.localeCompare(b,'ja'));updateFarmDatalist();}
+      saveToStorage();renderMemoQueue();renderResultsList();renderDict();renderConvPairs();updateBadge();
+      toast(`メモ${newMemos.length}件・カルテ${newKartes}件を追加しました`,'success');
+    } catch(err){toast('読み込みエラー: '+err.message,'error');}
+    input.value='';
+  };
+  reader.readAsText(file);
+}
+
+function copyMemoFormula(id){const memo=memos.find(m=>m.id===id);if(!memo||!memo.items)return;const f=memo.items.filter(it=>it.price>0).map(it=>`${it.name}*${it.qty}`).join('/');navigator.clipboard.writeText(f).then(()=>toast('B1形式をコピーしました','success'));}
+
+// ==================== ELECTRONIC RECORD CONVERSION ====================
+function updateKartePreview() {
+  const fields=['convDate','convTime','convOwnerName','convDistance','convTemp','convSymptom'].map(id=>document.getElementById(id).value.trim());
+  const proc=document.getElementById('convResult').value.trim();
+  const all=[...fields,proc];
+  document.getElementById('kartePreview').textContent=all.some(f=>f)?all.join('｜'):'—';
+}
+function copyKarteRecord(){const p=document.getElementById('kartePreview').textContent;if(!p||p==='—')return toast('レコードが空です','error');navigator.clipboard.writeText(p).then(()=>toast('カルテレコードをコピーしました','success'));}
+
+let pendingPairsArr=[];
+function addPendingPair(paper,electronic){if(pendingPairsArr.some(p=>p.paper===paper))return;pendingPairsArr.push({id:Date.now().toString(),paper,electronic});renderPendingPairs();}
+function renderPendingPairs(){
+  const section=document.getElementById('pendingPairsSection'),table=document.getElementById('pendingPairsTable'),countEl=document.getElementById('pendingPairCount');
+  if(!section||!table)return;if(!pendingPairsArr.length){section.style.display='none';return;}
+  section.style.display='';if(countEl)countEl.textContent=`${pendingPairsArr.length}件`;
+  table.innerHTML=pendingPairsArr.map((p,i)=>`
+    <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:4px;align-items:center">
+      <input type="text" value="${p.paper.replace(/"/g,'&quot;')}" readonly style="font-family:'JetBrains Mono',monospace;font-size:11px;background:var(--surface3);color:var(--text3);cursor:default">
+      <input type="text" value="${p.electronic.replace(/"/g,'&quot;')}" style="font-family:'JetBrains Mono',monospace;font-size:11px" oninput="pendingPairsArr[${i}].electronic=this.value">
+      <button class="del-row" onclick="removePendingPair(${i})">×</button>
+    </div>`).join('');
+}
+function removePendingPair(i){pendingPairsArr.splice(i,1);renderPendingPairs();}
+function saveAllPendingPairs(){
+  const toSave=pendingPairsArr.filter(p=>p.paper&&p.electronic&&p.paper!==p.electronic);
+  if(!toSave.length)return toast('書き換えられた行がありません','error');
+  const existingKeys=new Set(convPairs.map(p=>p.paper+'||'+p.electronic));let added=0;
+  toSave.forEach(p=>{const key=p.paper+'||'+p.electronic;if(!existingKeys.has(key)){convPairs.push({id:Date.now().toString()+added,paper:p.paper,electronic:p.electronic,note:'',createdAt:new Date().toISOString()});added++;}});
+  pendingPairsArr=pendingPairsArr.filter(p=>p.paper===p.electronic);
+  saveToStorage();renderConvPairs();renderPendingPairs();toast(`${added}件を学習データに保存しました`,'success');
+}
+function bulkImportConvPairs(){
+  const text=document.getElementById('bulkImportText').value.trim();if(!text)return toast('データを貼り付けてください','error');
+  let added=0;const eKeys=new Set(convPairs.map(p=>p.paper+'||'+p.electronic));
+  for(const line of text.split('\n').filter(l=>l.trim())){const sep=line.includes('\t')?'\t':',';const[paper,electronic,note=''] =line.split(sep).map(c=>c.trim().replace(/^"|"$/g,''));if(!paper||!electronic||paper===electronic)continue;const key=paper+'||'+electronic;if(eKeys.has(key))continue;convPairs.push({id:Date.now().toString()+added,paper,electronic,note,createdAt:new Date().toISOString()});eKeys.add(key);added++;}
+  if(added>0){saveToStorage();renderConvPairs();}toast(added>0?`${added}件をインポートしました`:'新しいデータはありませんでした',added>0?'success':'');
+  document.getElementById('bulkImportText').value='';
+}
+function handleCsvImport(input){const file=input.files[0];if(!file)return;const reader=new FileReader();reader.onload=e=>{document.getElementById('bulkImportText').value=e.target.result;bulkImportConvPairs();};reader.readAsText(file,'UTF-8');input.value='';}
+function renderConvPairs(){
+  const el=document.getElementById('pairsList'),label=document.getElementById('pairCountLabel');
+  if(label)label.textContent=`${convPairs.length}件`;
+  if(!el)return;
+  if(!convPairs.length){el.innerHTML='<div style="font-size:12px;color:var(--text3);text-align:center;padding:20px">学習データがありません。</div>';return;}
+  el.innerHTML=[...convPairs].reverse().map(p=>`
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 10px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:10px;color:var(--text3);margin-bottom:2px">紙カルテ</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;word-break:break-all">${p.paper}</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:6px;margin-bottom:2px">電子カルテ</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--green);word-break:break-all">${p.electronic}</div>
+          ${p.note?`<div style="font-size:10px;color:var(--text3);margin-top:4px">${p.note}</div>`:''}
+        </div>
+        <button class="del-row" onclick="removeConvPair('${p.id}')">×</button>
+      </div>
+    </div>`).join('');
+}
+function addConvPair(){const paper=document.getElementById('newPairPaper').value.trim(),electronic=document.getElementById('newPairElectronic').value.trim(),note=document.getElementById('newPairNote').value.trim();if(!paper||!electronic)return toast('紙カルテと電子カルテ両方を入力してください','error');convPairs.push({id:Date.now().toString(),paper,electronic,note,createdAt:new Date().toISOString()});document.getElementById('newPairPaper').value='';document.getElementById('newPairElectronic').value='';document.getElementById('newPairNote').value='';saveToStorage();renderConvPairs();toast('学習データに追加しました','success');}
+function removeConvPair(id){convPairs=convPairs.filter(p=>p.id!==id);saveToStorage();renderConvPairs();}
+function fillConvInput(formula,ownerName='',temp='',symptom=''){
+  document.getElementById('convInput').value=formula;document.getElementById('convResult').value=formula;
+  document.getElementById('convOwnerName').value=ownerName;document.getElementById('convTemp').value=temp;document.getElementById('convSymptom').value=symptom;
+  document.getElementById('convDate').value=new Date().toISOString().slice(0,10).replace(/-/g,'');
+  updateKartePreview();if(formula)addPendingPair(formula,formula);switchTab('conv');toast('電カル変換タブに入力しました','success');
+}
+function saveConvPairFromResult(){const paper=document.getElementById('convInput').value.trim(),electronic=document.getElementById('convResult').value.trim();if(!paper||!electronic)return toast('B1形式と処置内容の両方が必要です','error');if(paper===electronic)return toast('処置内容を電カル形式に書き換えてから保存してください','error');convPairs.push({id:Date.now().toString(),paper,electronic,note:'',createdAt:new Date().toISOString()});saveToStorage();renderConvPairs();toast('学習データに保存しました','success');}
+async function convertToElectronic(){
+  const ak=document.getElementById('anthropicKey').value.trim();if(!ak)return toast('APIキーを設定してください（設定タブ）','error');
+  const input=document.getElementById('convInput').value.trim();if(!input)return toast('紙カルテ形式を入力してください','error');
+  const btn=document.getElementById('convBtn');btn.disabled=true;btn.innerHTML='<span class="spinner"></span> 変換中...';
+  let examplesText='';
+  if(convPairs.length>0){const examples=convPairs.slice(-20);examplesText='\n\n【変換例（これを参考に変換してください）】\n'+examples.map(p=>`紙カルテ: ${p.paper}\n電子カルテ: ${p.electronic}`).join('\n\n');}
+  const prompt=`あなたは獣医診療記録の変換AIです。院内計算用の紙カルテ形式を、保険申請用の電子カルテ形式に変換してください。変換結果のテキストのみを出力し、説明・コード・他の文字は一切不要です。${examplesText}\n\n【変換対象】\n紙カルテ: ${input}\n\n電子カルテ（変換結果のみ出力）:`;
+  try{
+    const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${ak}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})});
+    const data=await resp.json();if(data.error)throw new Error(data.error.message);
+    const result=(data.candidates[0].content.parts||[]).map(b=>b.text||'').join('').trim();
+    document.getElementById('convResult').value=result;updateKartePreview();toast('変換完了','success');
+  }catch(e){toast('エラー: '+e.message,'error');}
+  finally{btn.disabled=false;btn.innerHTML='🤖 処置内容をAI予測';}
+}
+
+// ==================== KARTE MANAGEMENT ====================
+function updateFarmDatalist() {
+  const dl = document.getElementById('farmDatalist');
+  if(dl) dl.innerHTML = FARMS.map(f => `<option value="${f}">`).join('');
+}
+function updateKarteFarmFilter() {
+  const sel = document.getElementById('karte-filter-farm');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">全農場</option>' + FARMS.map(f => `<option value="${f}"${f===cur?' selected':''}>${f}</option>`).join('');
+}
+
+function openKarteModal(memoId) {
+  const memo = memos.find(m => m.id === memoId); if(!memo) return;
+  const total = Math.round((memo.items||[]).reduce((s,it)=>s+it.price*it.qty,0));
+  const formula = (memo.items||[]).filter(it=>it.price>0).map(it=>`${it.name}*${it.qty}`).join('/');
+  karteSaveMemoId = memoId;
+  document.getElementById('modal-farm').value = memo.ownerName || '';
+  document.getElementById('modal-cow').value = memo.patientNo || '';
+  document.getElementById('modal-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('modal-content').value = formula;
+  document.getElementById('modal-amount').value = total;
+  document.getElementById('karteModal').style.display = 'flex';
+}
+function closeKarteModal() { document.getElementById('karteModal').style.display='none'; karteSaveMemoId=null; }
+document.getElementById('karteModal').addEventListener('click', e => { if(e.target===document.getElementById('karteModal')) closeKarteModal(); });
+
+function confirmKarteSave() {
+  const farm = document.getElementById('modal-farm').value.trim();
+  const cow = document.getElementById('modal-cow').value.trim();
+  const date = document.getElementById('modal-date').value;
+  const content = document.getElementById('modal-content').value.trim();
+  const amount = parseInt(document.getElementById('modal-amount').value) || 0;
+  if(!farm) return toast('農場名を入力してください','error');
+  if(!cow) return toast('牛番号を入力してください','error');
+  if(!date) return toast('日付を入力してください','error');
+  const record = {date, content, amount};
+  const existing = KARTES.find(k => k.farm===farm && k.cow===cow && !k.closed);
+  if(existing) {
+    existing.records.push(record);
+    existing.records.sort((a,b)=>a.date.localeCompare(b.date));
+    existing.paper_total = existing.records.reduce((s,r)=>s+r.amount,0);
+    existing.month = existing.records[0].date.slice(0,7);
+  } else {
+    KARTES.unshift({id:Date.now().toString(),farm,cow,records:[record],paper_total:amount,electronic_amount:null,diff:null,month:date.slice(0,7),closed:false});
+  }
+  if(!FARMS.includes(farm)){FARMS.push(farm);FARMS.sort((a,b)=>a.localeCompare(b,'ja'));updateFarmDatalist();}
+  saveToStorage(); closeKarteModal();
+  toast(`【${farm} / ${cow}】にカルテを保存しました`,'success');
+}
+
+function renderKarteList() {
+  const farmF = document.getElementById('karte-filter-farm').value;
+  const cowF = document.getElementById('karte-filter-cow').value.trim().toLowerCase();
+  const unclosedOnly = document.getElementById('karte-filter-unclosed').checked;
+  let list = [...KARTES];
+  if(farmF) list = list.filter(k=>k.farm===farmF);
+  if(cowF) list = list.filter(k=>k.cow.toLowerCase().includes(cowF));
+  if(unclosedOnly) list = list.filter(k=>!k.closed);
+  const el = document.getElementById('karteList');
+  document.getElementById('karte-count').textContent = list.length + '件';
+  if(!list.length){el.innerHTML='<div class="empty-state"><div class="es-icon">📋</div>カルテがありません<br>一括計算タブの「カルテに保存」ボタンで追加してください</div>';return;}
+  el.innerHTML = list.map(k => {
+    const recs = k.records.map(r=>`
+      <div class="karte-rec">
+        <span class="rec-date">${fmtDate(r.date)}</span>
+        <span class="rec-content">${esc(r.content)}</span>
+        <span class="rec-amt">${r.amount>0?'¥'+r.amount.toLocaleString():'—'}</span>
+      </div>`).join('');
+    const diffClass = k.diff===null?'':k.diff>0?'diff-pos':k.diff<0?'diff-neg':'';
+    const diffText = k.diff===null?'—':(k.diff>=0?'+':'')+fmtAmt(k.diff);
+    const elecRow = k.closed
+      ? `<div class="total-row"><span>電子カルテ</span><span class="total-val">${fmtAmt(k.electronic_amount)}</span></div>`
+      : `<div class="total-row elec-row"><span>電子カルテ</span><div class="elec-input-wrap"><input type="number" id="elec-${k.id}" min="0" step="100" value="${k.electronic_amount!==null?k.electronic_amount:''}" placeholder="金額入力" onkeydown="if(event.key==='Enter')confirmElectronic('${k.id}')"><button class="btn btn-ghost btn-xs" onclick="confirmElectronic('${k.id}')">確定</button></div></div>`;
+    return `<div class="karte-card ${k.closed?'':'unclosed'}" id="card-${k.id}">
+      <div class="karte-hdr">
+        <span class="karte-title">【${esc(k.farm)} / ${esc(k.cow)}】</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="karte-badge ${k.closed?'badge-closed':'badge-unclosed'}">${k.closed?'確定済':'電子未入力'}</span>
+          <button class="btn btn-danger btn-xs" onclick="deleteKarte('${k.id}')">削除</button>
+        </div>
+      </div>
+      <div class="karte-records">${recs}</div>
+      <div class="karte-totals">
+        <div class="total-row"><span>紙カルテ合計</span><span class="total-val">${fmtAmt(k.paper_total)}</span></div>
+        ${elecRow}
+        <div class="total-row ${diffClass}"><span>差額（電子−紙）</span><span class="total-val">${diffText}</span></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function confirmElectronic(id) {
+  const input=document.getElementById('elec-'+id);if(!input)return;
+  const val=parseInt(input.value);if(isNaN(val)||val<0){alert('正しい金額を入力してください');return;}
+  const k=KARTES.find(x=>x.id===id);if(!k)return;
+  k.electronic_amount=val;k.diff=val-k.paper_total;k.closed=true;
+  saveToStorage();renderKarteList();
+}
+function deleteKarte(id){if(!confirm('このカルテを削除しますか？'))return;KARTES=KARTES.filter(k=>k.id!==id);saveToStorage();renderKarteList();}
+
+// ==================== STATS ====================
+function renderStats() {
+  const rangeN = parseInt(document.getElementById('stats-range').value);
+  const closed = KARTES.filter(k=>k.closed&&k.diff!==null);
+  let months=[...new Set(closed.map(k=>k.month))].sort();
+  if(rangeN>0){const cutoff=monthOffset(-rangeN);months=months.filter(m=>m>=cutoff);}
+  const farms=[...new Set(closed.map(k=>k.farm))].sort((a,b)=>a.localeCompare(b,'ja'));
+  const el=document.getElementById('statsContainer');
+  if(!months.length||!farms.length){el.innerHTML='<div class="empty-state"><div class="es-icon">📊</div>差額確定済みのデータがありません</div>';return;}
+  const tbl={};farms.forEach(f=>{tbl[f]={};});
+  closed.forEach(k=>{if(months.includes(k.month)&&farms.includes(k.farm))tbl[k.farm][k.month]=(tbl[k.farm][k.month]||0)+k.diff;});
+  const ths=months.map(m=>{const[y,mo]=m.split('-');return`<th>${y}年${parseInt(mo)}月</th>`;}).join('');
+  const rows=farms.map(f=>{
+    const cells=months.map(m=>{const v=tbl[f][m];if(v===undefined)return'<td style="color:var(--text3)">—</td>';const cls=v>0?'diff-pos':v<0?'diff-neg':'';return`<td class="${cls}">${(v>=0?'+':'')}${fmtAmt(v)}</td>`;}).join('');
+    return`<tr><td>${esc(f)}</td>${cells}</tr>`;
+  }).join('');
+  el.innerHTML=`<table class="stats-table"><thead><tr><th>農場名</th>${ths}</tr></thead><tbody>${rows}</tbody></table>`;
+}
+function monthOffset(n){const d=new Date();d.setMonth(d.getMonth()+n);return d.toISOString().slice(0,7);}
+function exportCSV() {
+  const rangeN=parseInt(document.getElementById('stats-range').value);
+  const closed=KARTES.filter(k=>k.closed&&k.diff!==null);
+  let months=[...new Set(closed.map(k=>k.month))].sort();
+  if(rangeN>0){const cutoff=monthOffset(-rangeN);months=months.filter(m=>m>=cutoff);}
+  const farms=[...new Set(closed.map(k=>k.farm))].sort((a,b)=>a.localeCompare(b,'ja'));
+  const tbl={};farms.forEach(f=>{tbl[f]={};});
+  closed.forEach(k=>{if(months.includes(k.month)&&farms.includes(k.farm))tbl[k.farm][k.month]=(tbl[k.farm][k.month]||0)+k.diff;});
+  let csv='﻿農場名,'+months.join(',')+'\n';
+  farms.forEach(f=>{csv+=f+','+months.map(m=>tbl[f][m]!==undefined?tbl[f][m]:'').join(',')+'\n';});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
+  a.download=`差額集計_${new Date().toISOString().slice(0,10)}.csv`;a.click();
+}
+
+// ==================== BOOKMARKLET ====================
+const BOOKMARKLET=`javascript:(function(){var el=document.querySelector('.amount-selector-placeholder');var amt=el?parseInt(el.textContent.replace(/[^0-9]/g,'')):null;if(!amt){alert('金額を取得できませんでした。セレクタの差し替えが必要です。');return;}var w=window.open('','cartememo');if(w&&w.postMessage){w.postMessage({type:'electronic_amount',amount:amt},'*');}else{prompt('カルテメモを開いてから再試行してください。金額:',amt);}})();`;
+function initBookmarklet(){document.getElementById('bookmarkletDisplay').textContent=BOOKMARKLET;}
+function copyBookmarklet(btn){navigator.clipboard.writeText(BOOKMARKLET).then(()=>{btn.textContent='コピー完了!';setTimeout(()=>btn.textContent='コピー',1800);});}
+window.name='cartememo';
+window.addEventListener('message',e=>{
+  if(!e.data||e.data.type!=='electronic_amount')return;
+  const amt=e.data.amount;if(typeof amt!=='number')return;
+  switchTab('karte');
+  setTimeout(()=>{
+    const inputs=document.querySelectorAll('[id^="elec-"]');
+    if(inputs.length>0){inputs[0].value=amt;inputs[0].style.borderColor='var(--accent)';inputs[0].focus();}
+    else alert('電子金額未入力のカルテが見つかりません。\n金額: '+amt.toLocaleString('ja-JP')+'円');
+  },350);
+});
+
+// ==================== UTILS ====================
+function fmtAmt(n){if(n===null||n===undefined)return'—';return n.toLocaleString('ja-JP')+'円';}
+function fmtDate(s){if(!s)return'';const p=s.split('-');return parseInt(p[1])+'/'+parseInt(p[2]);}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+// ==================== TOAST ====================
+function toast(msg,type=''){
+  const wrap=document.getElementById('toastWrap');
+  const el=document.createElement('div');el.className='toast'+(type?' '+type:'');el.textContent=msg;
+  wrap.appendChild(el);setTimeout(()=>el.remove(),3500);
+}
 </script>
 </body>
 </html>
