@@ -7,141 +7,142 @@
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap');
 :root{
-  --bg:#0f1117;--surface:#181c27;--surface2:#1e2335;--surface3:#252b40;
-  --border:#2d3452;--border2:#3d4570;
-  --accent:#4f8ef7;--accent2:#3b6fd4;--accent-glow:rgba(79,142,247,0.15);
-  --green:#3ecf8e;--green-glow:rgba(62,207,142,0.15);
-  --warn:#f5a623;--danger:#e74c5e;--discord:#5865f2;
-  --text:#e8eaf2;--text2:#9ca3c8;--text3:#5a6080;
+  --bg:#fff;--surface:#f7f7f7;--surface2:#f0f0f0;--surface3:#e8e8e8;
+  --border:#e0e0e0;--border2:#c8c8c8;
+  --accent:#111;--accent2:#333;--accent-glow:rgba(0,0,0,.04);
+  --green:#111;--green-glow:transparent;
+  --warn:#c00;--danger:#c00;--discord:#555;
+  --text:#111;--text2:#555;--text3:#999;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--text);font-family:'Noto Sans JP',sans-serif;font-size:14px;min-height:100vh}
-header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 20px;height:52px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:200}
-.logo{font-size:17px;font-weight:700;color:var(--text)}.logo em{color:var(--accent);font-style:normal}
+body{background:#fff;color:#111;font-family:'Noto Sans JP',sans-serif;font-size:14px;min-height:100vh}
+header{background:#fff;border-bottom:1px solid var(--border);padding:0 24px;height:54px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:200}
+.logo{font-size:22px;font-weight:800;color:#111;letter-spacing:-.5px}
 header .spacer{flex:1}
-.hdr-pill{font-size:11px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px 10px;display:flex;align-items:center;gap:5px}
-.hdr-pill .dot{width:7px;height:7px;border-radius:50%;background:var(--text3)}
-.hdr-pill .dot.on{background:var(--green);box-shadow:0 0 6px var(--green)}
-.tab-bar{display:flex;background:var(--surface);border-bottom:1px solid var(--border);padding:0 20px;overflow-x:auto}
-.tab{padding:10px 16px;font-size:13px;font-weight:500;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;display:flex;align-items:center;gap:6px;white-space:nowrap}
-.tab:hover{color:var(--text2)}.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
-.tab .badge{background:var(--warn);color:#000;font-size:10px;font-weight:700;border-radius:10px;padding:1px 6px;min-width:18px;text-align:center}
-.layout{display:flex;min-height:calc(100vh - 97px)}
-.sidebar{width:260px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);overflow-y:auto;position:sticky;top:52px;height:calc(100vh - 97px)}
-.main{flex:1;min-width:0}
-.tab-page{display:none;padding:20px;flex-direction:column;gap:16px}
+.hdr-pill{font-size:12px;color:var(--text2);background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:3px 12px;display:flex;align-items:center;gap:6px}
+.hdr-pill .dot{width:8px;height:8px;border-radius:50%;background:var(--border2)}
+.hdr-pill .dot.on{background:#111}
+.tab-bar{display:flex;background:#fff;border-bottom:2px solid var(--border);padding:0 24px;overflow-x:auto}
+.tab{padding:12px 16px;font-size:13px;font-weight:500;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.tab:hover{color:var(--text2)}.tab.active{color:#111;border-bottom-color:#111;font-weight:700}
+.tab .badge{background:#c00;color:#fff;font-size:10px;font-weight:700;border-radius:10px;padding:1px 6px;min-width:18px;text-align:center}
+.layout{display:flex;min-height:calc(100vh - 95px)}
+.sidebar{width:260px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);overflow-y:auto;position:sticky;top:54px;height:calc(100vh - 95px)}
+.main{flex:1;min-width:0;background:#fff}
+.tab-page{display:none;padding:22px;flex-direction:column;gap:16px}
 .tab-page.active{display:flex}
 .s-section{padding:14px 16px;border-bottom:1px solid var(--border)}
-.s-title{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:10px}
-label{font-size:12px;color:var(--text2);display:block;margin-bottom:4px;margin-top:8px}
+.s-title{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:10px}
+label{font-size:12px;color:var(--text2);display:block;margin-bottom:4px;margin-top:8px;font-weight:500}
 label:first-of-type{margin-top:0}
-input,textarea,select{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'Noto Sans JP',sans-serif;font-size:13px;padding:7px 10px;outline:none;transition:border-color .2s}
-input:focus,textarea:focus{border-color:var(--accent)}
+input,textarea,select{width:100%;background:#fff;border:1px solid var(--border2);border-radius:5px;color:#111;font-family:'Noto Sans JP',sans-serif;font-size:13px;padding:8px 10px;outline:none;transition:border-color .15s}
+input:focus,textarea:focus,select:focus{border-color:#111}
 input[type=password]{font-family:'JetBrains Mono',monospace;letter-spacing:.05em}
 input[type=checkbox]{width:auto;margin:0}
-.input-hint{font-size:11px;color:var(--text3);margin-top:4px;line-height:1.5}
+.input-hint{font-size:11px;color:var(--text3);margin-top:4px;line-height:1.6}
 .dict-tags{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;max-height:160px;overflow-y:auto}
-.dict-tag{display:inline-flex;align-items:center;gap:3px;background:var(--surface2);border:1px solid var(--green);border-radius:20px;padding:2px 10px 2px 12px}
-.dt-word{color:var(--green);font-size:11px;font-family:'JetBrains Mono',monospace}
-.dt-del{background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;line-height:1}.dt-del:hover{color:var(--danger)}
+.dict-tag{display:inline-flex;align-items:center;gap:3px;background:#fff;border:1px solid var(--border2);border-radius:20px;padding:2px 10px 2px 12px}
+.dt-word{color:#111;font-size:11px;font-family:'JetBrains Mono',monospace;font-weight:600}
+.dt-del{background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;line-height:1}.dt-del:hover{color:#c00}
 .master-list{max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
-.m-row{display:flex;justify-content:space-between;align-items:center;background:var(--surface2);border-radius:4px;padding:4px 8px;font-size:12px;cursor:pointer;transition:background .15s}
-.m-row:hover{background:var(--surface3)}.m-name{color:var(--text)}.m-price{color:var(--accent);font-family:'JetBrains Mono',monospace;font-size:11px}
-.btn{border:none;border-radius:6px;cursor:pointer;font-family:'Noto Sans JP',sans-serif;font-weight:500;font-size:13px;padding:8px 16px;transition:all .15s;display:inline-flex;align-items:center;gap:6px}
-.btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{background:var(--accent2)}.btn-primary:disabled{opacity:.4;cursor:not-allowed}
-.btn-ghost{background:var(--surface2);color:var(--text);border:1px solid var(--border)}.btn-ghost:hover{border-color:var(--border2)}
-.btn-green{background:var(--green);color:#0a1a12;font-weight:700}.btn-green:hover{filter:brightness(1.1)}.btn-green:disabled{opacity:.4;cursor:not-allowed}
-.btn-danger{background:var(--danger);color:#fff}.btn-discord{background:var(--discord);color:#fff}.btn-discord:hover{filter:brightness(1.15)}.btn-discord:disabled{opacity:.4;cursor:not-allowed}
-.btn-sm{padding:5px 10px;font-size:12px}.btn-xs{padding:3px 8px;font-size:11px}.btn-full{width:100%;justify-content:center}
-.panel{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden}
-.panel-hdr{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;background:var(--surface2)}
-.panel-hdr h2{font-size:13px;font-weight:600;flex:1}
-.step-badge{font-size:10px;font-family:'JetBrains Mono',monospace;background:var(--accent-glow);color:var(--accent);border:1px solid var(--accent);border-radius:20px;padding:2px 8px}
-.panel-body{padding:14px}
+.m-row{display:flex;justify-content:space-between;align-items:center;background:#fff;border:1px solid var(--border);border-radius:4px;padding:5px 8px;font-size:12px;cursor:pointer;transition:background .12s}
+.m-row:hover{background:var(--surface2)}.m-name{color:#111;font-weight:500}.m-price{color:var(--text2);font-family:'JetBrains Mono',monospace;font-size:11px}
+.btn{border:none;border-radius:5px;cursor:pointer;font-family:'Noto Sans JP',sans-serif;font-weight:600;font-size:13px;padding:8px 16px;transition:all .12s;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:#111;color:#fff}.btn-primary:hover{background:#333}.btn-primary:disabled{opacity:.35;cursor:not-allowed}
+.btn-ghost{background:#fff;color:#333;border:1px solid var(--border2)}.btn-ghost:hover{background:var(--surface);border-color:#aaa}
+.btn-green{background:#111;color:#fff;font-weight:700}.btn-green:hover{background:#333}.btn-green:disabled{opacity:.35;cursor:not-allowed}
+.btn-danger{background:#c00;color:#fff}.btn-danger:hover{background:#a00}
+.btn-discord{background:#555;color:#fff}.btn-discord:hover{background:#444}.btn-discord:disabled{opacity:.35;cursor:not-allowed}
+.btn-sm{padding:6px 12px;font-size:12px}.btn-xs{padding:3px 8px;font-size:11px}.btn-full{width:100%;justify-content:center}
+.panel{background:#fff;border:1px solid var(--border);border-radius:7px;overflow:hidden}
+.panel-hdr{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;background:var(--surface)}
+.panel-hdr h2{font-size:15px;font-weight:700;flex:1;color:#111}
+.step-badge{font-size:10px;background:var(--surface2);color:var(--text2);border:1px solid var(--border2);border-radius:20px;padding:2px 8px}
+.panel-body{padding:16px}
 .memo-queue{display:flex;flex-direction:column;gap:8px}
-.memo-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;position:relative;transition:border-color .2s}
-.memo-card:hover{border-color:var(--border2)}.memo-card.processing{border-color:var(--accent);animation:pulse 1.5s infinite}.memo-card.done{border-color:var(--green);opacity:.75}
-@keyframes pulse{0%,100%{box-shadow:none}50%{box-shadow:0 0 8px var(--accent-glow)}}
+.memo-card{background:#fff;border:1px solid var(--border);border-radius:7px;padding:12px 14px;position:relative;transition:border-color .2s}
+.memo-card:hover{border-color:var(--border2)}.memo-card.processing{border-color:#111;animation:pulse 1.5s infinite}.memo-card.done{border-color:var(--border);opacity:.65}
+@keyframes pulse{0%,100%{border-color:var(--border)}50%{border-color:#555}}
 .mc-header{display:flex;align-items:center;gap:8px;margin-bottom:6px}
-.mc-num{font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text3);background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 6px}
-.mc-time{font-size:11px;color:var(--text3)}.mc-status{margin-left:auto;font-size:11px;font-weight:500}
-.mc-status.pending{color:var(--warn)}.mc-status.processing{color:var(--accent)}.mc-status.done{color:var(--green)}
-.mc-patient{font-size:13px;font-weight:500;color:var(--text);margin-bottom:4px}
+.mc-num{font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text3);background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:1px 6px}
+.mc-time{font-size:11px;color:var(--text3)}.mc-status{margin-left:auto;font-size:11px;font-weight:600}
+.mc-status.pending{color:#999}.mc-status.processing{color:#111}.mc-status.done{color:#555}
+.mc-patient{font-size:13px;font-weight:600;color:#111;margin-bottom:4px}
 .mc-text{font-size:12px;color:var(--text2);line-height:1.5;max-height:60px;overflow:hidden;position:relative}
-.mc-text::after{content:'';position:absolute;bottom:0;left:0;right:0;height:20px;background:linear-gradient(transparent,var(--surface2))}
+.mc-text::after{content:'';position:absolute;bottom:0;left:0;right:0;height:20px;background:linear-gradient(transparent,#fff)}
 .mc-actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
-.new-memo-form{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px}
+.new-memo-form{background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:16px}
 .new-memo-form textarea{min-height:100px;resize:vertical;font-size:14px;line-height:1.6}
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
 .results-list{display:flex;flex-direction:column;gap:20px;padding-right:4px}
-.result-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden}
-.rc-header{background:var(--surface2);border-bottom:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;gap:10px}
-.rc-patient{font-size:13px;font-weight:600}.rc-time{font-size:11px;color:var(--text3)}
-.rc-total{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:var(--green)}
-.rc-body{padding:12px 14px;max-height:320px;overflow-y:auto}
+.result-card{background:#fff;border:1px solid var(--border);border-radius:7px;overflow:hidden}
+.rc-header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 16px;display:flex;align-items:center;gap:10px}
+.rc-patient{font-size:14px;font-weight:700;color:#111}.rc-time{font-size:11px;color:var(--text3)}
+.rc-total{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:700;color:#111}
+.rc-body{padding:12px 16px;max-height:320px;overflow-y:auto}
 .items-table{width:100%;border-collapse:collapse;font-size:13px}
-.items-table th{text-align:left;padding:5px 8px;font-size:10px;font-weight:600;letter-spacing:.05em;color:var(--text3);text-transform:uppercase;border-bottom:1px solid var(--border)}
-.items-table td{padding:6px 8px;border-bottom:1px solid var(--border)}.items-table tr:last-child td{border-bottom:none}.items-table tr:hover td{background:var(--surface2)}
-.name-cell{color:var(--text);font-weight:500}.name-cell.unknown{color:var(--warn)}
+.items-table th{text-align:left;padding:5px 8px;font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--text3);text-transform:uppercase;border-bottom:1px solid var(--border)}
+.items-table td{padding:6px 8px;border-bottom:1px solid var(--border)}.items-table tr:last-child td{border-bottom:none}.items-table tr:hover td{background:var(--surface)}
+.name-cell{color:#111;font-weight:500}.name-cell.unknown{color:#c00}
 .num-cell{font-family:'JetBrains Mono',monospace;color:var(--text2);text-align:right}
 .price-cell{font-family:'JetBrains Mono',monospace;color:var(--text2);text-align:right}
-.sub-cell{font-family:'JetBrains Mono',monospace;color:var(--text);text-align:right;font-weight:500}
+.sub-cell{font-family:'JetBrains Mono',monospace;color:#111;text-align:right;font-weight:600}
 .qty-input{width:55px;padding:2px 5px;font-size:12px;font-family:'JetBrains Mono',monospace;text-align:right}
-.del-row{background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 3px}.del-row:hover{color:var(--danger)}
-.formula-line{background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:6px 10px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);word-break:break-all;margin-top:8px}
-.formula-line span{color:var(--accent)}
-.rc-actions{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--border);flex-wrap:wrap}
-.batch-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px}
-.batch-bar .count{font-size:12px;color:var(--text2)}
-.batch-progress{flex:1;min-width:120px;height:6px;background:var(--border);border-radius:3px;overflow:hidden}
-.batch-progress-bar{height:100%;background:var(--accent);border-radius:3px;transition:width .4s ease}
-.empty-state{text-align:center;padding:40px 20px;color:var(--text3);font-size:13px}
-.empty-state .es-icon{font-size:36px;margin-bottom:10px;opacity:.4}
+.del-row{background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 3px}.del-row:hover{color:#c00}
+.formula-line{background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:7px 10px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);word-break:break-all;margin-top:8px}
+.formula-line span{color:#111;font-weight:600}
+.rc-actions{display:flex;gap:8px;padding:10px 16px;border-top:1px solid var(--border);flex-wrap:wrap}
+.batch-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:7px}
+.batch-bar .count{font-size:12px;color:var(--text2);font-weight:500}
+.batch-progress{flex:1;min-width:120px;height:4px;background:var(--border);border-radius:2px;overflow:hidden}
+.batch-progress-bar{height:100%;background:#111;border-radius:2px;transition:width .4s ease}
+.empty-state{text-align:center;padding:48px 20px;color:var(--text3);font-size:13px}
+.empty-state .es-icon{font-size:36px;margin-bottom:12px;opacity:.35}
 .toast-wrap{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:6px;z-index:9999}
-.toast{background:var(--surface3);border:1px solid var(--border2);border-radius:7px;padding:8px 14px;font-size:13px;color:var(--text);display:flex;align-items:center;gap:7px;animation:slideIn .2s ease;box-shadow:0 4px 16px rgba(0,0,0,.4)}
-.toast.success{border-color:var(--green);color:var(--green)}.toast.error{border-color:var(--danger);color:var(--danger)}
+.toast{background:#fff;border:1px solid var(--border2);border-radius:6px;padding:9px 16px;font-size:13px;color:#111;display:flex;align-items:center;gap:7px;animation:slideIn .2s ease;box-shadow:0 2px 12px rgba(0,0,0,.1)}
+.toast.success{border-color:#111}.toast.error{border-color:#c00;color:#c00}
 @keyframes slideIn{from{transform:translateX(30px);opacity:0}to{transform:translateX(0);opacity:1}}
-.spinner{width:14px;height:14px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;display:inline-block;flex-shrink:0}
+.spinner{width:14px;height:14px;border:2px solid var(--border);border-top-color:#111;border-radius:50%;animation:spin .7s linear infinite;display:inline-block;flex-shrink:0}
 @keyframes spin{to{transform:rotate(360deg)}}
 
 /* ===== KARTE ===== */
-.filter-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:14px}
+.filter-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:7px;margin-bottom:14px}
 .filter-bar select,.filter-bar input[type=text]{width:auto;flex:none}
-.filter-bar label{margin:0;display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--text2);font-size:13px}
-.karte-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:10px}
-.karte-card.unclosed{border-color:var(--warn)}
+.filter-bar label{margin:0;display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--text2);font-size:13px;font-weight:400}
+.karte-card{background:#fff;border:1px solid var(--border);border-radius:7px;padding:16px;margin-bottom:10px}
+.karte-card.unclosed{border-left:3px solid #c00}
 .karte-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px}
-.karte-title{font-size:14px;font-weight:700;color:var(--text)}
-.karte-badge{font-size:10px;padding:2px 8px;border-radius:10px;border:1px solid}
-.badge-unclosed{color:var(--warn);border-color:var(--warn)}
-.badge-closed{color:var(--green);border-color:var(--green)}
-.karte-records{margin-bottom:10px}
-.karte-rec{display:flex;gap:10px;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px}
+.karte-title{font-size:16px;font-weight:700;color:#111}
+.karte-badge{font-size:11px;padding:2px 9px;border-radius:10px;border:1px solid;font-weight:500}
+.badge-unclosed{color:#c00;border-color:#c00}
+.badge-closed{color:var(--text3);border-color:var(--border2)}
+.karte-records{margin-bottom:12px}
+.karte-rec{display:flex;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px}
 .karte-rec:last-child{border-bottom:none}
 .rec-date{color:var(--text3);width:48px;flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:12px}
 .rec-content{flex:1;color:var(--text2)}
-.rec-amt{text-align:right;width:90px;flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:12px}
-.karte-totals{border-top:1px solid var(--border);padding-top:10px}
-.total-row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:13px}
+.rec-amt{text-align:right;width:90px;flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:#111}
+.karte-totals{border-top:1px solid var(--border);padding-top:12px}
+.total-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;font-size:14px}
 .total-row.elec-row{gap:8px}
-.total-val{font-family:'JetBrains Mono',monospace}
-.diff-pos{color:var(--green);font-weight:700}
-.diff-neg{color:var(--danger);font-weight:700}
+.total-val{font-family:'JetBrains Mono',monospace;font-weight:600}
+.diff-pos{color:#111;font-weight:700}
+.diff-neg{color:#c00;font-weight:700}
 .elec-input-wrap{display:flex;gap:6px;align-items:center}
-.elec-input-wrap input{width:120px;text-align:right;padding:4px 8px;font-size:12px;font-family:'JetBrains Mono',monospace}
+.elec-input-wrap input{width:130px;text-align:right;padding:5px 8px;font-size:13px;font-family:'JetBrains Mono',monospace}
 
 /* ===== STATS ===== */
 .stats-table{width:100%;border-collapse:collapse;font-size:13px}
-.stats-table th{background:var(--surface2);padding:8px 12px;text-align:right;border:1px solid var(--border);font-size:12px;white-space:nowrap}
+.stats-table th{background:var(--surface);padding:9px 12px;text-align:right;border:1px solid var(--border);font-size:12px;font-weight:700;white-space:nowrap;color:var(--text2)}
 .stats-table th:first-child{text-align:left}
-.stats-table td{padding:7px 12px;text-align:right;border:1px solid var(--border)}
-.stats-table td:first-child{text-align:left;font-weight:600}
-.stats-table tr:nth-child(even) td{background:var(--surface2)}
+.stats-table td{padding:8px 12px;text-align:right;border:1px solid var(--border);font-family:'JetBrains Mono',monospace}
+.stats-table td:first-child{text-align:left;font-weight:600;font-family:'Noto Sans JP',sans-serif}
+.stats-table tr:nth-child(even) td{background:var(--surface)}
 
 /* ===== MODAL ===== */
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:500;display:flex;align-items:center;justify-content:center}
-.modal-box{background:var(--surface);border:1px solid var(--border2);border-radius:10px;padding:20px;width:400px;max-width:90vw;max-height:90vh;overflow-y:auto}
-.modal-title{font-size:14px;font-weight:700;margin-bottom:14px}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;display:flex;align-items:center;justify-content:center}
+.modal-box{background:#fff;border:1px solid var(--border2);border-radius:8px;padding:24px;width:420px;max-width:90vw;max-height:90vh;overflow-y:auto;box-shadow:0 4px 24px rgba(0,0,0,.12)}
+.modal-title{font-size:17px;font-weight:700;margin-bottom:16px;color:#111}
 
 @media(max-width:768px){
   .layout{flex-direction:column}
@@ -150,7 +151,7 @@ input[type=checkbox]{width:auto;margin:0}
   .form-row{grid-template-columns:1fr}
   .new-memo-form textarea{font-size:16px}
   .btn{padding:10px 14px;font-size:14px}
-  .tab{padding:8px 12px;font-size:12px}
+  .tab{padding:8px 10px;font-size:12px}
 }
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:transparent}
@@ -160,7 +161,7 @@ input[type=checkbox]{width:auto;margin:0}
 <body>
 
 <header>
-  <div class="logo">Carte<em>Memo</em></div>
+  <div class="logo">CarteMemo</div>
   <div class="spacer"></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
 </header>
@@ -170,7 +171,6 @@ input[type=checkbox]{width:auto;margin:0}
   <div class="tab" onclick="switchTab('calc')" id="tab-calc">🧮 一括計算</div>
   <div class="tab" onclick="switchTab('karte')" id="tab-karte">📋 カルテ一覧</div>
   <div class="tab" onclick="switchTab('stats')" id="tab-stats">📊 集計</div>
-  <div class="tab" onclick="switchTab('conv')" id="tab-conv">🔄 電カル変換</div>
   <div class="tab" onclick="switchTab('settings')" id="tab-settings">⚙️ 設定</div>
 </div>
 
@@ -189,7 +189,7 @@ input[type=checkbox]{width:auto;margin:0}
 <!-- ===== 往診メモ ===== -->
 <div class="tab-page active" id="page-memo">
   <div class="new-memo-form">
-    <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:10px">🎤 新しいメモを追加</div>
+    <div style="font-size:13px;font-weight:700;color:#111;margin-bottom:12px">🎤 新しいメモを追加</div>
     <div class="form-row">
       <div><label>患者番号（牛番号）</label><input type="text" id="newPatientNo" placeholder="例: 0001"></div>
       <div><label>飼い主（農場）名</label><input type="text" id="newOwnerName" list="farmDatalist" placeholder="例: A牧場" autocomplete="off"></div>
@@ -203,7 +203,7 @@ input[type=checkbox]{width:auto;margin:0}
     </div>
   </div>
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-    <div style="font-size:12px;font-weight:600;color:var(--text2)">保存済みメモ <span id="queueCount" style="color:var(--text3)">0件</span></div>
+    <div style="font-size:13px;font-weight:700;color:#111">保存済みメモ <span id="queueCount" style="font-size:12px;font-weight:400;color:var(--text3)">0件</span></div>
     <button class="btn btn-ghost btn-xs" onclick="clearDoneMemos()">完了済みを削除</button>
   </div>
   <div class="memo-queue" id="memoQueue">
@@ -216,9 +216,7 @@ input[type=checkbox]{width:auto;margin:0}
   <div class="batch-bar">
     <div class="count">未処理: <b id="pendingCount">0</b>件</div>
     <div class="batch-progress"><div class="batch-progress-bar" id="batchBar" style="width:0%"></div></div>
-    <button class="btn btn-green" id="batchBtn" onclick="batchProcess()">
-      ⚡ まとめてAI解析
-    </button>
+    <button class="btn btn-green" id="batchBtn" onclick="batchProcess()">⚡ まとめてAI解析</button>
     <button class="btn btn-discord btn-sm" id="sendAllBtn" onclick="sendAllToDiscord()" style="display:none">一括Discord送信</button>
   </div>
   <div class="results-list" id="resultsList">
@@ -242,7 +240,7 @@ input[type=checkbox]{width:auto;margin:0}
 <!-- ===== 集計 ===== -->
 <div class="tab-page" id="page-stats">
   <div class="batch-bar">
-    <label style="font-size:13px;color:var(--text2);margin:0">表示期間:</label>
+    <label style="font-size:13px;color:var(--text2);margin:0;font-weight:500">表示期間:</label>
     <select id="stats-range" onchange="renderStats()" style="width:auto;flex:none">
       <option value="3">直近3ヶ月</option>
       <option value="6">直近6ヶ月</option>
@@ -252,74 +250,6 @@ input[type=checkbox]{width:auto;margin:0}
     <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="exportCSV()">↓ CSVエクスポート</button>
   </div>
   <div id="statsContainer"></div>
-</div>
-
-<!-- ===== 電カル変換 ===== -->
-<div class="tab-page" id="page-conv">
-  <div class="panel">
-    <div class="panel-hdr"><h2>🔄 電子カルテレコード作成</h2><span class="step-badge">AI変換</span></div>
-    <div class="panel-body">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
-        <div><label>日付（YYYYMMDD）</label><input type="text" id="convDate" placeholder="20260517" oninput="updateKartePreview()"></div>
-        <div><label>時間</label><input type="text" id="convTime" placeholder="例: 10:30" oninput="updateKartePreview()"></div>
-        <div><label>往診元</label><input type="text" id="convOwnerName" placeholder="例: A牧場" oninput="updateKartePreview()"></div>
-        <div><label>往診距離</label><input type="text" id="convDistance" placeholder="例: 5km" oninput="updateKartePreview()"></div>
-        <div><label>体温</label><input type="text" id="convTemp" placeholder="例: 38.5" oninput="updateKartePreview()"></div>
-        <div><label>症状/所見</label><input type="text" id="convSymptom" placeholder="例: 未消化軟便" oninput="updateKartePreview()"></div>
-      </div>
-      <label>VetMemo品目（B1形式）</label>
-      <textarea id="convInput" placeholder="例: ビオペア*2/ウルソ粉*1/po/直検" style="min-height:60px;resize:vertical;font-family:'JetBrains Mono',monospace;font-size:13px" oninput="updateKartePreview()"></textarea>
-      <p class="input-hint">計算タブの「電カル変換」ボタンで自動入力できます</p>
-      <button class="btn btn-primary btn-full" id="convBtn" onclick="convertToElectronic()" style="margin-top:8px">🤖 処置内容をAI予測</button>
-      <label style="margin-top:12px">処置内容（電カル形式）</label>
-      <textarea id="convResult" placeholder="AI予測結果、または直接入力" style="min-height:50px;resize:vertical;font-family:'JetBrains Mono',monospace;font-size:13px" oninput="updateKartePreview()"></textarea>
-      <div style="margin-top:14px">
-        <label>カルテレコード（プレビュー）</label>
-        <div id="kartePreview" style="background:var(--surface3);border:1px solid var(--border);border-radius:6px;padding:10px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text2);min-height:36px;word-break:break-all">—</div>
-      </div>
-      <div style="display:flex;gap:8px;margin-top:10px">
-        <button class="btn btn-green btn-sm btn-full" onclick="copyKarteRecord()">📋 カルテレコードをコピー</button>
-        <button class="btn btn-ghost btn-sm" onclick="saveConvPairFromResult()" style="white-space:nowrap">学習データに保存</button>
-      </div>
-    </div>
-  </div>
-  <div class="panel">
-    <div class="panel-hdr"><h2>📚 変換ペア（学習データ）</h2><span id="pairCountLabel" style="font-size:11px;color:var(--text3);margin-left:auto">0件</span></div>
-    <div class="panel-body">
-      <div id="pendingPairsSection" style="display:none;margin-bottom:14px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-          <div style="font-size:12px;font-weight:600;color:var(--text2)">編集中のペア <span id="pendingPairCount" style="color:var(--text3)"></span></div>
-          <button class="btn btn-primary btn-sm" onclick="saveAllPendingPairs()">すべて保存</button>
-        </div>
-        <p class="input-hint" style="margin-bottom:8px">右列（電カル形式）を書き換えてから「すべて保存」を押してください。</p>
-        <div id="pendingPairsTable" style="display:flex;flex-direction:column;gap:4px"></div>
-      </div>
-      <details style="margin-bottom:12px">
-        <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text2);padding:4px 0;user-select:none">📥 一括インポート（Excel/CSV）</summary>
-        <div style="margin-top:8px">
-          <p class="input-hint">ExcelのA列:B1形式、B列:電カル形式をコピーして貼り付け</p>
-          <textarea id="bulkImportText" placeholder="Excelのセルをコピーして貼り付け..." style="min-height:80px;resize:vertical;font-family:'JetBrains Mono',monospace;font-size:12px;margin-top:6px"></textarea>
-          <div style="display:flex;gap:8px;margin-top:6px">
-            <button class="btn btn-primary btn-sm" onclick="bulkImportConvPairs()">インポート実行</button>
-            <label class="btn btn-ghost btn-sm" style="cursor:pointer">CSVファイル<input type="file" accept=".csv,.txt" style="display:none" onchange="handleCsvImport(this)"></label>
-          </div>
-        </div>
-      </details>
-      <details style="margin-bottom:12px">
-        <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text2);padding:4px 0;user-select:none">✏️ 手動で追加</summary>
-        <div style="margin-top:8px">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-            <div><label>紙カルテ形式</label><input type="text" id="newPairPaper" placeholder="ビオペア*2/ウルソ粉*1"></div>
-            <div><label>電子カルテ形式</label><input type="text" id="newPairElectronic" placeholder="診断書/ビオペア成牛"></div>
-          </div>
-          <input type="text" id="newPairNote" placeholder="メモ（任意）" style="margin-top:6px;margin-bottom:8px">
-          <button class="btn btn-primary btn-sm" onclick="addConvPair()">ペアを追加</button>
-        </div>
-      </details>
-      <div style="font-size:11px;color:var(--text3);margin-bottom:6px">確定済みペア</div>
-      <div id="pairsList" style="display:flex;flex-direction:column;gap:4px;max-height:400px;overflow-y:auto"></div>
-    </div>
-  </div>
 </div>
 
 <!-- ===== 設定 ===== -->
@@ -345,7 +275,7 @@ input[type=checkbox]{width:auto;margin:0}
       <p class="input-hint" style="margin-bottom:10px">スマホ↔PC間でメモ・カルテデータを同期できます。<br>① <b>jsonbin.io</b> で無料アカウントを作成しAPIキーを取得<br>② 両端末に同じAPIキーとBin IDを設定するだけ</p>
       <label>jsonbin.io API Key</label>
       <input type="password" id="jsonbinKey" placeholder="$2a$10$...">
-      <label style="margin-top:8px">Bin ID <span style="font-size:10px;color:var(--text3)">（初回保存後に自動発行。他の端末にはコピーして貼り付け）</span></label>
+      <label style="margin-top:8px">Bin ID <span style="font-size:10px;font-weight:400;color:var(--text3)">（初回保存後に自動発行。他の端末にはコピーして貼り付け）</span></label>
       <div style="display:flex;gap:6px">
         <input type="text" id="jsonbinId" placeholder="初回保存後に自動入力されます" style="font-family:'JetBrains Mono',monospace;font-size:12px">
         <button class="btn btn-ghost btn-xs" onclick="copyBinId()">コピー</button>
@@ -372,7 +302,7 @@ input[type=checkbox]{width:auto;margin:0}
     <div class="panel-hdr"><h2>📋 マスターデータ管理</h2></div>
     <div class="panel-body">
       <details style="margin-bottom:12px">
-        <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text2);padding:4px 0;user-select:none">📥 一括インポート／エクスポート</summary>
+        <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--text2);padding:4px 0;user-select:none">📥 一括インポート／エクスポート</summary>
         <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
           <p class="input-hint">ExcelのA列:品目名、B列:単価をコピーして貼り付け。既存と同名の品目は単価を上書き。</p>
           <textarea id="masterImportText" placeholder="品目名&#9;単価&#10;アンピシリン注射液&#9;1200" style="min-height:80px;resize:vertical;font-family:'JetBrains Mono',monospace;font-size:12px"></textarea>
@@ -409,8 +339,8 @@ input[type=checkbox]{width:auto;margin:0}
   <div class="panel">
     <div class="panel-hdr"><h2>🔖 Bookmarklet（電子カルテ金額取得）</h2></div>
     <div class="panel-body">
-      <p class="input-hint" style="margin-bottom:8px">電子カルテ画面でクリックすると金額がカルテ一覧に自動入力されます。<br>お気に入りバーにドラッグ＆ドロップしてください。<br><span style="color:var(--warn)">※ .amount-selector-placeholder のセレクタは電子カルテシステムに合わせて差し替えが必要です。</span></p>
-      <div style="background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:10px;font-family:'JetBrains Mono',monospace;font-size:11px;word-break:break-all;color:var(--text2);line-height:1.5" id="bookmarkletDisplay"></div>
+      <p class="input-hint" style="margin-bottom:8px">電子カルテ画面でクリックすると金額がカルテ一覧に自動入力されます。<br>お気に入りバーにドラッグ＆ドロップしてください。<br><span style="color:#c00">※ .amount-selector-placeholder のセレクタは電子カルテシステムに合わせて差し替えが必要です。</span></p>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:10px;font-family:'JetBrains Mono',monospace;font-size:11px;word-break:break-all;color:var(--text2);line-height:1.5" id="bookmarkletDisplay"></div>
       <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="copyBookmarklet(this)">コピー</button>
     </div>
   </div>
@@ -434,8 +364,8 @@ input[type=checkbox]{width:auto;margin:0}
     <label>金額（円）</label>
     <input type="number" id="modal-amount" min="0">
     <p class="input-hint" style="margin-top:6px">※ 同じ農場名・牛番号の未確定カルテがある場合は自動的に追記されます。</p>
-    <div style="display:flex;gap:8px;margin-top:14px">
-      <button class="btn btn-green" onclick="confirmKarteSave()">保存</button>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-primary" onclick="confirmKarteSave()">保存</button>
       <button class="btn btn-ghost" onclick="closeKarteModal()">キャンセル</button>
     </div>
   </div>
@@ -454,12 +384,11 @@ let MASTER = [...MASTER_BUILTIN];
 // ==================== STATE ====================
 let memos = [];
 let DICT_WORDS = ["マルボ","アンピ","デキサ","ネオアス","イーエスイー","ザクトラン","セフチオ","バイトリル","フルニキ","メトクロ","パンカル","ウルソ","フルスル","バソラミン","ペニシリン","フォルテ","メンブトン","ダイメトン","パドリン","ベルパリン","セファ","エクセネル","ガスナイン","プロナルゴン","ビクタス","デポー","ジメトキシン","スタマー","ウルソ粉","ビオペア","ミヤリサン","ビスキノン","ビオスリー","獣医散","モニラック","ルミナップ","ノイエル","ボバクチン","ジクロ","レパミピド","コクシックス","ポルトラック","オメプラゾール","エクセーデ","タイニー","カナマイ","硫マグ","スタートバック","セフロ","インタゲン","ネオマイゾン","フロロコール","フジックス","ガス抜き"];
-let convPairs = [];
+let convPairs = []; // kept for data compat in cloud sync
 let KARTES = [];
 let FARMS = [];
 let activeResultId = null;
 let karteSaveMemoId = null;
-let pendingPairs = [];
 let masterEditIndex = -1;
 
 // ==================== INIT ====================
@@ -472,7 +401,6 @@ document.addEventListener('DOMContentLoaded', () => {
   renderMasterEditor();
   renderMemoQueue();
   updateBadge();
-  renderConvPairs();
   updateFarmDatalist();
   initBookmarklet();
   const dl = document.getElementById('masterNamesList');
@@ -581,10 +509,10 @@ function renderMasterEditor() {
   const list = q ? MASTER.filter(m=>m.name.toLowerCase().includes(q)) : MASTER;
   el.innerHTML = list.map(m => {
     const i = MASTER.indexOf(m);
-    return `<div style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:5px;background:var(--surface2);font-size:12px">
-      <span style="flex:1;font-weight:500">${m.name}</span>
+    return `<div style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:5px;background:var(--surface);border:1px solid var(--border);font-size:12px">
+      <span style="flex:1;font-weight:600">${m.name}</span>
       <span style="font-family:'JetBrains Mono',monospace;color:var(--text2);min-width:60px;text-align:right">¥${m.price.toLocaleString()}</span>
-      <button class="btn btn-ghost btn-xs" onclick="startMasterEdit(${i})">✏️</button>
+      <button class="btn btn-ghost btn-xs" onclick="startMasterEdit(${i})">編集</button>
       <button class="del-row" onclick="deleteMasterItem(${i})">×</button>
     </div>`;
   }).join('');
@@ -708,7 +636,7 @@ function renderMemoQueue() {
       <div class="mc-actions">
         <button class="btn btn-ghost btn-xs" onclick="deleteMemo('${m.id}')">削除</button>
         ${m.status==='pending'?`<button class="btn btn-primary btn-xs" onclick="processSingle('${m.id}')">この1件を解析</button>`:''}
-        ${m.status==='done'?`<button class="btn btn-xs" style="background:var(--surface3);color:var(--text2);border:1px solid var(--border)" onclick="switchTab('calc')">結果を見る →</button>`:''}
+        ${m.status==='done'?`<button class="btn btn-ghost btn-xs" onclick="switchTab('calc')">結果を見る →</button>`:''}
       </div>
     </div>`).join('');
 }
@@ -797,7 +725,7 @@ async function batchProcess() {
       if(!memo.temp&&result.temp) memo.temp=result.temp;
       if(!memo.symptom&&result.symptom) memo.symptom=result.symptom;
       memo.status='done';
-    } catch(e) { memo.status='pending'; toast(`エラー: `+e.message,'error'); }
+    } catch(e) { memo.status='pending'; toast('エラー: '+e.message,'error'); }
     saveToStorage(); renderResultsList(); renderMemoQueue(); updateBadge();
     if(i<pending.length-1) await new Promise(r=>setTimeout(r,500));
   }
@@ -817,9 +745,9 @@ function renderResultsList() {
     const rows = (m.items||[]).map((it,i)=>{
       const sub=Math.round(it.price*it.qty);
       return `<tr>
-        <td><input type="text" class="name-input" value="${it.name.replace(/"/g,'&quot;')}" list="masterNamesList" onchange="updateItemName('${m.id}',${i},this.value)" style="width:100%;min-width:80px;border:1px solid ${it.unknown?'var(--warn)':'transparent'};border-radius:4px;padding:2px 6px;font-size:12px;background:${it.unknown?'rgba(255,165,0,0.1)':'transparent'};color:var(--text);cursor:text"></td>
+        <td><input type="text" class="name-input" value="${it.name.replace(/"/g,'&quot;')}" list="masterNamesList" onchange="updateItemName('${m.id}',${i},this.value)" style="width:100%;min-width:80px;border:1px solid ${it.unknown?'#c00':'transparent'};border-radius:4px;padding:2px 6px;font-size:12px;background:${it.unknown?'rgba(204,0,0,0.05)':'transparent'};color:#111;cursor:text"></td>
         <td class="num-cell"><input class="qty-input" type="text" inputmode="decimal" value="${it.qty}" onchange="updateItemQty('${m.id}',${i},this.value)"></td>
-        <td class="price-cell">${it.price>0?'¥'+it.price.toLocaleString():'<span style="color:var(--warn)">未登録</span>'}</td>
+        <td class="price-cell">${it.price>0?'¥'+it.price.toLocaleString():'<span style="color:#c00">未登録</span>'}</td>
         <td class="sub-cell">${sub>0?'¥'+sub.toLocaleString():'—'}</td>
         <td><button class="del-row" onclick="removeItemFromMemo('${m.id}',${i})">×</button></td>
       </tr>`;
@@ -829,7 +757,7 @@ function renderResultsList() {
       <div class="rc-header">
         <div>
           <div class="rc-patient">${m.status==='processing'?'<span class="spinner" style="width:10px;height:10px;margin-right:4px"></span>':''}${m.patientNo?'['+m.patientNo+'] ':''}${m.ownerName?'🐮 '+m.ownerName:'（農場名なし）'}</div>
-          <div class="rc-time">${m.time}</div>
+          <div class="rc-time">${m.time}${m.temp?' 　🌡 '+m.temp+'℃':''}${m.symptom?' 　'+m.symptom:''}</div>
         </div>
         <div class="rc-total">${m.status==='processing'?'解析中...':'¥'+Math.round(total).toLocaleString()}</div>
       </div>
@@ -841,14 +769,13 @@ function renderResultsList() {
         </table>
         <div class="formula-line">${formula?formula.split('/').map(p=>`<span>${p}</span>`).join('<span style="color:var(--text3)">/</span>'):'—'}</div>
       </div>
-      <div style="padding:4px 14px;border-top:1px solid var(--border)">
+      <div style="padding:4px 16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost btn-xs" style="width:100%;justify-content:center" onclick="addItemToMemo('${m.id}')">＋ 品目を追加</button>
       </div>
       <div class="rc-actions">
-        <button class="btn btn-green btn-sm" onclick="openKarteModal('${m.id}')">📋 カルテに保存</button>
+        <button class="btn btn-primary btn-sm" onclick="openKarteModal('${m.id}')">📋 カルテに保存</button>
         <button class="btn btn-discord btn-sm" onclick="sendOneToDiscord('${m.id}')">Discord送信</button>
         <button class="btn btn-ghost btn-sm" onclick="copyMemoFormula('${m.id}')">B1形式コピー</button>
-        <button class="btn btn-ghost btn-sm" onclick="fillConvInput(\`${formula}\`,\`${(m.ownerName||'').replace(/`/g,"'")}\`,\`${(m.temp||'').replace(/`/g,"'")}\`,\`${(m.symptom||'').replace(/`/g,"'")}\`)">🔄 電カル変換</button>
         <button class="btn btn-ghost btn-sm" onclick="reparse('${m.id}')">再解析</button>
       </div>`:''}</div>`;
   }).join('');
@@ -932,7 +859,7 @@ async function cloudLoad() {
     if(Array.isArray(data.kartes)){const eIds=new Set(KARTES.map(k=>k.id));const added=data.kartes.filter(k=>!eIds.has(k.id));KARTES=[...KARTES,...added];newKartes=added.length;}
     if(Array.isArray(data.farms)){data.farms.forEach(f=>{if(!FARMS.includes(f))FARMS.push(f);});FARMS.sort((a,b)=>a.localeCompare(b,'ja'));updateFarmDatalist();}
     saveToStorage(); saveJsonbinSettings();
-    renderMemoQueue();renderResultsList();renderDict();renderConvPairs();updateBadge();
+    renderMemoQueue();renderResultsList();renderDict();updateBadge();
     document.getElementById('cloudInfo').textContent=`最終読み込み: ${new Date().toLocaleString('ja-JP')}（メモ${newMemos.length}件・カルテ${newKartes}件追加）`;
     toast(`メモ${newMemos.length}件・カルテ${newKartes}件を追加しました`,'success');
   } catch(e) { toast('読み込みエラー: '+e.message,'error'); }
@@ -959,7 +886,7 @@ function importData(input) {
       let newKartes=0;
       if(Array.isArray(data.kartes)){const eIds3=new Set(KARTES.map(k=>k.id));const added=data.kartes.filter(k=>!eIds3.has(k.id));KARTES=[...KARTES,...added];newKartes=added.length;}
       if(Array.isArray(data.farms)){data.farms.forEach(f=>{if(!FARMS.includes(f))FARMS.push(f);});FARMS.sort((a,b)=>a.localeCompare(b,'ja'));updateFarmDatalist();}
-      saveToStorage();renderMemoQueue();renderResultsList();renderDict();renderConvPairs();updateBadge();
+      saveToStorage();renderMemoQueue();renderResultsList();renderDict();updateBadge();
       toast(`メモ${newMemos.length}件・カルテ${newKartes}件を追加しました`,'success');
     } catch(err){toast('読み込みエラー: '+err.message,'error');}
     input.value='';
@@ -968,89 +895,6 @@ function importData(input) {
 }
 
 function copyMemoFormula(id){const memo=memos.find(m=>m.id===id);if(!memo||!memo.items)return;const f=memo.items.filter(it=>it.price>0).map(it=>`${it.name}*${it.qty}`).join('/');navigator.clipboard.writeText(f).then(()=>toast('B1形式をコピーしました','success'));}
-
-// ==================== ELECTRONIC RECORD CONVERSION ====================
-function updateKartePreview() {
-  const fields=['convDate','convTime','convOwnerName','convDistance','convTemp','convSymptom'].map(id=>document.getElementById(id).value.trim());
-  const proc=document.getElementById('convResult').value.trim();
-  const all=[...fields,proc];
-  document.getElementById('kartePreview').textContent=all.some(f=>f)?all.join('｜'):'—';
-}
-function copyKarteRecord(){const p=document.getElementById('kartePreview').textContent;if(!p||p==='—')return toast('レコードが空です','error');navigator.clipboard.writeText(p).then(()=>toast('カルテレコードをコピーしました','success'));}
-
-let pendingPairsArr=[];
-function addPendingPair(paper,electronic){if(pendingPairsArr.some(p=>p.paper===paper))return;pendingPairsArr.push({id:Date.now().toString(),paper,electronic});renderPendingPairs();}
-function renderPendingPairs(){
-  const section=document.getElementById('pendingPairsSection'),table=document.getElementById('pendingPairsTable'),countEl=document.getElementById('pendingPairCount');
-  if(!section||!table)return;if(!pendingPairsArr.length){section.style.display='none';return;}
-  section.style.display='';if(countEl)countEl.textContent=`${pendingPairsArr.length}件`;
-  table.innerHTML=pendingPairsArr.map((p,i)=>`
-    <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:4px;align-items:center">
-      <input type="text" value="${p.paper.replace(/"/g,'&quot;')}" readonly style="font-family:'JetBrains Mono',monospace;font-size:11px;background:var(--surface3);color:var(--text3);cursor:default">
-      <input type="text" value="${p.electronic.replace(/"/g,'&quot;')}" style="font-family:'JetBrains Mono',monospace;font-size:11px" oninput="pendingPairsArr[${i}].electronic=this.value">
-      <button class="del-row" onclick="removePendingPair(${i})">×</button>
-    </div>`).join('');
-}
-function removePendingPair(i){pendingPairsArr.splice(i,1);renderPendingPairs();}
-function saveAllPendingPairs(){
-  const toSave=pendingPairsArr.filter(p=>p.paper&&p.electronic&&p.paper!==p.electronic);
-  if(!toSave.length)return toast('書き換えられた行がありません','error');
-  const existingKeys=new Set(convPairs.map(p=>p.paper+'||'+p.electronic));let added=0;
-  toSave.forEach(p=>{const key=p.paper+'||'+p.electronic;if(!existingKeys.has(key)){convPairs.push({id:Date.now().toString()+added,paper:p.paper,electronic:p.electronic,note:'',createdAt:new Date().toISOString()});added++;}});
-  pendingPairsArr=pendingPairsArr.filter(p=>p.paper===p.electronic);
-  saveToStorage();renderConvPairs();renderPendingPairs();toast(`${added}件を学習データに保存しました`,'success');
-}
-function bulkImportConvPairs(){
-  const text=document.getElementById('bulkImportText').value.trim();if(!text)return toast('データを貼り付けてください','error');
-  let added=0;const eKeys=new Set(convPairs.map(p=>p.paper+'||'+p.electronic));
-  for(const line of text.split('\n').filter(l=>l.trim())){const sep=line.includes('\t')?'\t':',';const[paper,electronic,note=''] =line.split(sep).map(c=>c.trim().replace(/^"|"$/g,''));if(!paper||!electronic||paper===electronic)continue;const key=paper+'||'+electronic;if(eKeys.has(key))continue;convPairs.push({id:Date.now().toString()+added,paper,electronic,note,createdAt:new Date().toISOString()});eKeys.add(key);added++;}
-  if(added>0){saveToStorage();renderConvPairs();}toast(added>0?`${added}件をインポートしました`:'新しいデータはありませんでした',added>0?'success':'');
-  document.getElementById('bulkImportText').value='';
-}
-function handleCsvImport(input){const file=input.files[0];if(!file)return;const reader=new FileReader();reader.onload=e=>{document.getElementById('bulkImportText').value=e.target.result;bulkImportConvPairs();};reader.readAsText(file,'UTF-8');input.value='';}
-function renderConvPairs(){
-  const el=document.getElementById('pairsList'),label=document.getElementById('pairCountLabel');
-  if(label)label.textContent=`${convPairs.length}件`;
-  if(!el)return;
-  if(!convPairs.length){el.innerHTML='<div style="font-size:12px;color:var(--text3);text-align:center;padding:20px">学習データがありません。</div>';return;}
-  el.innerHTML=[...convPairs].reverse().map(p=>`
-    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 10px">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
-        <div style="flex:1;min-width:0">
-          <div style="font-size:10px;color:var(--text3);margin-bottom:2px">紙カルテ</div>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;word-break:break-all">${p.paper}</div>
-          <div style="font-size:10px;color:var(--text3);margin-top:6px;margin-bottom:2px">電子カルテ</div>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--green);word-break:break-all">${p.electronic}</div>
-          ${p.note?`<div style="font-size:10px;color:var(--text3);margin-top:4px">${p.note}</div>`:''}
-        </div>
-        <button class="del-row" onclick="removeConvPair('${p.id}')">×</button>
-      </div>
-    </div>`).join('');
-}
-function addConvPair(){const paper=document.getElementById('newPairPaper').value.trim(),electronic=document.getElementById('newPairElectronic').value.trim(),note=document.getElementById('newPairNote').value.trim();if(!paper||!electronic)return toast('紙カルテと電子カルテ両方を入力してください','error');convPairs.push({id:Date.now().toString(),paper,electronic,note,createdAt:new Date().toISOString()});document.getElementById('newPairPaper').value='';document.getElementById('newPairElectronic').value='';document.getElementById('newPairNote').value='';saveToStorage();renderConvPairs();toast('学習データに追加しました','success');}
-function removeConvPair(id){convPairs=convPairs.filter(p=>p.id!==id);saveToStorage();renderConvPairs();}
-function fillConvInput(formula,ownerName='',temp='',symptom=''){
-  document.getElementById('convInput').value=formula;document.getElementById('convResult').value=formula;
-  document.getElementById('convOwnerName').value=ownerName;document.getElementById('convTemp').value=temp;document.getElementById('convSymptom').value=symptom;
-  document.getElementById('convDate').value=new Date().toISOString().slice(0,10).replace(/-/g,'');
-  updateKartePreview();if(formula)addPendingPair(formula,formula);switchTab('conv');toast('電カル変換タブに入力しました','success');
-}
-function saveConvPairFromResult(){const paper=document.getElementById('convInput').value.trim(),electronic=document.getElementById('convResult').value.trim();if(!paper||!electronic)return toast('B1形式と処置内容の両方が必要です','error');if(paper===electronic)return toast('処置内容を電カル形式に書き換えてから保存してください','error');convPairs.push({id:Date.now().toString(),paper,electronic,note:'',createdAt:new Date().toISOString()});saveToStorage();renderConvPairs();toast('学習データに保存しました','success');}
-async function convertToElectronic(){
-  const ak=document.getElementById('anthropicKey').value.trim();if(!ak)return toast('APIキーを設定してください（設定タブ）','error');
-  const input=document.getElementById('convInput').value.trim();if(!input)return toast('紙カルテ形式を入力してください','error');
-  const btn=document.getElementById('convBtn');btn.disabled=true;btn.innerHTML='<span class="spinner"></span> 変換中...';
-  let examplesText='';
-  if(convPairs.length>0){const examples=convPairs.slice(-20);examplesText='\n\n【変換例（これを参考に変換してください）】\n'+examples.map(p=>`紙カルテ: ${p.paper}\n電子カルテ: ${p.electronic}`).join('\n\n');}
-  const prompt=`あなたは獣医診療記録の変換AIです。院内計算用の紙カルテ形式を、保険申請用の電子カルテ形式に変換してください。変換結果のテキストのみを出力し、説明・コード・他の文字は一切不要です。${examplesText}\n\n【変換対象】\n紙カルテ: ${input}\n\n電子カルテ（変換結果のみ出力）:`;
-  try{
-    const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${ak}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})});
-    const data=await resp.json();if(data.error)throw new Error(data.error.message);
-    const result=(data.candidates[0].content.parts||[]).map(b=>b.text||'').join('').trim();
-    document.getElementById('convResult').value=result;updateKartePreview();toast('変換完了','success');
-  }catch(e){toast('エラー: '+e.message,'error');}
-  finally{btn.disabled=false;btn.innerHTML='🤖 処置内容をAI予測';}
-}
 
 // ==================== KARTE MANAGEMENT ====================
 function updateFarmDatalist() {
@@ -1123,8 +967,8 @@ function renderKarteList() {
     const diffClass = k.diff===null?'':k.diff>0?'diff-pos':k.diff<0?'diff-neg':'';
     const diffText = k.diff===null?'—':(k.diff>=0?'+':'')+fmtAmt(k.diff);
     const elecRow = k.closed
-      ? `<div class="total-row"><span>電子カルテ</span><span class="total-val">${fmtAmt(k.electronic_amount)}</span></div>`
-      : `<div class="total-row elec-row"><span>電子カルテ</span><div class="elec-input-wrap"><input type="number" id="elec-${k.id}" min="0" step="100" value="${k.electronic_amount!==null?k.electronic_amount:''}" placeholder="金額入力" onkeydown="if(event.key==='Enter')confirmElectronic('${k.id}')"><button class="btn btn-ghost btn-xs" onclick="confirmElectronic('${k.id}')">確定</button></div></div>`;
+      ? `<div class="total-row"><span style="color:var(--text2)">電子カルテ</span><span class="total-val">${fmtAmt(k.electronic_amount)}</span></div>`
+      : `<div class="total-row elec-row"><span style="color:var(--text2)">電子カルテ</span><div class="elec-input-wrap"><input type="number" id="elec-${k.id}" min="0" step="100" value="${k.electronic_amount!==null?k.electronic_amount:''}" placeholder="金額入力" onkeydown="if(event.key==='Enter')confirmElectronic('${k.id}')"><button class="btn btn-ghost btn-xs" onclick="confirmElectronic('${k.id}')">確定</button></div></div>`;
     return `<div class="karte-card ${k.closed?'':'unclosed'}" id="card-${k.id}">
       <div class="karte-hdr">
         <span class="karte-title">【${esc(k.farm)} / ${esc(k.cow)}】</span>
@@ -1135,9 +979,9 @@ function renderKarteList() {
       </div>
       <div class="karte-records">${recs}</div>
       <div class="karte-totals">
-        <div class="total-row"><span>紙カルテ合計</span><span class="total-val">${fmtAmt(k.paper_total)}</span></div>
+        <div class="total-row"><span style="color:var(--text2)">紙カルテ合計</span><span class="total-val">¥${k.paper_total.toLocaleString()}</span></div>
         ${elecRow}
-        <div class="total-row ${diffClass}"><span>差額（電子−紙）</span><span class="total-val">${diffText}</span></div>
+        <div class="total-row ${diffClass}" style="margin-top:4px;padding-top:8px;border-top:1px solid var(--border)"><span style="font-weight:600">差額（電子−紙）</span><span class="total-val" style="font-size:16px">${diffText}</span></div>
       </div>
     </div>`;
   }).join('');
@@ -1165,7 +1009,7 @@ function renderStats() {
   closed.forEach(k=>{if(months.includes(k.month)&&farms.includes(k.farm))tbl[k.farm][k.month]=(tbl[k.farm][k.month]||0)+k.diff;});
   const ths=months.map(m=>{const[y,mo]=m.split('-');return`<th>${y}年${parseInt(mo)}月</th>`;}).join('');
   const rows=farms.map(f=>{
-    const cells=months.map(m=>{const v=tbl[f][m];if(v===undefined)return'<td style="color:var(--text3)">—</td>';const cls=v>0?'diff-pos':v<0?'diff-neg':'';return`<td class="${cls}">${(v>=0?'+':'')}${fmtAmt(v)}</td>`;}).join('');
+    const cells=months.map(m=>{const v=tbl[f][m];if(v===undefined)return'<td style="color:var(--text3)">—</td>';const cls=v>0?'diff-pos':v<0?'diff-neg':'';return`<td class="${cls}">${(v>=0?'+':'')+fmtAmt(v)}</td>`;}).join('');
     return`<tr><td>${esc(f)}</td>${cells}</tr>`;
   }).join('');
   el.innerHTML=`<table class="stats-table"><thead><tr><th>農場名</th>${ths}</tr></thead><tbody>${rows}</tbody></table>`;
@@ -1197,7 +1041,7 @@ window.addEventListener('message',e=>{
   switchTab('karte');
   setTimeout(()=>{
     const inputs=document.querySelectorAll('[id^="elec-"]');
-    if(inputs.length>0){inputs[0].value=amt;inputs[0].style.borderColor='var(--accent)';inputs[0].focus();}
+    if(inputs.length>0){inputs[0].value=amt;inputs[0].style.borderColor='#111';inputs[0].focus();}
     else alert('電子金額未入力のカルテが見つかりません。\n金額: '+amt.toLocaleString('ja-JP')+'円');
   },350);
 });
