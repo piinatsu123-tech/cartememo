@@ -339,7 +339,7 @@ input[type=checkbox]{width:auto;margin:0}
   <div class="panel">
     <div class="panel-hdr"><h2>🔖 Bookmarklet（電子カルテ金額取得）</h2></div>
     <div class="panel-body">
-      <p class="input-hint" style="margin-bottom:8px">電子カルテ画面でクリックすると金額がカルテ一覧に自動入力されます。<br>お気に入りバーにドラッグ＆ドロップしてください。<br><span style="color:#c00">※ .amount-selector-placeholder のセレクタは電子カルテシステムに合わせて差し替えが必要です。</span></p>
+      <p class="input-hint" style="margin-bottom:8px">電子カルテの診療記録画面でクリックすると「B点計 × 10」の金額をカルテ一覧に自動入力します。<br>お気に入りバーにドラッグ＆ドロップしてください。<br><span style="color:#555">取得先: <code style="font-family:'JetBrains Mono',monospace;background:#f0f0f0;padding:1px 5px;border-radius:3px">id="karte_record_3_7_1"</code> の次の要素の値 × 10</span></p>
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:10px;font-family:'JetBrains Mono',monospace;font-size:11px;word-break:break-all;color:var(--text2);line-height:1.5" id="bookmarkletDisplay"></div>
       <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="copyBookmarklet(this)">コピー</button>
     </div>
@@ -1031,7 +1031,7 @@ function exportCSV() {
 }
 
 // ==================== BOOKMARKLET ====================
-const BOOKMARKLET=`javascript:(function(){var el=document.querySelector('.amount-selector-placeholder');var amt=el?parseInt(el.textContent.replace(/[^0-9]/g,'')):null;if(!amt){alert('金額を取得できませんでした。セレクタの差し替えが必要です。');return;}var w=window.open('','cartememo');if(w&&w.postMessage){w.postMessage({type:'electronic_amount',amount:amt},'*');}else{prompt('カルテメモを開いてから再試行してください。金額:',amt);}})();`;
+const BOOKMARKLET=`javascript:(function(){var el=document.getElementById('karte_record_3_7_1');if(!el){alert('B点計の要素が見つかりませんでした（id: karte_record_3_7_1）');return;}var next=el.nextElementSibling;if(!next){alert('B点計の値が見つかりませんでした');return;}var pts=parseFloat(next.textContent.replace(/[^0-9.]/g,''));if(isNaN(pts)||pts<=0){alert('B点計を数値として読み取れませんでした: '+next.textContent);return;}var amt=Math.round(pts*10);var w=window.open('','cartememo');if(w&&w.postMessage){w.postMessage({type:'electronic_amount',amount:amt},'*');}else{prompt('CarteMemoを開いてから再試行してください。金額('+amt+'円):',amt);}})();`;
 function initBookmarklet(){document.getElementById('bookmarkletDisplay').textContent=BOOKMARKLET;}
 function copyBookmarklet(btn){navigator.clipboard.writeText(BOOKMARKLET).then(()=>{btn.textContent='コピー完了!';setTimeout(()=>btn.textContent='コピー',1800);});}
 window.name='cartememo';
