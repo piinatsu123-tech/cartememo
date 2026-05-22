@@ -1,0 +1,1169 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>カルテメモ</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, sans-serif; background: #f5f5f5; color: #222; min-width: 820px; }
+
+/* Header */
+header {
+  background: #fff;
+  border-bottom: 1px solid #ddd;
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+header h1 { font-size: 18px; font-weight: 700; color: #333; }
+.api-status { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #555; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; flex-shrink: 0; }
+.status-dot.ok { background: #4caf50; }
+.api-key-wrap { display: flex; gap: 6px; margin-left: auto; align-items: center; }
+.api-key-wrap input {
+  width: 280px;
+  padding: 6px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 13px;
+}
+.api-key-wrap button {
+  padding: 6px 14px;
+  background: #555;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.api-key-wrap button:hover { background: #333; }
+
+/* Tabs */
+nav.tabs {
+  background: #fff;
+  border-bottom: 1px solid #ddd;
+  display: flex;
+  padding: 0 24px;
+}
+.tab-btn {
+  padding: 12px 22px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: #666;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.15s;
+}
+.tab-btn.active { color: #1976d2; border-bottom-color: #1976d2; font-weight: 600; }
+.tab-btn:hover:not(.active) { color: #333; }
+
+/* Main */
+main { padding: 24px; max-width: 1100px; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* Section card */
+.section {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+.section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-bottom: 12px;
+}
+
+/* Form elements */
+textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+  line-height: 1.6;
+}
+textarea:focus { outline: none; border-color: #1976d2; box-shadow: 0 0 0 2px rgba(25,118,210,0.1); }
+input[type="text"], input[type="number"], input[type="date"], input[type="password"] {
+  padding: 7px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  font-family: inherit;
+}
+input:focus { outline: none; border-color: #1976d2; box-shadow: 0 0 0 2px rgba(25,118,210,0.1); }
+
+/* Buttons */
+.btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: #1976d2; color: #fff; }
+.btn-primary:hover:not(:disabled) { background: #1565c0; }
+.btn-success { background: #388e3c; color: #fff; }
+.btn-success:hover:not(:disabled) { background: #2e7d32; }
+.btn-secondary { background: #f0f0f0; color: #333; border: 1px solid #ddd; }
+.btn-secondary:hover:not(:disabled) { background: #e4e4e4; }
+.btn-danger { background: #e53935; color: #fff; }
+.btn-danger:hover:not(:disabled) { background: #c62828; }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+
+/* Result table */
+.result-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+.result-table th {
+  background: #f8f8f8;
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #666;
+  border-bottom: 2px solid #eee;
+}
+.result-table td { padding: 5px 8px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+.result-table input[type="date"] { width: 140px; }
+.result-table input[type="text"] { width: 100%; }
+.result-table input[type="number"] { width: 100px; text-align: right; }
+
+/* Save form */
+.save-form { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+.save-form .field { display: flex; flex-direction: column; gap: 4px; }
+.save-form .field label { font-size: 12px; color: #666; font-weight: 600; }
+.save-form .field input { width: 200px; }
+
+/* Karte cards */
+.karte-card {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 16px;
+  margin-bottom: 10px;
+}
+.karte-card.unclosed {
+  background: #fffde7;
+  border-color: #ffca28;
+}
+.karte-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.karte-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #222;
+}
+.karte-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+.badge-unclosed { background: #fff3e0; color: #e65100; border: 1px solid #ffcc80; }
+.badge-closed { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+
+.karte-records { margin-bottom: 10px; }
+.karte-record {
+  display: flex;
+  gap: 12px;
+  padding: 5px 0;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 14px;
+}
+.karte-record:last-child { border-bottom: none; }
+.rec-date { color: #777; width: 52px; flex-shrink: 0; }
+.rec-content { flex: 1; }
+.rec-amount { text-align: right; width: 90px; flex-shrink: 0; color: #333; }
+
+.karte-totals {
+  border-top: 2px solid #eee;
+  padding-top: 10px;
+  margin-top: 6px;
+}
+.total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 0;
+  font-size: 14px;
+}
+.total-row.paper { color: #555; }
+.total-row.diff-positive { color: #2e7d32; font-weight: 700; }
+.total-row.diff-negative { color: #c62828; font-weight: 700; }
+.total-row.diff-zero { color: #555; font-weight: 700; }
+.elec-input-row { display: flex; align-items: center; gap: 8px; }
+.elec-input-row input {
+  width: 130px;
+  text-align: right;
+  padding: 5px 8px;
+}
+
+/* Filter bar */
+.filter-bar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 12px 16px;
+}
+.filter-bar select {
+  padding: 6px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  background: #fff;
+}
+.filter-bar input[type="text"] { width: 140px; }
+.filter-bar label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  user-select: none;
+}
+.filter-bar input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; }
+
+/* Stats table */
+.stats-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.stats-table th {
+  background: #f5f5f5;
+  padding: 10px 14px;
+  text-align: right;
+  font-size: 13px;
+  border: 1px solid #ddd;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.stats-table th:first-child { text-align: left; }
+.stats-table td { padding: 9px 14px; text-align: right; border: 1px solid #eee; }
+.stats-table td:first-child { text-align: left; font-weight: 600; }
+.stats-table tr:nth-child(even) td { background: #fafafa; }
+.diff-pos { color: #2e7d32; }
+.diff-neg { color: #c62828; }
+
+/* Month filter row */
+.stats-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.stats-controls label { font-size: 14px; color: #555; }
+.stats-controls select {
+  padding: 6px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+/* Bookmarklet */
+.bookmarklet-block {
+  background: #f8f8f8;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  padding: 12px 14px;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  color: #333;
+  word-break: break-all;
+  line-height: 1.5;
+  margin: 10px 0;
+}
+
+/* Messages */
+.msg {
+  padding: 9px 14px;
+  border-radius: 4px;
+  font-size: 13px;
+  margin-top: 8px;
+}
+.msg-success { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+.msg-error { background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
+.msg-info { background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; }
+
+/* Spinner */
+.spinner {
+  display: inline-block;
+  width: 14px; height: 14px;
+  border: 2px solid #ccc;
+  border-top-color: #1976d2;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Empty state */
+.empty { color: #aaa; font-size: 14px; text-align: center; padding: 48px 0; }
+
+/* Divider */
+.divider { border: none; border-top: 1px solid #eee; margin: 16px 0; }
+
+.header-actions { display: flex; gap: 8px; align-items: center; }
+
+/* Karte delete confirmation */
+.karte-actions { display: flex; gap: 8px; align-items: center; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>カルテメモ</h1>
+  <div class="api-status">
+    <div class="status-dot" id="status-dot"></div>
+    <span id="status-text">未設定</span>
+  </div>
+  <div class="api-key-wrap">
+    <input type="password" id="api-key-input" placeholder="Claude APIキー (sk-ant-...)" autocomplete="off">
+    <button onclick="saveApiKey()">保存</button>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button class="tab-btn active" data-tab="analyze">解析</button>
+  <button class="tab-btn" data-tab="kartes">カルテ一覧</button>
+  <button class="tab-btn" data-tab="stats">集計</button>
+</nav>
+
+<main>
+
+  <!-- ========== Tab 1: 解析 ========== -->
+  <div id="tab-analyze" class="tab-content active">
+
+    <div class="section">
+      <div class="section-title">音声テキスト入力</div>
+      <textarea id="voice-input" rows="7"
+        placeholder="音声メモを貼り付けてください（複数日分まとめてOK）&#10;例：&#10;1月13日 A牧場 0001番 初診 アンピシリン 100ml 筋注 3000円&#10;14日 再診 アンピ im 1500円"></textarea>
+      <div style="display:flex; gap:10px; align-items:center; margin-top:10px;">
+        <button class="btn btn-primary" id="analyze-btn" onclick="analyzeText()">AI解析</button>
+        <div id="analyze-msg"></div>
+      </div>
+    </div>
+
+    <div class="section" id="result-section" style="display:none;">
+      <div class="section-title">解析結果（編集可）</div>
+      <table class="result-table" id="result-table">
+        <thead>
+          <tr>
+            <th style="width:150px;">日付</th>
+            <th>診療内容</th>
+            <th style="width:120px;">金額（円）</th>
+            <th style="width:44px;"></th>
+          </tr>
+        </thead>
+        <tbody id="result-tbody"></tbody>
+      </table>
+      <button class="btn btn-secondary btn-sm" onclick="addResultRow()">＋ 行を追加</button>
+
+      <hr class="divider">
+
+      <div class="section-title">カルテに保存</div>
+      <div class="save-form">
+        <div class="field">
+          <label>農場名</label>
+          <input list="farm-datalist" id="farm-input" placeholder="A牧場" autocomplete="off">
+          <datalist id="farm-datalist"></datalist>
+        </div>
+        <div class="field">
+          <label>牛番号</label>
+          <input type="text" id="cow-input" placeholder="0001" style="width:140px;">
+        </div>
+        <div class="field" style="justify-content:flex-end;">
+          <button class="btn btn-success" onclick="saveKarte()">カルテに保存</button>
+        </div>
+      </div>
+      <div id="save-msg"></div>
+    </div>
+
+  </div>
+
+  <!-- ========== Tab 2: カルテ一覧 ========== -->
+  <div id="tab-kartes" class="tab-content">
+
+    <div class="filter-bar">
+      <select id="filter-farm" onchange="renderKartes()">
+        <option value="">全農場</option>
+      </select>
+      <input type="text" id="filter-cow" placeholder="牛番号で検索" oninput="renderKartes()">
+      <label>
+        <input type="checkbox" id="filter-unclosed" onchange="renderKartes()">
+        電子未入力のみ
+      </label>
+      <span id="karte-count" style="font-size:13px; color:#999; margin-left:auto;"></span>
+    </div>
+
+    <div id="karte-list"></div>
+
+    <!-- Cloud sync -->
+    <div class="section" style="margin-top:8px;">
+      <div class="section-title">クラウド同期（jsonbin.io）</div>
+      <p style="font-size:13px; color:#666; line-height:1.7; margin-bottom:12px;">
+        スマホ・PC間でカルテデータを同期できます。<br>
+        ① <a href="https://jsonbin.io" target="_blank" rel="noopener" style="color:#1976d2;">jsonbin.io</a> で無料アカウントを作成しAPIキーを取得<br>
+        ② 両端末に同じAPIキーとBin IDを設定するだけ
+      </p>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; max-width:560px;">
+        <div class="field">
+          <label style="font-size:12px;color:#666;font-weight:600;display:block;margin-bottom:4px;">jsonbin.io API Key</label>
+          <input type="password" id="jb-key" placeholder="$2a$10$..." style="width:100%;">
+        </div>
+        <div class="field">
+          <label style="font-size:12px;color:#666;font-weight:600;display:block;margin-bottom:4px;">
+            Bin ID <span style="font-weight:400;">（初回保存後に自動発行）</span>
+          </label>
+          <div style="display:flex;gap:6px;">
+            <input type="text" id="jb-id" placeholder="初回保存後に自動入力" style="flex:1;font-size:12px;font-family:monospace;">
+            <button class="btn btn-secondary btn-sm" onclick="copyBinId()">コピー</button>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px;align-items:center;">
+        <button class="btn btn-primary btn-sm" onclick="cloudSave()">↑ クラウドに保存</button>
+        <button class="btn btn-secondary btn-sm" onclick="cloudLoad()">↓ クラウドから読み込む</button>
+        <span id="cloud-status" style="font-size:12px;color:#999;margin-left:4px;"></span>
+      </div>
+    </div>
+
+    <!-- Bookmarklet -->
+    <div class="section" style="margin-top:8px;">
+      <div class="section-title">Bookmarklet — 電子カルテ金額自動取得</div>
+      <p style="font-size:13px; color:#666; line-height:1.6; margin-bottom:8px;">
+        以下のリンクをブラウザのお気に入りバーにドラッグ＆ドロップするか、新しいお気に入りを作成してURLに貼り付けてください。<br>
+        電子カルテ画面でクリックすると金額が自動入力されます。<br>
+        <span style="color:#e65100;">※ `.amount-selector-placeholder` のセレクタは電子カルテシステム確定後に差し替えが必要です。</span>
+      </p>
+      <div class="bookmarklet-block" id="bookmarklet-display"></div>
+      <button class="btn btn-secondary btn-sm" onclick="copyBookmarklet(this)">コピー</button>
+    </div>
+
+  </div>
+
+  <!-- ========== Tab 3: 集計 ========== -->
+  <div id="tab-stats" class="tab-content">
+
+    <div class="stats-controls">
+      <label>表示期間:</label>
+      <select id="month-range" onchange="renderStats()">
+        <option value="3">直近3ヶ月</option>
+        <option value="6">直近6ヶ月</option>
+        <option value="12">直近12ヶ月</option>
+        <option value="0">全期間</option>
+      </select>
+      <div style="margin-left:auto;">
+        <button class="btn btn-secondary btn-sm" onclick="exportCSV()">CSVエクスポート</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div id="stats-container"></div>
+    </div>
+
+  </div>
+
+</main>
+
+<script>
+'use strict';
+
+// ================================================================
+// Storage helpers
+// ================================================================
+const KEY = { api: 'cm_apikey', kartes: 'cm_kartes', farms: 'cm_farms', jbk: 'cm_jbk', jbid: 'cm_jbid' };
+
+function loadKartes() {
+  try { return JSON.parse(localStorage.getItem(KEY.kartes) || '[]'); }
+  catch { return []; }
+}
+function saveKartes(arr) { localStorage.setItem(KEY.kartes, JSON.stringify(arr)); }
+
+function loadFarms() {
+  try { return JSON.parse(localStorage.getItem(KEY.farms) || '[]'); }
+  catch { return []; }
+}
+function saveFarms(arr) { localStorage.setItem(KEY.farms, JSON.stringify(arr)); }
+
+function getApiKey() { return localStorage.getItem(KEY.api) || ''; }
+
+// ================================================================
+// API key management
+// ================================================================
+function saveApiKey() {
+  const key = document.getElementById('api-key-input').value.trim();
+  localStorage.setItem(KEY.api, key);
+  updateApiStatus();
+}
+
+function updateApiStatus() {
+  const key = getApiKey();
+  const dot = document.getElementById('status-dot');
+  const txt = document.getElementById('status-text');
+  if (key.startsWith('sk-ant-')) {
+    dot.className = 'status-dot ok';
+    txt.textContent = 'API接続可';
+  } else if (key) {
+    dot.className = 'status-dot';
+    txt.textContent = 'キー確認中';
+  } else {
+    dot.className = 'status-dot';
+    txt.textContent = '未設定';
+  }
+}
+
+// ================================================================
+// Tab navigation
+// ================================================================
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    const tab = btn.dataset.tab;
+    document.getElementById('tab-' + tab).classList.add('active');
+    if (tab === 'kartes') { updateFarmFilter(); renderKartes(); }
+    if (tab === 'stats') renderStats();
+  });
+});
+
+// ================================================================
+// Claude API
+// ================================================================
+const SYSTEM_PROMPT = `あなたは獣医診療記録の解析AIです。以下の音声メモ（牛の往診記録）から診療情報を抽出し、JSONの配列のみを返してください。説明文・マークダウンは不要です。
+
+【出力形式】
+[{"date":"YYYY-MM-DD","content":"診療内容","amount":金額(整数)}]
+
+【ルール】
+- dateは音声メモに日付があればそれを使用し、年が省略されていれば今日の年を補完する。日付記載なければ今日の日付を使う
+- contentは投薬・処置内容を簡潔に記述（例：「初診 / アンピ im」「再診 / セファ im」「直検 / 卵巣検査」「アンピシリン 100ml im」）
+- amountは円単位の整数。記載がなければ0
+- 同一日の診療は1レコードにまとめる
+- JSON配列のみ出力。コードブロック記号(\`\`\`)は使わない`;
+
+async function callClaude(voiceText) {
+  const apiKey = getApiKey();
+  if (!apiKey) throw new Error('APIキーが設定されていません');
+
+  const today = todayStr();
+  const system = SYSTEM_PROMPT + `\n\n今日の日付: ${today}`;
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 2048,
+      system,
+      messages: [{ role: 'user', content: voiceText }]
+    })
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || `HTTP ${res.status}`);
+  }
+
+  const data = await res.json();
+  const rawText = data.content?.[0]?.text || '';
+  const cleaned = rawText
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```\s*$/, '')
+    .trim();
+  return JSON.parse(cleaned);
+}
+
+// ================================================================
+// Tab 1: Analyze
+// ================================================================
+async function analyzeText() {
+  const voice = document.getElementById('voice-input').value.trim();
+  if (!voice) { showMsg('analyze-msg', 'テキストを入力してください', 'info'); return; }
+
+  const btn = document.getElementById('analyze-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>解析中...';
+  clearMsg('analyze-msg');
+
+  try {
+    const records = await callClaude(voice);
+    if (!Array.isArray(records) || records.length === 0) {
+      throw new Error('解析結果が空です。テキストを確認してください。');
+    }
+    renderResultTable(records);
+    const sec = document.getElementById('result-section');
+    sec.style.display = 'block';
+    sec.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch (e) {
+    showMsg('analyze-msg', 'エラー: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'AI解析';
+  }
+}
+
+function renderResultTable(records) {
+  const tbody = document.getElementById('result-tbody');
+  tbody.innerHTML = '';
+  records.forEach(r => addResultRow(r));
+}
+
+function addResultRow(record) {
+  record = record || {};
+  const tbody = document.getElementById('result-tbody');
+  const tr = document.createElement('tr');
+  const date = record.date || todayStr();
+  const content = esc(record.content || '');
+  const amount = record.amount != null ? record.amount : 0;
+  tr.innerHTML =
+    `<td><input type="date" value="${date}"></td>` +
+    `<td><input type="text" value="${content}" placeholder="診療内容"></td>` +
+    `<td><input type="number" min="0" step="100" value="${amount}" style="text-align:right;width:110px;"></td>` +
+    `<td><button class="btn btn-danger btn-sm" onclick="this.closest('tr').remove()">×</button></td>`;
+  tbody.appendChild(tr);
+}
+
+function getResultRows() {
+  return Array.from(document.querySelectorAll('#result-tbody tr')).map(tr => {
+    const ins = tr.querySelectorAll('input');
+    return {
+      date: ins[0].value,
+      content: ins[1].value.trim(),
+      amount: parseInt(ins[2].value) || 0
+    };
+  }).filter(r => r.content && r.date);
+}
+
+function saveKarte() {
+  const farm = document.getElementById('farm-input').value.trim();
+  const cow = document.getElementById('cow-input').value.trim();
+
+  if (!farm) { showMsg('save-msg', '農場名を入力してください', 'error'); return; }
+  if (!cow)  { showMsg('save-msg', '牛番号を入力してください', 'error'); return; }
+
+  const records = getResultRows();
+  if (records.length === 0) { showMsg('save-msg', '診療記録がありません', 'error'); return; }
+
+  const sorted = [...records].sort((a, b) => a.date.localeCompare(b.date));
+  const paper_total = sorted.reduce((s, r) => s + r.amount, 0);
+  const month = sorted[0].date.slice(0, 7);
+
+  const karte = {
+    id: String(Date.now()),
+    farm,
+    cow,
+    records: sorted,
+    paper_total,
+    electronic_amount: null,
+    diff: null,
+    month,
+    closed: false
+  };
+
+  const kartes = loadKartes();
+  kartes.unshift(karte);
+  saveKartes(kartes);
+
+  // Update farm master
+  const farms = loadFarms();
+  if (!farms.includes(farm)) {
+    farms.push(farm);
+    farms.sort((a, b) => a.localeCompare(b, 'ja'));
+    saveFarms(farms);
+    updateFarmDatalist();
+  }
+
+  showMsg('save-msg', `【${esc(farm)} / ${esc(cow)}】を保存しました`, 'success');
+  document.getElementById('voice-input').value = '';
+  document.getElementById('result-section').style.display = 'none';
+  document.getElementById('farm-input').value = '';
+  document.getElementById('cow-input').value = '';
+}
+
+// ================================================================
+// Tab 2: Karte list
+// ================================================================
+function renderKartes() {
+  const farmFilter   = document.getElementById('filter-farm').value;
+  const cowFilter    = document.getElementById('filter-cow').value.trim().toLowerCase();
+  const unclosedOnly = document.getElementById('filter-unclosed').checked;
+
+  let list = loadKartes();
+  if (farmFilter)    list = list.filter(k => k.farm === farmFilter);
+  if (cowFilter)     list = list.filter(k => k.cow.toLowerCase().includes(cowFilter));
+  if (unclosedOnly)  list = list.filter(k => !k.closed);
+
+  document.getElementById('karte-count').textContent = list.length + '件';
+
+  const container = document.getElementById('karte-list');
+  if (list.length === 0) {
+    container.innerHTML = '<div class="empty">該当するカルテがありません</div>';
+    return;
+  }
+  container.innerHTML = list.map(karteCardHTML).join('');
+}
+
+function karteCardHTML(k) {
+  const records = k.records.map(r =>
+    `<div class="karte-record">` +
+    `<span class="rec-date">${fmtDate(r.date)}</span>` +
+    `<span class="rec-content">${esc(r.content)}</span>` +
+    `<span class="rec-amount">${fmtAmt(r.amount)}</span>` +
+    `</div>`
+  ).join('');
+
+  let diffClass = '';
+  let diffText = '—';
+  if (k.diff !== null) {
+    diffClass = k.diff > 0 ? 'diff-positive' : k.diff < 0 ? 'diff-negative' : 'diff-zero';
+    diffText = (k.diff >= 0 ? '+' : '') + fmtAmt(k.diff);
+  }
+
+  const electronicRow = k.closed
+    ? `<div class="total-row">
+         <span>電子カルテ</span>
+         <span>${fmtAmt(k.electronic_amount)}</span>
+       </div>`
+    : `<div class="total-row">
+         <span>電子カルテ</span>
+         <div class="elec-input-row">
+           <input type="number" id="elec-${k.id}" min="0" step="100"
+             value="${k.electronic_amount !== null ? k.electronic_amount : ''}"
+             placeholder="金額入力"
+             onkeydown="if(event.key==='Enter')confirmElectronic('${k.id}')">
+           <button class="btn btn-secondary btn-sm" onclick="confirmElectronic('${k.id}')">確定</button>
+         </div>
+       </div>`;
+
+  const badge = k.closed
+    ? '<span class="karte-badge badge-closed">確定済</span>'
+    : '<span class="karte-badge badge-unclosed">電子未入力</span>';
+
+  return `<div class="karte-card ${k.closed ? '' : 'unclosed'}" id="card-${k.id}">
+    <div class="karte-header">
+      <span class="karte-title">【${esc(k.farm)} / ${esc(k.cow)}】</span>
+      <div class="karte-actions">
+        ${badge}
+        <button class="btn btn-danger btn-sm" onclick="deleteKarte('${k.id}')">削除</button>
+      </div>
+    </div>
+    <div class="karte-records">${records}</div>
+    <div class="karte-totals">
+      <div class="total-row paper">
+        <span>紙カルテ合計</span>
+        <span>${fmtAmt(k.paper_total)}</span>
+      </div>
+      ${electronicRow}
+      <div class="total-row ${diffClass}">
+        <span>差額（電子 − 紙）</span>
+        <span>${diffText}</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+function confirmElectronic(id) {
+  const input = document.getElementById('elec-' + id);
+  if (!input) return;
+  const val = parseInt(input.value);
+  if (isNaN(val) || val < 0) { alert('正しい金額（0以上の整数）を入力してください'); return; }
+
+  const kartes = loadKartes();
+  const k = kartes.find(x => x.id === id);
+  if (!k) return;
+  k.electronic_amount = val;
+  k.diff = val - k.paper_total;
+  k.closed = true;
+  saveKartes(kartes);
+  renderKartes();
+}
+
+function deleteKarte(id) {
+  if (!confirm('このカルテを削除しますか？')) return;
+  saveKartes(loadKartes().filter(k => k.id !== id));
+  renderKartes();
+}
+
+function updateFarmFilter() {
+  const farms = loadFarms();
+  const sel = document.getElementById('filter-farm');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">全農場</option>' +
+    farms.map(f => `<option value="${esc(f)}"${f === cur ? ' selected' : ''}>${esc(f)}</option>`).join('');
+}
+
+function updateFarmDatalist() {
+  const farms = loadFarms();
+  document.getElementById('farm-datalist').innerHTML =
+    farms.map(f => `<option value="${esc(f)}">`).join('');
+}
+
+// ================================================================
+// Bookmarklet
+// ================================================================
+const BOOKMARKLET = `javascript:(function(){var el=document.querySelector('.amount-selector-placeholder');var amt=el?parseInt(el.textContent.replace(/[^0-9]/g,'')):null;if(!amt){alert('金額を取得できませんでした。\\nセレクタの差し替えが必要です。');return;}var w=window.open('','cartememo');if(w&&w.postMessage){w.postMessage({type:'electronic_amount',amount:amt},'*');}else{prompt('カルテメモを開いてから再試行してください。手動入力用の金額:',amt);}})();`;
+
+function initBookmarklet() {
+  document.getElementById('bookmarklet-display').textContent = BOOKMARKLET;
+}
+
+function copyBookmarklet(btn) {
+  navigator.clipboard.writeText(BOOKMARKLET).then(() => {
+    btn.textContent = 'コピー完了!';
+    setTimeout(() => { btn.textContent = 'コピー'; }, 1800);
+  }).catch(() => {
+    alert('コピーに失敗しました。手動でテキストをコピーしてください。');
+  });
+}
+
+// Receive postMessage from bookmarklet
+window.name = 'cartememo';
+window.addEventListener('message', e => {
+  if (!e.data || e.data.type !== 'electronic_amount') return;
+  const amt = e.data.amount;
+  if (typeof amt !== 'number') return;
+
+  // Switch to karte tab
+  document.querySelector('[data-tab="kartes"]').click();
+  setTimeout(() => {
+    const inputs = document.querySelectorAll('[id^="elec-"]');
+    if (inputs.length > 0) {
+      inputs[0].value = amt;
+      inputs[0].style.borderColor = '#1976d2';
+      inputs[0].focus();
+    } else {
+      alert('電子金額未入力のカルテが見つかりません。\n金額: ' + amt.toLocaleString('ja-JP') + '円');
+    }
+  }, 350);
+});
+
+// ================================================================
+// Tab 3: Stats
+// ================================================================
+function renderStats() {
+  const rangeN = parseInt(document.getElementById('month-range').value);
+  const kartes = loadKartes().filter(k => k.closed && k.diff !== null);
+
+  let months = [...new Set(kartes.map(k => k.month))].sort();
+  if (rangeN > 0) {
+    const cutoff = monthOffset(-rangeN);
+    months = months.filter(m => m >= cutoff);
+  }
+
+  const farms = [...new Set(kartes.map(k => k.farm))].sort((a, b) => a.localeCompare(b, 'ja'));
+  const container = document.getElementById('stats-container');
+
+  if (months.length === 0 || farms.length === 0) {
+    container.innerHTML = '<div class="empty">差額確定済みのデータがありません</div>';
+    return;
+  }
+
+  // Build farm × month sum
+  const table = {};
+  farms.forEach(f => { table[f] = {}; });
+  kartes.forEach(k => {
+    if (!months.includes(k.month) || !farms.includes(k.farm)) return;
+    table[k.farm][k.month] = (table[k.farm][k.month] || 0) + k.diff;
+  });
+
+  const ths = months.map(m => {
+    const [y, mo] = m.split('-');
+    return `<th>${y}年${parseInt(mo)}月</th>`;
+  }).join('');
+
+  const rows = farms.map(f => {
+    const cells = months.map(m => {
+      const v = table[f][m];
+      if (v === undefined) return '<td style="color:#ccc;">—</td>';
+      const cls = v > 0 ? 'diff-pos' : v < 0 ? 'diff-neg' : '';
+      return `<td class="${cls}">${(v >= 0 ? '+' : '') + fmtAmt(v)}</td>`;
+    }).join('');
+    return `<tr><td>${esc(f)}</td>${cells}</tr>`;
+  }).join('');
+
+  container.innerHTML =
+    `<table class="stats-table">` +
+    `<thead><tr><th>農場名</th>${ths}</tr></thead>` +
+    `<tbody>${rows}</tbody>` +
+    `</table>`;
+}
+
+function exportCSV() {
+  const rangeN = parseInt(document.getElementById('month-range').value);
+  const kartes = loadKartes().filter(k => k.closed && k.diff !== null);
+
+  let months = [...new Set(kartes.map(k => k.month))].sort();
+  if (rangeN > 0) {
+    const cutoff = monthOffset(-rangeN);
+    months = months.filter(m => m >= cutoff);
+  }
+
+  const farms = [...new Set(kartes.map(k => k.farm))].sort((a, b) => a.localeCompare(b, 'ja'));
+
+  const table = {};
+  farms.forEach(f => { table[f] = {}; });
+  kartes.forEach(k => {
+    if (!months.includes(k.month) || !farms.includes(k.farm)) return;
+    table[k.farm][k.month] = (table[k.farm][k.month] || 0) + k.diff;
+  });
+
+  // BOM for Excel
+  let csv = '﻿農場名,' + months.join(',') + '\n';
+  farms.forEach(f => {
+    const cells = months.map(m => table[f][m] !== undefined ? table[f][m] : '');
+    csv += f + ',' + cells.join(',') + '\n';
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '差額集計_' + todayStr() + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ================================================================
+// Utilities
+// ================================================================
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function monthOffset(n) {
+  const d = new Date();
+  d.setMonth(d.getMonth() + n);
+  return d.toISOString().slice(0, 7);
+}
+
+function fmtAmt(n) {
+  if (n === null || n === undefined) return '—';
+  return n.toLocaleString('ja-JP') + '円';
+}
+
+function fmtDate(dateStr) {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  return parseInt(parts[1]) + '/' + parseInt(parts[2]);
+}
+
+function esc(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function showMsg(id, text, type) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.className = 'msg msg-' + type;
+  el.textContent = text;
+}
+
+function clearMsg(id) {
+  const el = document.getElementById(id);
+  if (el) { el.className = ''; el.textContent = ''; }
+}
+
+// ================================================================
+// Cloud sync (jsonbin.io)
+// ================================================================
+function loadCloudSettings() {
+  const key = localStorage.getItem(KEY.jbk) || '';
+  const id  = localStorage.getItem(KEY.jbid) || '';
+  if (key) document.getElementById('jb-key').value = key;
+  if (id)  document.getElementById('jb-id').value  = id;
+}
+
+function saveCloudSettings() {
+  localStorage.setItem(KEY.jbk,  document.getElementById('jb-key').value.trim());
+  localStorage.setItem(KEY.jbid, document.getElementById('jb-id').value.trim());
+}
+
+async function cloudSave() {
+  const key   = document.getElementById('jb-key').value.trim();
+  const binId = document.getElementById('jb-id').value.trim();
+  if (!key) { showToast('jsonbin.io APIキーを入力してください'); return; }
+
+  const payload = {
+    version: 1,
+    savedAt: new Date().toISOString(),
+    kartes: loadKartes(),
+    farms:  loadFarms()
+  };
+
+  try {
+    let resp;
+    if (binId) {
+      resp = await fetch(`https://api.jsonbin.io/v3/b/${binId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-Master-Key': key },
+        body: JSON.stringify(payload)
+      });
+    } else {
+      resp = await fetch('https://api.jsonbin.io/v3/b', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Master-Key': key,
+          'X-Bin-Name': 'CarteMemo',
+          'X-Bin-Private': 'true'
+        },
+        body: JSON.stringify(payload)
+      });
+    }
+    const result = await resp.json();
+    if (!resp.ok) throw new Error(result.message || 'HTTP ' + resp.status);
+
+    if (!binId) {
+      const newId = result.metadata.id;
+      document.getElementById('jb-id').value = newId;
+      localStorage.setItem(KEY.jbid, newId);
+    }
+    saveCloudSettings();
+    document.getElementById('cloud-status').textContent =
+      '最終保存: ' + new Date().toLocaleString('ja-JP') + '（' + payload.kartes.length + '件）';
+    showToast('クラウドに保存しました');
+  } catch (e) {
+    showToast('保存エラー: ' + e.message);
+  }
+}
+
+async function cloudLoad() {
+  const key   = document.getElementById('jb-key').value.trim();
+  const binId = document.getElementById('jb-id').value.trim();
+  if (!key)   { showToast('jsonbin.io APIキーを入力してください'); return; }
+  if (!binId) { showToast('Bin IDを入力してください（保存端末でコピーして貼り付け）'); return; }
+
+  try {
+    const resp = await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`, {
+      headers: { 'X-Master-Key': key }
+    });
+    const result = await resp.json();
+    if (!resp.ok) throw new Error(result.message || 'HTTP ' + resp.status);
+
+    const data = result.record;
+    if (!Array.isArray(data.kartes)) throw new Error('カルテデータが見つかりません');
+
+    // Merge kartes (dedup by id)
+    const local = loadKartes();
+    const existingIds = new Set(local.map(k => k.id));
+    const added = data.kartes.filter(k => !existingIds.has(k.id));
+    saveKartes([...local, ...added]);
+
+    // Merge farms (dedup)
+    if (Array.isArray(data.farms)) {
+      const farms = loadFarms();
+      data.farms.forEach(f => { if (!farms.includes(f)) farms.push(f); });
+      farms.sort((a, b) => a.localeCompare(b, 'ja'));
+      saveFarms(farms);
+      updateFarmDatalist();
+      updateFarmFilter();
+    }
+
+    saveCloudSettings();
+    document.getElementById('cloud-status').textContent =
+      '最終読み込み: ' + new Date().toLocaleString('ja-JP') + '（' + added.length + '件追加）';
+    showToast(added.length + '件の新しいカルテを追加しました');
+    renderKartes();
+  } catch (e) {
+    showToast('読み込みエラー: ' + e.message);
+  }
+}
+
+function copyBinId() {
+  const id = document.getElementById('jb-id').value.trim();
+  if (!id) { showToast('Bin IDがありません。先に「クラウドに保存」してください'); return; }
+  navigator.clipboard.writeText(id).then(() => showToast('Bin IDをコピーしました'));
+}
+
+// ================================================================
+// URL parameter import (iPhone Shortcuts integration)
+// URL format: cartememo.html?memo=テキスト&farm=A牧場&cow=0001&autosave=1
+// ================================================================
+function handleUrlParams() {
+  const params = new URLSearchParams(window.location.search);
+  const memoText = params.get('memo');
+  if (!memoText) return;
+
+  document.getElementById('voice-input').value = memoText;
+  if (params.get('farm')) document.getElementById('farm-input').value = params.get('farm');
+  if (params.get('cow'))  document.getElementById('cow-input').value  = params.get('cow');
+
+  // Remove params from URL so reload doesn't re-trigger
+  history.replaceState({}, '', window.location.pathname);
+
+  if (params.get('autosave') === '1') {
+    // Auto-analyze immediately
+    showToast('音声メモを受信しました。AI解析を開始します…');
+    setTimeout(analyzeText, 600);
+  } else {
+    document.getElementById('voice-input').focus();
+    showToast('音声メモを受信しました。内容を確認して「AI解析」を押してください。');
+  }
+}
+
+// Simple toast notification
+function showToast(msg) {
+  let el = document.getElementById('toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'toast';
+    el.style.cssText =
+      'position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);' +
+      'background:#323232;color:#fff;padding:12px 20px;border-radius:6px;font-size:14px;' +
+      'opacity:0;transition:opacity 0.25s,transform 0.25s;z-index:9999;max-width:500px;text-align:center;';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.opacity = '1';
+  el.style.transform = 'translateX(-50%) translateY(0)';
+  clearTimeout(el._timer);
+  el._timer = setTimeout(() => {
+    el.style.opacity = '0';
+    el.style.transform = 'translateX(-50%) translateY(20px)';
+  }, 3500);
+}
+
+// ================================================================
+// Init
+// ================================================================
+(function init() {
+  const key = getApiKey();
+  if (key) document.getElementById('api-key-input').value = key;
+  updateApiStatus();
+  updateFarmDatalist();
+  updateFarmFilter();
+  initBookmarklet();
+  loadCloudSettings();
+  handleUrlParams();
+})();
+</script>
+</body>
+</html>
