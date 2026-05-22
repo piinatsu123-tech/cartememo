@@ -409,9 +409,36 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 window.addEventListener('pageshow', e => { if(e.persisted) handleUrlParams(); });
 
-// ==================== URL PARAMS (iPhone Shortcuts) ====================
+// ==================== URL PARAMS (iPhone Shortcuts & Bookmarklet) ====================
 function handleUrlParams() {
   const params = new URLSearchParams(window.location.search);
+
+  // ブックマークレットからの電子カルテ金額
+  const electronicAmt = params.get('electronic_amount');
+  if(electronicAmt) {
+    const amt = parseInt(electronicAmt);
+    history.replaceState({}, '', window.location.pathname);
+    if(!isNaN(amt) && amt > 0) {
+      switchTab('karte');
+      updateKarteFarmFilter();
+      renderKarteList();
+      setTimeout(() => {
+        const inputs = document.querySelectorAll('[id^="elec-"]');
+        if(inputs.length > 0) {
+          inputs[0].value = amt;
+          inputs[0].style.outline = '2px solid #c00';
+          inputs[0].scrollIntoView({behavior:'smooth', block:'center'});
+          inputs[0].focus();
+          toast('B点計から金額を取得: ¥' + amt.toLocaleString('ja-JP'), 'success');
+        } else {
+          toast('電子未入力のカルテがありません（金額: ¥' + amt.toLocaleString('ja-JP') + '）', 'error');
+        }
+      }, 150);
+    }
+    return;
+  }
+
+  // iPhoneショートカットからの音声メモインポート
   const memoText = params.get('memo');
   if(!memoText) return;
   document.getElementById('newMemoText').value = memoText;
@@ -1031,7 +1058,8 @@ function exportCSV() {
 }
 
 // ==================== BOOKMARKLET ====================
-const BOOKMARKLET=`javascript:(function(){var el=document.getElementById('karte_record_3_7_1');if(!el){alert('B点計の要素が見つかりませんでした（id: karte_record_3_7_1）');return;}var next=el.nextElementSibling;if(!next){alert('B点計の値が見つかりませんでした');return;}var pts=parseFloat(next.textContent.replace(/[^0-9.]/g,''));if(isNaN(pts)||pts<=0){alert('B点計を数値として読み取れませんでした: '+next.textContent);return;}var amt=Math.round(pts*10);var w=window.open('','cartememo');if(w&&w.postMessage){w.postMessage({type:'electronic_amount',amount:amt},'*');}else{prompt('CarteMemoを開いてから再試行してください。金額('+amt+'円):',amt);}})();`;
+const CARTEMEMO_URL='https://piinatsu123-tech.github.io/cartememo/cartememo.html';
+const BOOKMARKLET=`javascript:(function(){var el=document.getElementById('karte_record_3_7_1');if(!el){alert('B点計の要素が見つかりませんでした（id: karte_record_3_7_1）');return;}var next=el.nextElementSibling;if(!next){alert('B点計の値が見つかりませんでした');return;}var pts=parseFloat(next.textContent.replace(/[^0-9.]/g,''));if(isNaN(pts)||pts<=0){alert('B点計を数値として読み取れませんでした: '+next.textContent);return;}var amt=Math.round(pts*10);window.open('${CARTEMEMO_URL}?electronic_amount='+amt,'cartememo');})();`;
 function initBookmarklet(){document.getElementById('bookmarkletDisplay').textContent=BOOKMARKLET;}
 function copyBookmarklet(btn){navigator.clipboard.writeText(BOOKMARKLET).then(()=>{btn.textContent='コピー完了!';setTimeout(()=>btn.textContent='コピー',1800);});}
 window.name='cartememo';
