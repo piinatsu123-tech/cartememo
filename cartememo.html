@@ -1022,25 +1022,17 @@ function buildKarteCard(k, isDetail) {
     </div>`).join('');
   const diffClass = k.diff===null?'':k.diff>0?'diff-pos':k.diff<0?'diff-neg':'';
   const diffText = k.diff===null?'—':(k.diff>=0?'+':'')+fmtAmt(k.diff);
-  const elecRow = k.closed
-    ? `<div class="total-row"><span style="color:var(--text2)">電子カルテ</span><span class="total-val">${fmtAmt(k.electronic_amount)}</span></div>`
-    : `<div class="total-row elec-row"><span style="color:var(--text2)">電子カルテ</span><div class="elec-input-wrap"><input type="number" id="elec-${k.id}" min="0" step="100" value="${k.electronic_amount!==null?k.electronic_amount:''}" placeholder="金額入力" onkeydown="if(event.key==='Enter')confirmElectronic('${k.id}')"><button class="btn btn-ghost btn-xs" onclick="confirmElectronic('${k.id}')">確定</button></div></div>`;
+  // 常に編集可能な入力欄を表示（確定済みでも再編集できる）
+  const elecRow = `<div class="total-row elec-row"><span style="color:var(--text2)">電子カルテ</span><div class="elec-input-wrap"><input type="number" id="elec-${k.id}" min="0" step="100" value="${k.electronic_amount!==null?k.electronic_amount:''}" placeholder="金額を入力" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter')this.blur()" onblur="autoSaveElectronic('${k.id}')"></div></div>`;
   const isSelected = (activeKarteId === k.id);
-  const cardClass = [
-    'karte-card',
-    k.closed ? '' : 'unclosed',
-    isSelected ? 'selected' : ''
-  ].filter(Boolean).join(' ');
-  const selectBtn = (!isDetail && !k.closed)
-    ? `<button class="btn btn-xs" style="background:#111;color:#fff;border:none" onclick="selectKarte('${k.id}')">選択</button>`
-    : '';
-  return `<div class="${cardClass}" id="card-${k.id}">
+  const cardClass = ['karte-card', k.closed?'':'unclosed', isSelected?'selected':''].filter(Boolean).join(' ');
+  const clickAttr = isDetail ? '' : `onclick="handleKarteCardClick(event,'${k.id}')" style="cursor:pointer"`;
+  return `<div class="${cardClass}" id="card-${k.id}" ${clickAttr}>
     <div class="karte-hdr">
       <span class="karte-title">【${esc(k.farm)} / ${esc(k.cow)}】</span>
       <div style="display:flex;gap:8px;align-items:center">
         <span class="karte-badge ${k.closed?'badge-closed':'badge-unclosed'}">${k.closed?'確定済':'電子未入力'}</span>
-        ${selectBtn}
-        <button class="btn btn-danger btn-xs" onclick="deleteKarte('${k.id}')">削除</button>
+        <button class="btn btn-danger btn-xs" onclick="event.stopPropagation();deleteKarte('${k.id}')">削除</button>
       </div>
     </div>
     <div class="karte-records">${recs}</div>
@@ -1050,6 +1042,11 @@ function buildKarteCard(k, isDetail) {
       <div class="total-row ${diffClass}" style="margin-top:4px;padding-top:8px;border-top:1px solid var(--border)"><span style="font-weight:600">差額（電子−紙）</span><span class="total-val" style="font-size:16px">${diffText}</span></div>
     </div>
   </div>`;
+}
+
+function handleKarteCardClick(e, karteId) {
+  if(['INPUT','BUTTON','SELECT','TEXTAREA'].includes(e.target.tagName)) return;
+  selectKarte(karteId);
 }
 
 function renderKarteList() {
@@ -1097,12 +1094,22 @@ function deselectKarte() {
   renderKarteList();
 }
 
-function confirmElectronic(id) {
+function autoSaveElectronic(id) {
   const input=document.getElementById('elec-'+id);if(!input)return;
-  const val=parseInt(input.value);if(isNaN(val)||val<0){alert('正しい金額を入力してください');return;}
   const k=KARTES.find(x=>x.id===id);if(!k)return;
+  const raw=input.value.trim();
+  if(raw==='') {
+    if(k.electronic_amount!==null) {
+      k.electronic_amount=null;k.diff=null;k.closed=false;
+      saveToStorage();renderKarteList();
+      toast('電子カルテ金額をクリアしました');
+    }
+    return;
+  }
+  const val=parseInt(raw);
+  if(isNaN(val)||val<0) return;
+  if(k.electronic_amount===val) return;
   k.electronic_amount=val;k.diff=val-k.paper_total;k.closed=true;
-  if(activeKarteId===id) deselectKarte();
   saveToStorage();renderKarteList();
   toast(`差額: ${k.diff>=0?'+':''}${fmtAmt(k.diff)}`, k.diff<0?'error':'success');
 }
@@ -1151,11 +1158,15 @@ function fillElectAmt(karteId, amt) {
   const input = document.getElementById('elec-' + karteId);
   if(!input) return;
   input.value = amt;
-  input.style.outline = '2px solid #c00';
-  input.scrollIntoView({behavior:'smooth', block:'center'});
-  input.focus();
-  // アウトラインは3秒後に消す
-  setTimeout(() => { input.style.outline = ''; }, 3000);
+  // 即時保存（ブラーイベントなしで直接保存）
+  autoSaveElectronic(karteId);
+  // 再描画後の新しい入力欄をハイライト
+  const newInput = document.getElementById('elec-' + karteId);
+  if(newInput) {
+    newInput.style.outline = '2px solid #c00';
+    newInput.scrollIntoView({behavior:'smooth', block:'center'});
+    setTimeout(() => { const el=document.getElementById('elec-'+karteId); if(el) el.style.outline=''; }, 3000);
+  }
 }
 
 function showElectModal(amt, unclosedKartes) {
