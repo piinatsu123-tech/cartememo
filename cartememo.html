@@ -109,8 +109,12 @@ input[type=checkbox]{width:auto;margin:0}
 .filter-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:7px;margin-bottom:14px}
 .filter-bar select,.filter-bar input[type=text]{width:auto;flex:none}
 .filter-bar label{margin:0;display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--text2);font-size:13px;font-weight:400}
-.karte-card{background:#fff;border:1px solid var(--border);border-radius:7px;padding:16px;margin-bottom:10px}
+.karte-back-bar{display:flex;align-items:center;gap:12px;padding:10px 16px;background:#111;color:#fff;border-radius:7px;margin-bottom:14px}
+.karte-back-bar .back-label{font-size:15px;font-weight:700;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.karte-back-bar .waiting-badge{font-size:11px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:20px;padding:3px 10px;white-space:nowrap;flex-shrink:0}
+.karte-card{background:#fff;border:1px solid var(--border);border-radius:7px;padding:16px;margin-bottom:10px;cursor:default}
 .karte-card.unclosed{border-left:3px solid #c00}
+.karte-card.selected{border:2px solid #111;border-left:2px solid #111}
 .karte-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px}
 .karte-title{font-size:16px;font-weight:700;color:#111}
 .karte-badge{font-size:11px;padding:2px 9px;border-radius:10px;border:1px solid;font-weight:500}
@@ -226,7 +230,14 @@ input[type=checkbox]{width:auto;margin:0}
 
 <!-- ===== カルテ一覧 ===== -->
 <div class="tab-page" id="page-karte">
-  <div class="filter-bar">
+  <!-- 詳細ビュー用バー（カルテ選択中に表示） -->
+  <div class="karte-back-bar" id="karte-back-bar" style="display:none">
+    <button class="btn btn-ghost btn-xs" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);color:#fff;flex-shrink:0" onclick="deselectKarte()">← 一覧に戻る</button>
+    <span class="back-label" id="karte-active-label"></span>
+    <span class="waiting-badge">B点待機中</span>
+  </div>
+  <!-- 一覧ビュー用フィルターバー -->
+  <div class="filter-bar" id="karte-filter-bar">
     <select id="karte-filter-farm" onchange="renderKarteList()" style="width:140px">
       <option value="">全農場</option>
     </select>
@@ -406,6 +417,7 @@ let activeResultId = null;
 let karteSaveMemoId = null;
 let masterEditIndex = -1;
 let pendingElectAmt = null;
+let activeKarteId = null;
 
 // ==================== INIT ====================
 document.addEventListener('DOMContentLoaded', () => {
@@ -439,9 +451,21 @@ function handleUrlParams() {
       updateKarteFarmFilter();
       renderKarteList();
       setTimeout(() => {
+        // 選択中カルテがあればそこへ直接入力
+        if(activeKarteId) {
+          const k = KARTES.find(x => x.id === activeKarteId);
+          if(k && !k.closed) {
+            fillElectAmt(activeKarteId, amt);
+            toast('¥' + amt.toLocaleString('ja-JP') + ' を入力しました。確定ボタンを押してください', 'success');
+            return;
+          }
+          // 選択中だったが確定済みの場合は選択解除してフォールバック
+          deselectKarte();
+        }
+        // フォールバック: 未入力カルテ数で分岐
         const unclosed = KARTES.filter(k => !k.closed);
         if(unclosed.length === 0) {
-          toast('電子未入力のカルテがありません（金額: ¥' + amt.toLocaleString('ja-JP') + '）', 'error');
+          toast('電子未入力のカルテがありません（¥' + amt.toLocaleString('ja-JP') + '）', 'error');
         } else if(unclosed.length === 1) {
           fillElectAmt(unclosed[0].id, amt);
           toast('B点計から金額を取得: ¥' + amt.toLocaleString('ja-JP'), 'success');
@@ -502,6 +526,7 @@ function loadFromStorage() {
     const cp = localStorage.getItem('vetmemo_convPairs'); if(cp) convPairs = JSON.parse(cp);
     const k = localStorage.getItem('cm_kartes'); if(k) KARTES = JSON.parse(k);
     const f = localStorage.getItem('cm_farms'); if(f) FARMS = JSON.parse(f);
+    const ak = localStorage.getItem('cm_active_karte'); if(ak) activeKarteId = ak;
   } catch(e){}
 }
 
@@ -988,7 +1013,65 @@ function confirmKarteSave() {
   toast(`【${farm} / ${cow}】にカルテを保存しました`,'success');
 }
 
+function buildKarteCard(k, isDetail) {
+  const recs = k.records.map(r=>`
+    <div class="karte-rec">
+      <span class="rec-date">${fmtDate(r.date)}</span>
+      <span class="rec-content">${esc(r.content)}</span>
+      <span class="rec-amt">${r.amount>0?'¥'+r.amount.toLocaleString():'—'}</span>
+    </div>`).join('');
+  const diffClass = k.diff===null?'':k.diff>0?'diff-pos':k.diff<0?'diff-neg':'';
+  const diffText = k.diff===null?'—':(k.diff>=0?'+':'')+fmtAmt(k.diff);
+  const elecRow = k.closed
+    ? `<div class="total-row"><span style="color:var(--text2)">電子カルテ</span><span class="total-val">${fmtAmt(k.electronic_amount)}</span></div>`
+    : `<div class="total-row elec-row"><span style="color:var(--text2)">電子カルテ</span><div class="elec-input-wrap"><input type="number" id="elec-${k.id}" min="0" step="100" value="${k.electronic_amount!==null?k.electronic_amount:''}" placeholder="金額入力" onkeydown="if(event.key==='Enter')confirmElectronic('${k.id}')"><button class="btn btn-ghost btn-xs" onclick="confirmElectronic('${k.id}')">確定</button></div></div>`;
+  const isSelected = (activeKarteId === k.id);
+  const cardClass = [
+    'karte-card',
+    k.closed ? '' : 'unclosed',
+    isSelected ? 'selected' : ''
+  ].filter(Boolean).join(' ');
+  const selectBtn = (!isDetail && !k.closed)
+    ? `<button class="btn btn-xs" style="background:#111;color:#fff;border:none" onclick="selectKarte('${k.id}')">選択</button>`
+    : '';
+  return `<div class="${cardClass}" id="card-${k.id}">
+    <div class="karte-hdr">
+      <span class="karte-title">【${esc(k.farm)} / ${esc(k.cow)}】</span>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span class="karte-badge ${k.closed?'badge-closed':'badge-unclosed'}">${k.closed?'確定済':'電子未入力'}</span>
+        ${selectBtn}
+        <button class="btn btn-danger btn-xs" onclick="deleteKarte('${k.id}')">削除</button>
+      </div>
+    </div>
+    <div class="karte-records">${recs}</div>
+    <div class="karte-totals">
+      <div class="total-row"><span style="color:var(--text2)">紙カルテ合計</span><span class="total-val">¥${k.paper_total.toLocaleString()}</span></div>
+      ${elecRow}
+      <div class="total-row ${diffClass}" style="margin-top:4px;padding-top:8px;border-top:1px solid var(--border)"><span style="font-weight:600">差額（電子−紙）</span><span class="total-val" style="font-size:16px">${diffText}</span></div>
+    </div>
+  </div>`;
+}
+
 function renderKarteList() {
+  const el = document.getElementById('karteList');
+  const backBar = document.getElementById('karte-back-bar');
+  const filterBar = document.getElementById('karte-filter-bar');
+
+  // ===== 詳細ビュー（カルテ選択中） =====
+  if(activeKarteId) {
+    const k = KARTES.find(x => x.id === activeKarteId);
+    if(!k) { deselectKarte(); return; }
+    backBar.style.display = 'flex';
+    filterBar.style.display = 'none';
+    document.getElementById('karte-active-label').textContent = `【${k.farm} / ${k.cow}】`;
+    document.getElementById('karte-count').textContent = '';
+    el.innerHTML = buildKarteCard(k, true);
+    return;
+  }
+
+  // ===== 一覧ビュー =====
+  backBar.style.display = 'none';
+  filterBar.style.display = '';
   const farmF = document.getElementById('karte-filter-farm').value;
   const cowF = document.getElementById('karte-filter-cow').value.trim().toLowerCase();
   const unclosedOnly = document.getElementById('karte-filter-unclosed').checked;
@@ -996,37 +1079,22 @@ function renderKarteList() {
   if(farmF) list = list.filter(k=>k.farm===farmF);
   if(cowF) list = list.filter(k=>k.cow.toLowerCase().includes(cowF));
   if(unclosedOnly) list = list.filter(k=>!k.closed);
-  const el = document.getElementById('karteList');
   document.getElementById('karte-count').textContent = list.length + '件';
   if(!list.length){el.innerHTML='<div class="empty-state"><div class="es-icon">📋</div>カルテがありません<br>一括計算タブの「カルテに保存」ボタンで追加してください</div>';return;}
-  el.innerHTML = list.map(k => {
-    const recs = k.records.map(r=>`
-      <div class="karte-rec">
-        <span class="rec-date">${fmtDate(r.date)}</span>
-        <span class="rec-content">${esc(r.content)}</span>
-        <span class="rec-amt">${r.amount>0?'¥'+r.amount.toLocaleString():'—'}</span>
-      </div>`).join('');
-    const diffClass = k.diff===null?'':k.diff>0?'diff-pos':k.diff<0?'diff-neg':'';
-    const diffText = k.diff===null?'—':(k.diff>=0?'+':'')+fmtAmt(k.diff);
-    const elecRow = k.closed
-      ? `<div class="total-row"><span style="color:var(--text2)">電子カルテ</span><span class="total-val">${fmtAmt(k.electronic_amount)}</span></div>`
-      : `<div class="total-row elec-row"><span style="color:var(--text2)">電子カルテ</span><div class="elec-input-wrap"><input type="number" id="elec-${k.id}" min="0" step="100" value="${k.electronic_amount!==null?k.electronic_amount:''}" placeholder="金額入力" onkeydown="if(event.key==='Enter')confirmElectronic('${k.id}')"><button class="btn btn-ghost btn-xs" onclick="confirmElectronic('${k.id}')">確定</button></div></div>`;
-    return `<div class="karte-card ${k.closed?'':'unclosed'}" id="card-${k.id}">
-      <div class="karte-hdr">
-        <span class="karte-title">【${esc(k.farm)} / ${esc(k.cow)}】</span>
-        <div style="display:flex;gap:8px;align-items:center">
-          <span class="karte-badge ${k.closed?'badge-closed':'badge-unclosed'}">${k.closed?'確定済':'電子未入力'}</span>
-          <button class="btn btn-danger btn-xs" onclick="deleteKarte('${k.id}')">削除</button>
-        </div>
-      </div>
-      <div class="karte-records">${recs}</div>
-      <div class="karte-totals">
-        <div class="total-row"><span style="color:var(--text2)">紙カルテ合計</span><span class="total-val">¥${k.paper_total.toLocaleString()}</span></div>
-        ${elecRow}
-        <div class="total-row ${diffClass}" style="margin-top:4px;padding-top:8px;border-top:1px solid var(--border)"><span style="font-weight:600">差額（電子−紙）</span><span class="total-val" style="font-size:16px">${diffText}</span></div>
-      </div>
-    </div>`;
-  }).join('');
+  el.innerHTML = list.map(k => buildKarteCard(k, false)).join('');
+}
+
+function selectKarte(id) {
+  activeKarteId = id;
+  try { localStorage.setItem('cm_active_karte', id); } catch(e){}
+  renderKarteList();
+  const k = KARTES.find(x => x.id === id);
+  toast(`【${k?k.farm+' / '+k.cow:''}】を選択しました。電子カルテでB点取得を押してください`, 'success');
+}
+function deselectKarte() {
+  activeKarteId = null;
+  try { localStorage.removeItem('cm_active_karte'); } catch(e){}
+  renderKarteList();
 }
 
 function confirmElectronic(id) {
@@ -1034,9 +1102,15 @@ function confirmElectronic(id) {
   const val=parseInt(input.value);if(isNaN(val)||val<0){alert('正しい金額を入力してください');return;}
   const k=KARTES.find(x=>x.id===id);if(!k)return;
   k.electronic_amount=val;k.diff=val-k.paper_total;k.closed=true;
+  if(activeKarteId===id) deselectKarte();
   saveToStorage();renderKarteList();
+  toast(`差額: ${k.diff>=0?'+':''}${fmtAmt(k.diff)}`, k.diff<0?'error':'success');
 }
-function deleteKarte(id){if(!confirm('このカルテを削除しますか？'))return;KARTES=KARTES.filter(k=>k.id!==id);saveToStorage();renderKarteList();}
+function deleteKarte(id){
+  if(!confirm('このカルテを削除しますか？'))return;
+  if(activeKarteId===id) deselectKarte();
+  KARTES=KARTES.filter(k=>k.id!==id);saveToStorage();renderKarteList();
+}
 
 // ==================== STATS ====================
 function renderStats() {
