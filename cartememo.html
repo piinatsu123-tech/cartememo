@@ -374,6 +374,21 @@ input[type=checkbox]{width:auto;margin:0}
 <datalist id="masterNamesList"></datalist>
 <div class="toast-wrap" id="toastWrap"></div>
 
+<!-- ===== 電子金額カルテ選択モーダル ===== -->
+<div id="electModal" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <div class="modal-title">どのカルテに入力しますか？</div>
+    <div style="font-size:13px;color:#555;margin-bottom:16px">
+      取得金額:
+      <span id="electModalAmt" style="font-size:20px;font-weight:700;font-family:'JetBrains Mono',monospace;color:#111;margin-left:6px"></span>
+    </div>
+    <div id="electModalList" style="display:flex;flex-direction:column;gap:8px;max-height:55vh;overflow-y:auto"></div>
+    <div style="margin-top:16px">
+      <button class="btn btn-ghost btn-sm" onclick="closeElectModal()">キャンセル</button>
+    </div>
+  </div>
+</div>
+
 <script>
 'use strict';
 // ==================== MASTER DATA ====================
@@ -390,6 +405,7 @@ let FARMS = [];
 let activeResultId = null;
 let karteSaveMemoId = null;
 let masterEditIndex = -1;
+let pendingElectAmt = null;
 
 // ==================== INIT ====================
 document.addEventListener('DOMContentLoaded', () => {
@@ -423,15 +439,14 @@ function handleUrlParams() {
       updateKarteFarmFilter();
       renderKarteList();
       setTimeout(() => {
-        const inputs = document.querySelectorAll('[id^="elec-"]');
-        if(inputs.length > 0) {
-          inputs[0].value = amt;
-          inputs[0].style.outline = '2px solid #c00';
-          inputs[0].scrollIntoView({behavior:'smooth', block:'center'});
-          inputs[0].focus();
+        const unclosed = KARTES.filter(k => !k.closed);
+        if(unclosed.length === 0) {
+          toast('電子未入力のカルテがありません（金額: ¥' + amt.toLocaleString('ja-JP') + '）', 'error');
+        } else if(unclosed.length === 1) {
+          fillElectAmt(unclosed[0].id, amt);
           toast('B点計から金額を取得: ¥' + amt.toLocaleString('ja-JP'), 'success');
         } else {
-          toast('電子未入力のカルテがありません（金額: ¥' + amt.toLocaleString('ja-JP') + '）', 'error');
+          showElectModal(amt, unclosed);
         }
       }, 150);
     }
@@ -1056,6 +1071,51 @@ function exportCSV() {
   a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
   a.download=`差額集計_${new Date().toISOString().slice(0,10)}.csv`;a.click();
 }
+
+// ==================== ELECTRONIC AMOUNT SELECTION ====================
+function fillElectAmt(karteId, amt) {
+  const input = document.getElementById('elec-' + karteId);
+  if(!input) return;
+  input.value = amt;
+  input.style.outline = '2px solid #c00';
+  input.scrollIntoView({behavior:'smooth', block:'center'});
+  input.focus();
+  // アウトラインは3秒後に消す
+  setTimeout(() => { input.style.outline = ''; }, 3000);
+}
+
+function showElectModal(amt, unclosedKartes) {
+  pendingElectAmt = amt;
+  document.getElementById('electModalAmt').textContent = '¥' + amt.toLocaleString('ja-JP');
+  document.getElementById('electModalList').innerHTML = unclosedKartes.map(k => `
+    <button onclick="applyElectAmt('${k.id}')" style="display:flex;justify-content:space-between;align-items:center;width:100%;padding:12px 16px;background:#fff;border:1px solid var(--border2);border-radius:6px;cursor:pointer;text-align:left;transition:background .12s" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background='#fff'">
+      <div>
+        <div style="font-size:15px;font-weight:700;color:#111">【${esc(k.farm)} / ${esc(k.cow)}】</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">${k.records.length}件の診療記録</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0;margin-left:12px">
+        <div style="font-size:11px;color:var(--text3)">紙カルテ合計</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;color:#111">¥${k.paper_total.toLocaleString()}</div>
+      </div>
+    </button>`).join('');
+  document.getElementById('electModal').style.display = 'flex';
+}
+
+function closeElectModal() {
+  document.getElementById('electModal').style.display = 'none';
+  pendingElectAmt = null;
+}
+
+function applyElectAmt(karteId) {
+  const amt = pendingElectAmt;
+  closeElectModal();
+  fillElectAmt(karteId, amt);
+  toast('¥' + amt.toLocaleString('ja-JP') + ' を入力しました。確定ボタンを押してください', 'success');
+}
+
+document.getElementById('electModal').addEventListener('click', e => {
+  if(e.target === document.getElementById('electModal')) closeElectModal();
+});
 
 // ==================== BOOKMARKLET ====================
 const CARTEMEMO_URL='https://piinatsu123-tech.github.io/cartememo/cartememo.html';
