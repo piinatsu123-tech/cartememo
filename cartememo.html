@@ -1103,8 +1103,18 @@ function recalcPaperTotal(k) {
 function addKarteRecord(karteId) {
   const k = KARTES.find(x=>x.id===karteId);
   if(!k) return;
-  const today = new Date().toISOString().slice(0,10);
-  k.records.push({date:today, content:'', amount:0});
+  // 最後のレコードの日付の翌日、なければ今日
+  let nextDate;
+  if(k.records.length>0) {
+    const last = k.records[k.records.length-1].date;
+    if(last) {
+      const d = new Date(last);
+      d.setDate(d.getDate()+1);
+      nextDate = d.toISOString().slice(0,10);
+    }
+  }
+  if(!nextDate) nextDate = new Date().toISOString().slice(0,10);
+  k.records.push({date:nextDate, content:'', amount:0});
   saveToStorage();
   renderKarteList();
 }
