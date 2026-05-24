@@ -146,6 +146,13 @@ input[type=checkbox]{width:auto;margin:0}
 .rec-del-btn:hover{color:#c00}
 .rec-add-btn{margin-top:8px;font-size:12px;color:var(--text2);background:none;border:1px dashed var(--border2);border-radius:5px;padding:7px 0;cursor:pointer;width:100%;text-align:center;font-family:'Noto Sans JP',sans-serif;font-weight:600;transition:all .12s}
 .rec-add-btn:hover{background:var(--surface);border-color:#888;color:#111}
+.preset-panel{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:10px}
+.preset-panel-title{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px}
+.preset-row{display:flex;align-items:center;gap:8px;padding:3px 0}
+.preset-row input[type=checkbox]{width:16px;height:16px;cursor:pointer;accent-color:#111;flex-shrink:0;margin:0}
+.preset-check-label{font-size:13px;font-weight:600;color:#111;flex:1;cursor:pointer}
+.preset-amt{width:85px;padding:3px 7px;font-size:12px;font-family:'JetBrains Mono',monospace;text-align:right}
+.preset-unit{font-size:11px;color:var(--text3);flex-shrink:0}
 
 /* ===== STATS ===== */
 .stats-table{width:100%;border-collapse:collapse;font-size:13px}
@@ -425,6 +432,11 @@ let memos = [];
 let DICT_WORDS = ["マルボ","アンピ","デキサ","ネオアス","イーエスイー","ザクトラン","セフチオ","バイトリル","フルニキ","メトクロ","パンカル","ウルソ","フルスル","バソラミン","ペニシリン","フォルテ","メンブトン","ダイメトン","パドリン","ベルパリン","セファ","エクセネル","ガスナイン","プロナルゴン","ビクタス","デポー","ジメトキシン","スタマー","ウルソ粉","ビオペア","ミヤリサン","ビスキノン","ビオスリー","獣医散","モニラック","ルミナップ","ノイエル","ボバクチン","ジクロ","レパミピド","コクシックス","ポルトラック","オメプラゾール","エクセーデ","タイニー","カナマイ","硫マグ","スタートバック","セフロ","インタゲン","ネオマイゾン","フロロコール","フジックス","ガス抜き"];
 let convPairs = []; // kept for data compat in cloud sync
 let KARTES = [];
+let PRESETS = [
+  {key:'shoshin',    label:'初診',   amount:0},
+  {key:'shindansho', label:'診断書', amount:0},
+  {key:'chokkei',    label:'直検',   amount:0},
+];
 let FARMS = [];
 let activeResultId = null;
 let karteSaveMemoId = null;
@@ -446,6 +458,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initBookmarklet();
   const dl = document.getElementById('masterNamesList');
   MASTER.forEach(m => { const o = document.createElement('option'); o.value = m.name; dl.appendChild(o); });
+  loadPresets();
   handleUrlParams();
   cloudAutoLoad(); // 起動時にクラウドから自動読み込み
 });
@@ -1160,6 +1173,20 @@ function buildKarteCard(k, isDetail) {
         <button class="btn btn-danger btn-xs" onclick="event.stopPropagation();deleteKarte('${k.id}')">削除</button>
       </div>
     </div>
+    <div class="preset-panel">
+      <div class="preset-panel-title">クイック追加</div>
+      ${PRESETS.map(pr=>{
+        const hasIt = k.records.some(r=>r.content===pr.label||r.content.startsWith(pr.label+'/')||r.content.startsWith(pr.label+' /'));
+        const cbId = `pcb-${pr.key}-${k.id}`;
+        const amtId = `pamt-${pr.key}-${k.id}`;
+        return `<div class="preset-row">
+          <input type="checkbox" id="${cbId}" ${hasIt?'checked':''} onclick="event.stopPropagation()" onchange="togglePreset('${k.id}','${pr.key}','${amtId}',this)">
+          <label class="preset-check-label" for="${cbId}">${pr.label}</label>
+          <input type="number" id="${amtId}" class="preset-amt" value="${pr.amount||''}" placeholder="金額" min="0" step="100" onclick="event.stopPropagation()" onblur="savePresetAmt('${pr.key}',parseInt(this.value)||0)">
+          <span class="preset-unit">円</span>
+        </div>`;
+      }).join('')}
+    </div>
     <div class="rec-edit-rows">
       <div class="rec-edit-hdr"><span>診療日</span><span>診療内容</span><span style="text-align:right">金額(円)</span><span></span></div>
       ${editRows}
@@ -1171,6 +1198,60 @@ function buildKarteCard(k, isDetail) {
       <div class="total-row ${diffClass}" style="margin-top:4px;padding-top:8px;border-top:1px solid var(--border)"><span style="font-weight:600">差額（電子−紙）</span><span class="total-val" style="font-size:16px">${diffText}</span></div>
     </div>
   </div>`;
+}
+
+function loadPresets() {
+  try {
+    const p = localStorage.getItem('cm_presets');
+    if(p) {
+      const saved = JSON.parse(p);
+      PRESETS.forEach(pr => { if(saved[pr.key] !== undefined) pr.amount = saved[pr.key]; });
+    }
+  } catch(e){}
+}
+
+function savePresetAmt(key, val) {
+  const pr = PRESETS.find(p=>p.key===key);
+  if(pr) pr.amount = val;
+  try {
+    const saved = {};
+    PRESETS.forEach(p => saved[p.key] = p.amount);
+    localStorage.setItem('cm_presets', JSON.stringify(saved));
+  } catch(e){}
+}
+
+function togglePreset(karteId, presetKey, amtInputId, checkbox) {
+  const k = KARTES.find(x=>x.id===karteId);
+  if(!k) return;
+  const pr = PRESETS.find(p=>p.key===presetKey);
+  if(!pr) return;
+  if(checkbox.checked) {
+    const amtInput = document.getElementById(amtInputId);
+    const amt = amtInput ? (parseInt(amtInput.value)||0) : pr.amount;
+    savePresetAmt(presetKey, amt);
+    const date = k.records.length>0 ? k.records[k.records.length-1].date : new Date().toISOString().slice(0,10);
+    k.records.push({date, content:pr.label, amount:amt});
+    recalcPaperTotal(k);
+    saveToStorage();
+    renderKarteList();
+  } else {
+    // 最後に一致するレコードを削除
+    let removeIdx = -1;
+    for(let i=k.records.length-1; i>=0; i--) {
+      const c = k.records[i].content;
+      if(c===pr.label || c.startsWith(pr.label+'/') || c.startsWith(pr.label+' /')) {
+        removeIdx = i; break;
+      }
+    }
+    if(removeIdx>=0) {
+      k.records.splice(removeIdx, 1);
+      recalcPaperTotal(k);
+      saveToStorage();
+      renderKarteList();
+    } else {
+      checkbox.checked = false;
+    }
+  }
 }
 
 function recalcPaperTotal(k) {
