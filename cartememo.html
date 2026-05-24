@@ -508,36 +508,54 @@ function switchTab(name) {
 }
 
 // ==================== STORAGE ====================
+// キーはすべて cm_ プレフィックス（vetmemo と独立）
 function saveToStorage() {
   try {
-    localStorage.setItem('vetmemo_memos', JSON.stringify(memos));
-    localStorage.setItem('vetmemo_dict', JSON.stringify(DICT_WORDS));
-    localStorage.setItem('vetmemo_master', JSON.stringify(MASTER));
-    localStorage.setItem('vetmemo_convPairs', JSON.stringify(convPairs));
+    localStorage.setItem('cm_memos', JSON.stringify(memos));
+    localStorage.setItem('cm_dict', JSON.stringify(DICT_WORDS));
+    localStorage.setItem('cm_master', JSON.stringify(MASTER));
+    localStorage.setItem('cm_convpairs', JSON.stringify(convPairs));
     localStorage.setItem('cm_kartes', JSON.stringify(KARTES));
     localStorage.setItem('cm_farms', JSON.stringify(FARMS));
   } catch(e){}
 }
 function loadFromStorage() {
+  migrateFromVetMemo(); // 初回のみ旧キーからデータを移行
   try {
-    const m = localStorage.getItem('vetmemo_memos'); if(m) memos = JSON.parse(m);
-    const d = localStorage.getItem('vetmemo_dict'); if(d) DICT_WORDS = JSON.parse(d);
-    const ms = localStorage.getItem('vetmemo_master'); if(ms) MASTER = JSON.parse(ms);
-    const cp = localStorage.getItem('vetmemo_convPairs'); if(cp) convPairs = JSON.parse(cp);
+    const m = localStorage.getItem('cm_memos'); if(m) memos = JSON.parse(m);
+    const d = localStorage.getItem('cm_dict'); if(d) DICT_WORDS = JSON.parse(d);
+    const ms = localStorage.getItem('cm_master'); if(ms) MASTER = JSON.parse(ms);
+    const cp = localStorage.getItem('cm_convpairs'); if(cp) convPairs = JSON.parse(cp);
     const k = localStorage.getItem('cm_kartes'); if(k) KARTES = JSON.parse(k);
     const f = localStorage.getItem('cm_farms'); if(f) FARMS = JSON.parse(f);
     const ak = localStorage.getItem('cm_active_karte'); if(ak) activeKarteId = ak;
   } catch(e){}
 }
+// vetmemo から cartememo への一回限りのデータ移行
+function migrateFromVetMemo() {
+  if(localStorage.getItem('cm_migrated')) return;
+  try {
+    const pairs = [
+      ['vetmemo_memos','cm_memos'],['vetmemo_dict','cm_dict'],
+      ['vetmemo_master','cm_master'],['vetmemo_convPairs','cm_convpairs'],
+      ['ak','cm_ak'],['dw','cm_dw'],['jbk','cm_jbk'],['jbid','cm_jbid']
+    ];
+    pairs.forEach(([from, to]) => {
+      const v = localStorage.getItem(from);
+      if(v && !localStorage.getItem(to)) localStorage.setItem(to, v);
+    });
+    localStorage.setItem('cm_migrated','1');
+  } catch(e){}
+}
 
 // ==================== KEYS ====================
 function saveKeys() {
-  try { localStorage.setItem('ak', document.getElementById('anthropicKey').value); localStorage.setItem('dw', document.getElementById('discordUrl').value); } catch(e){}
+  try { localStorage.setItem('cm_ak', document.getElementById('anthropicKey').value); localStorage.setItem('cm_dw', document.getElementById('discordUrl').value); } catch(e){}
   checkKeys(); toast('設定を保存しました', 'success');
 }
 function loadKeys() {
   try {
-    const ak = localStorage.getItem('ak')||''; const dw = localStorage.getItem('dw')||'';
+    const ak = localStorage.getItem('cm_ak')||''; const dw = localStorage.getItem('cm_dw')||'';
     if(ak) document.getElementById('anthropicKey').value = ak;
     if(dw) document.getElementById('discordUrl').value = dw;
   } catch(e){}
@@ -877,13 +895,13 @@ async function sendAllToDiscord() {
 // ==================== CLOUD SYNC ====================
 function loadJsonbinSettings() {
   try {
-    const key=localStorage.getItem('jbk')||'', id=localStorage.getItem('jbid')||'';
+    const key=localStorage.getItem('cm_jbk')||'', id=localStorage.getItem('cm_jbid')||'';
     if(key) document.getElementById('jsonbinKey').value=key;
     if(id) document.getElementById('jsonbinId').value=id;
   } catch(e){}
 }
 function saveJsonbinSettings() {
-  try { localStorage.setItem('jbk',document.getElementById('jsonbinKey').value.trim()); localStorage.setItem('jbid',document.getElementById('jsonbinId').value.trim()); } catch(e){}
+  try { localStorage.setItem('cm_jbk',document.getElementById('jsonbinKey').value.trim()); localStorage.setItem('cm_jbid',document.getElementById('jsonbinId').value.trim()); } catch(e){}
 }
 function copyBinId() {
   const id=document.getElementById('jsonbinId').value.trim();
@@ -901,7 +919,7 @@ async function cloudSave() {
     else { resp=await fetch('https://api.jsonbin.io/v3/b',{method:'POST',headers:{'Content-Type':'application/json','X-Master-Key':key,'X-Bin-Name':'CarteMemo','X-Bin-Private':'true'},body:JSON.stringify(data)}); }
     const result=await resp.json();
     if(!resp.ok) throw new Error(result.message||'HTTP '+resp.status);
-    if(!binId) { const newId=result.metadata.id; document.getElementById('jsonbinId').value=newId; localStorage.setItem('jbid',newId); }
+    if(!binId) { const newId=result.metadata.id; document.getElementById('jsonbinId').value=newId; localStorage.setItem('cm_jbid',newId); }
     saveJsonbinSettings();
     document.getElementById('cloudInfo').textContent=`最終保存: ${new Date().toLocaleString('ja-JP')}（メモ${memos.length}件・カルテ${KARTES.length}件）`;
     toast('クラウドに保存しました','success');
