@@ -137,22 +137,23 @@ input[type=checkbox]{width:auto;margin:0}
 .karte-summary{font-size:13px;color:var(--text2);margin-bottom:4px;line-height:1.7}
 .rec-edit-rows{margin-bottom:12px}
 .rec-edit-hdr{display:grid;grid-template-columns:112px 1fr 88px 26px;gap:5px;font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--text3);text-transform:uppercase;padding:0 0 5px;border-bottom:1px solid var(--border)}
-.rec-edit-row{display:grid;grid-template-columns:112px 1fr 88px 26px;gap:5px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border)}
+.rec-edit-row{display:grid;grid-template-columns:112px 1fr 88px 26px;gap:5px;align-items:start;padding:6px 0;border-bottom:1px solid var(--border)}
 .rec-edit-row:last-child{border-bottom:none}
 .rec-edit-row input[type=date]{padding:4px 5px;font-size:12px;font-family:'JetBrains Mono',monospace}
 .rec-edit-row input[type=text]{padding:4px 6px;font-size:12px;font-family:'Noto Sans JP',sans-serif}
 .rec-edit-row input[type=number]{padding:4px 6px;font-size:12px;font-family:'JetBrains Mono',monospace;text-align:right}
-.rec-del-btn{background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px;padding:0;line-height:1;display:flex;align-items:center;justify-content:center;width:26px;height:26px}
+.rec-del-btn{background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px;padding:0;line-height:1;display:flex;align-items:center;justify-content:center;width:26px;height:26px;margin-top:1px}
 .rec-del-btn:hover{color:#c00}
+.rec-preset-sub{grid-column:2;display:flex;gap:10px;flex-wrap:wrap;padding:3px 0 0}
+.rec-preset-item{display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:var(--text3);font-weight:500;user-select:none}
+.rec-preset-item input[type=checkbox]{width:13px;height:13px;cursor:pointer;accent-color:#111;margin:0;flex-shrink:0}
+.rec-preset-item:has(input:checked){color:#111;font-weight:700}
 .rec-add-btn{margin-top:8px;font-size:12px;color:var(--text2);background:none;border:1px dashed var(--border2);border-radius:5px;padding:7px 0;cursor:pointer;width:100%;text-align:center;font-family:'Noto Sans JP',sans-serif;font-weight:600;transition:all .12s}
 .rec-add-btn:hover{background:var(--surface);border-color:#888;color:#111}
-.preset-panel{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:10px}
-.preset-panel-title{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px}
-.preset-row{display:flex;align-items:center;gap:8px;padding:3px 0}
-.preset-row input[type=checkbox]{width:16px;height:16px;cursor:pointer;accent-color:#111;flex-shrink:0;margin:0}
-.preset-check-label{font-size:13px;font-weight:600;color:#111;flex:1;cursor:pointer}
-.preset-amt{width:85px;padding:3px 7px;font-size:12px;font-family:'JetBrains Mono',monospace;text-align:right}
-.preset-unit{font-size:11px;color:var(--text3);flex-shrink:0}
+.preset-settings{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:7px 10px;background:var(--surface);border:1px solid var(--border);border-radius:5px;margin-bottom:10px;font-size:11px;color:var(--text3)}
+.preset-settings-label{font-weight:700;letter-spacing:.06em;white-space:nowrap}
+.preset-settings-item{display:flex;align-items:center;gap:3px;color:var(--text2)}
+.preset-amt-sm{width:62px;padding:2px 5px;font-size:11px;font-family:'JetBrains Mono',monospace;text-align:right}
 
 /* ===== STATS ===== */
 .stats-table{width:100%;border-collapse:collapse;font-size:13px}
@@ -1157,13 +1158,29 @@ function buildKarteCard(k, isDetail) {
   }
 
   // ===== 詳細ビュー: 診療記録編集 + 電子カルテ入力 =====
-  const editRows = k.records.map((r,i)=>`
-    <div class="rec-edit-row">
+  const editRows = k.records.map((r,i)=>{
+    const presetChecks = PRESETS.map(pr=>{
+      const checked = contentHasPreset(r.content, pr.label);
+      const cbId = `pcb-${pr.key}-${k.id}-${i}`;
+      return `<label class="rec-preset-item" onclick="event.stopPropagation()">
+        <input type="checkbox" id="${cbId}" ${checked?'checked':''} onchange="toggleRecordPreset('${k.id}',${i},'${pr.key}',this)">
+        ${pr.label}
+      </label>`;
+    }).join('');
+    return `<div class="rec-edit-row">
       <input type="date" value="${esc(r.date)}" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'date',this.value)">
-      <input type="text" value="${esc(r.content)}" placeholder="診療内容" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'content',this.value)">
+      <div>
+        <input type="text" value="${esc(r.content)}" placeholder="診療内容" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'content',this.value)" style="width:100%">
+        <div class="rec-preset-sub">${presetChecks}</div>
+      </div>
       <input type="number" min="0" step="100" value="${r.amount>0?r.amount:''}" placeholder="0" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'amount',this.value)" onkeydown="if(event.key==='Enter')this.blur()">
       <button class="rec-del-btn" onclick="event.stopPropagation();deleteRecord('${k.id}',${i})" title="削除">×</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+  const presetSettingsHtml = `<div class="preset-settings">
+    <span class="preset-settings-label">プリセット金額</span>
+    ${PRESETS.map(pr=>`<span class="preset-settings-item">${pr.label}<input type="number" class="preset-amt-sm" value="${pr.amount||''}" placeholder="0" min="0" onclick="event.stopPropagation()" onblur="savePresetAmt('${pr.key}',parseInt(this.value)||0)">円</span>`).join('')}
+  </div>`;
   const elecRow = `<div class="total-row elec-row"><span style="color:var(--text2)">電子カルテ</span><div class="elec-input-wrap"><input type="number" id="elec-${k.id}" min="0" step="100" value="${k.electronic_amount!==null?k.electronic_amount:''}" placeholder="金額を入力" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter')this.blur()" onblur="autoSaveElectronic('${k.id}')"></div></div>`;
   return `<div class="karte-card" id="card-${k.id}">
     <div class="karte-hdr">
@@ -1173,20 +1190,7 @@ function buildKarteCard(k, isDetail) {
         <button class="btn btn-danger btn-xs" onclick="event.stopPropagation();deleteKarte('${k.id}')">削除</button>
       </div>
     </div>
-    <div class="preset-panel">
-      <div class="preset-panel-title">クイック追加</div>
-      ${PRESETS.map(pr=>{
-        const hasIt = k.records.some(r=>r.content===pr.label||r.content.startsWith(pr.label+'/')||r.content.startsWith(pr.label+' /'));
-        const cbId = `pcb-${pr.key}-${k.id}`;
-        const amtId = `pamt-${pr.key}-${k.id}`;
-        return `<div class="preset-row">
-          <input type="checkbox" id="${cbId}" ${hasIt?'checked':''} onclick="event.stopPropagation()" onchange="togglePreset('${k.id}','${pr.key}','${amtId}',this)">
-          <label class="preset-check-label" for="${cbId}">${pr.label}</label>
-          <input type="number" id="${amtId}" class="preset-amt" value="${pr.amount||''}" placeholder="金額" min="0" step="100" onclick="event.stopPropagation()" onblur="savePresetAmt('${pr.key}',parseInt(this.value)||0)">
-          <span class="preset-unit">円</span>
-        </div>`;
-      }).join('')}
-    </div>
+    ${presetSettingsHtml}
     <div class="rec-edit-rows">
       <div class="rec-edit-hdr"><span>診療日</span><span>診療内容</span><span style="text-align:right">金額(円)</span><span></span></div>
       ${editRows}
@@ -1220,38 +1224,39 @@ function savePresetAmt(key, val) {
   } catch(e){}
 }
 
-function togglePreset(karteId, presetKey, amtInputId, checkbox) {
+function contentHasPreset(content, label) {
+  if(!content) return false;
+  const esc = label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  return new RegExp('(^|/)' + esc + '(/|$)').test(content) || content === label;
+}
+
+function removePresetLabel(content, label) {
+  if(!content) return content;
+  const e = label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  let c = content;
+  c = c.replace(new RegExp('^' + e + '/'), '');
+  c = c.replace(new RegExp('/' + e + '$'), '');
+  c = c.replace(new RegExp('/' + e + '/'), '/');
+  c = c.replace(new RegExp('^' + e + '$'), '');
+  return c;
+}
+
+function toggleRecordPreset(karteId, recIdx, presetKey, checkbox) {
   const k = KARTES.find(x=>x.id===karteId);
-  if(!k) return;
+  if(!k || recIdx<0 || recIdx>=k.records.length) return;
+  const r = k.records[recIdx];
   const pr = PRESETS.find(p=>p.key===presetKey);
   if(!pr) return;
   if(checkbox.checked) {
-    const amtInput = document.getElementById(amtInputId);
-    const amt = amtInput ? (parseInt(amtInput.value)||0) : pr.amount;
-    savePresetAmt(presetKey, amt);
-    const date = k.records.length>0 ? k.records[k.records.length-1].date : new Date().toISOString().slice(0,10);
-    k.records.push({date, content:pr.label, amount:amt});
-    recalcPaperTotal(k);
-    saveToStorage();
-    renderKarteList();
+    r.content = r.content ? r.content.replace(/\/$/, '') + '/' + pr.label : pr.label;
+    r.amount = (r.amount||0) + pr.amount;
   } else {
-    // 最後に一致するレコードを削除
-    let removeIdx = -1;
-    for(let i=k.records.length-1; i>=0; i--) {
-      const c = k.records[i].content;
-      if(c===pr.label || c.startsWith(pr.label+'/') || c.startsWith(pr.label+' /')) {
-        removeIdx = i; break;
-      }
-    }
-    if(removeIdx>=0) {
-      k.records.splice(removeIdx, 1);
-      recalcPaperTotal(k);
-      saveToStorage();
-      renderKarteList();
-    } else {
-      checkbox.checked = false;
-    }
+    r.content = removePresetLabel(r.content, pr.label);
+    r.amount = Math.max(0, (r.amount||0) - pr.amount);
   }
+  recalcPaperTotal(k);
+  saveToStorage();
+  renderKarteList();
 }
 
 function recalcPaperTotal(k) {
