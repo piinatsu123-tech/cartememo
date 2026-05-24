@@ -1241,6 +1241,16 @@ function removePresetLabel(content, label) {
   return c;
 }
 
+function reorderContent(content) {
+  if(!content) return content;
+  const parts = content.split('/');
+  const presetLabels = PRESETS.map(p=>p.label);
+  const presetParts = parts.filter(p=>presetLabels.includes(p));
+  const otherParts = parts.filter(p=>!presetLabels.includes(p));
+  presetParts.sort((a,b)=>presetLabels.indexOf(a)-presetLabels.indexOf(b));
+  return [...presetParts, ...otherParts].filter(p=>p).join('/');
+}
+
 function toggleRecordPreset(karteId, recIdx, presetKey, checkbox) {
   const k = KARTES.find(x=>x.id===karteId);
   if(!k || recIdx<0 || recIdx>=k.records.length) return;
@@ -1254,6 +1264,7 @@ function toggleRecordPreset(karteId, recIdx, presetKey, checkbox) {
     r.content = removePresetLabel(r.content, pr.label);
     r.amount = Math.max(0, (r.amount||0) - pr.amount);
   }
+  r.content = reorderContent(r.content);
   recalcPaperTotal(k);
   saveToStorage();
   renderKarteList();
