@@ -134,6 +134,18 @@ input[type=checkbox]{width:auto;margin:0}
 .diff-neg{color:#c00;font-weight:700}
 .elec-input-wrap{display:flex;gap:6px;align-items:center}
 .elec-input-wrap input{width:130px;text-align:right;padding:5px 8px;font-size:13px;font-family:'JetBrains Mono',monospace}
+.karte-summary{font-size:13px;color:var(--text2);margin-bottom:4px;line-height:1.7}
+.rec-edit-rows{margin-bottom:12px}
+.rec-edit-hdr{display:grid;grid-template-columns:112px 1fr 88px 26px;gap:5px;font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--text3);text-transform:uppercase;padding:0 0 5px;border-bottom:1px solid var(--border)}
+.rec-edit-row{display:grid;grid-template-columns:112px 1fr 88px 26px;gap:5px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border)}
+.rec-edit-row:last-child{border-bottom:none}
+.rec-edit-row input[type=date]{padding:4px 5px;font-size:12px;font-family:'JetBrains Mono',monospace}
+.rec-edit-row input[type=text]{padding:4px 6px;font-size:12px;font-family:'Noto Sans JP',sans-serif}
+.rec-edit-row input[type=number]{padding:4px 6px;font-size:12px;font-family:'JetBrains Mono',monospace;text-align:right}
+.rec-del-btn{background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px;padding:0;line-height:1;display:flex;align-items:center;justify-content:center;width:26px;height:26px}
+.rec-del-btn:hover{color:#c00}
+.rec-add-btn{margin-top:8px;font-size:12px;color:var(--text2);background:none;border:1px dashed var(--border2);border-radius:5px;padding:7px 0;cursor:pointer;width:100%;text-align:center;font-family:'Noto Sans JP',sans-serif;font-weight:600;transition:all .12s}
+.rec-add-btn:hover{background:var(--surface);border-color:#888;color:#111}
 
 /* ===== STATS ===== */
 .stats-table{width:100%;border-collapse:collapse;font-size:13px}
@@ -1032,20 +1044,37 @@ function confirmKarteSave() {
 }
 
 function buildKarteCard(k, isDetail) {
-  const recs = k.records.map(r=>`
-    <div class="karte-rec">
-      <span class="rec-date">${fmtDate(r.date)}</span>
-      <span class="rec-content">${esc(r.content)}</span>
-      <span class="rec-amt">${r.amount>0?'¥'+r.amount.toLocaleString():'—'}</span>
-    </div>`).join('');
   const diffClass = k.diff===null?'':k.diff>0?'diff-pos':k.diff<0?'diff-neg':'';
   const diffText = k.diff===null?'—':(k.diff>=0?'+':'')+fmtAmt(k.diff);
-  // 常に編集可能な入力欄を表示（確定済みでも再編集できる）
+
+  // ===== 一覧ビュー: コンパクト表示（診療内容・小計なし） =====
+  if(!isDetail) {
+    const n = k.records.length;
+    const dates = k.records.map(r=>r.date).filter(Boolean).sort();
+    const dateRange = dates.length===0?'':dates.length===1?fmtDate(dates[0]):fmtDate(dates[0])+'〜'+fmtDate(dates[dates.length-1]);
+    const diffPart = k.diff!==null?` &nbsp;<span class="${diffClass}" style="font-weight:600">差額 ${(k.diff>=0?'+':'')+fmtAmt(k.diff)}</span>`:'';
+    const cardClass = ['karte-card', k.closed?'':'unclosed'].filter(Boolean).join(' ');
+    return `<div class="${cardClass}" id="card-${k.id}" onclick="handleKarteCardClick(event,'${k.id}')" style="cursor:pointer">
+      <div class="karte-hdr">
+        <span class="karte-title">【${esc(k.farm)} / ${esc(k.cow)}】</span>
+        <span class="karte-badge ${k.closed?'badge-closed':'badge-unclosed'}">${k.closed?'確定済':'電子未入力'}</span>
+      </div>
+      <div class="karte-summary">
+        ${n}件 &nbsp;${dateRange} &nbsp;|&nbsp; 紙カルテ ¥${k.paper_total.toLocaleString()}${diffPart}
+      </div>
+    </div>`;
+  }
+
+  // ===== 詳細ビュー: 診療記録編集 + 電子カルテ入力 =====
+  const editRows = k.records.map((r,i)=>`
+    <div class="rec-edit-row">
+      <input type="date" value="${esc(r.date)}" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'date',this.value)">
+      <input type="text" value="${esc(r.content)}" placeholder="診療内容" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'content',this.value)">
+      <input type="number" min="0" step="100" value="${r.amount>0?r.amount:''}" placeholder="0" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'amount',this.value)" onkeydown="if(event.key==='Enter')this.blur()">
+      <button class="rec-del-btn" onclick="event.stopPropagation();deleteRecord('${k.id}',${i})" title="削除">×</button>
+    </div>`).join('');
   const elecRow = `<div class="total-row elec-row"><span style="color:var(--text2)">電子カルテ</span><div class="elec-input-wrap"><input type="number" id="elec-${k.id}" min="0" step="100" value="${k.electronic_amount!==null?k.electronic_amount:''}" placeholder="金額を入力" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter')this.blur()" onblur="autoSaveElectronic('${k.id}')"></div></div>`;
-  const isSelected = (activeKarteId === k.id);
-  const cardClass = ['karte-card', k.closed?'':'unclosed', isSelected?'selected':''].filter(Boolean).join(' ');
-  const clickAttr = isDetail ? '' : `onclick="handleKarteCardClick(event,'${k.id}')" style="cursor:pointer"`;
-  return `<div class="${cardClass}" id="card-${k.id}" ${clickAttr}>
+  return `<div class="karte-card" id="card-${k.id}">
     <div class="karte-hdr">
       <span class="karte-title">【${esc(k.farm)} / ${esc(k.cow)}】</span>
       <div style="display:flex;gap:8px;align-items:center">
@@ -1053,13 +1082,66 @@ function buildKarteCard(k, isDetail) {
         <button class="btn btn-danger btn-xs" onclick="event.stopPropagation();deleteKarte('${k.id}')">削除</button>
       </div>
     </div>
-    <div class="karte-records">${recs}</div>
+    <div class="rec-edit-rows">
+      <div class="rec-edit-hdr"><span>診療日</span><span>診療内容</span><span style="text-align:right">金額(円)</span><span></span></div>
+      ${editRows}
+      <button class="rec-add-btn" onclick="event.stopPropagation();addKarteRecord('${k.id}')">＋ 診療日を追加</button>
+    </div>
     <div class="karte-totals">
       <div class="total-row"><span style="color:var(--text2)">紙カルテ合計</span><span class="total-val">¥${k.paper_total.toLocaleString()}</span></div>
       ${elecRow}
       <div class="total-row ${diffClass}" style="margin-top:4px;padding-top:8px;border-top:1px solid var(--border)"><span style="font-weight:600">差額（電子−紙）</span><span class="total-val" style="font-size:16px">${diffText}</span></div>
     </div>
   </div>`;
+}
+
+function recalcPaperTotal(k) {
+  k.paper_total = k.records.reduce((s,r)=>s+(r.amount||0), 0);
+  if(k.electronic_amount !== null) k.diff = k.electronic_amount - k.paper_total;
+}
+
+function addKarteRecord(karteId) {
+  const k = KARTES.find(x=>x.id===karteId);
+  if(!k) return;
+  const today = new Date().toISOString().slice(0,10);
+  k.records.push({date:today, content:'', amount:0});
+  saveToStorage();
+  renderKarteList();
+}
+
+function updateRecord(karteId, recIdx, field, value) {
+  const k = KARTES.find(x=>x.id===karteId);
+  if(!k || recIdx<0 || recIdx>=k.records.length) return;
+  const r = k.records[recIdx];
+  if(field==='content') {
+    r.content = value;
+    saveToStorage();
+    return; // 再描画不要
+  }
+  if(field==='amount') {
+    const v = parseInt(value);
+    r.amount = (isNaN(v)||v<0) ? 0 : v;
+    recalcPaperTotal(k);
+    saveToStorage();
+    renderKarteList();
+    return;
+  }
+  if(field==='date') {
+    r.date = value;
+    saveToStorage();
+    renderKarteList();
+    return;
+  }
+}
+
+function deleteRecord(karteId, recIdx) {
+  const k = KARTES.find(x=>x.id===karteId);
+  if(!k || recIdx<0 || recIdx>=k.records.length) return;
+  if(k.records.length<=1) { toast('最後の診療記録は削除できません','error'); return; }
+  k.records.splice(recIdx, 1);
+  recalcPaperTotal(k);
+  saveToStorage();
+  renderKarteList();
 }
 
 function handleKarteCardClick(e, karteId) {
