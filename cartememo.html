@@ -1248,7 +1248,7 @@ function toggleRecordPreset(karteId, recIdx, presetKey, checkbox) {
   const pr = PRESETS.find(p=>p.key===presetKey);
   if(!pr) return;
   if(checkbox.checked) {
-    r.content = r.content ? r.content.replace(/\/$/, '') + '/' + pr.label : pr.label;
+    r.content = r.content ? pr.label + '/' + r.content.replace(/^\//, '') : pr.label;
     r.amount = (r.amount||0) + pr.amount;
   } else {
     r.content = removePresetLabel(r.content, pr.label);
