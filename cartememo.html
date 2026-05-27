@@ -1184,14 +1184,13 @@ function buildKarteCard(k, isDetail) {
         ${pr.label}
       </label>`;
     }).join('');
-    const ojiMemo = r.oji ? `<input type="text" class="rec-oji-memo" value="${esc(r.oji_memo||'')}" placeholder="往診元メモ" onclick="event.stopPropagation()" onblur="updateOjiMemo('${k.id}',${i},this.value)">` : '';
     return `<div class="rec-edit-row">
       <input type="date" value="${esc(r.date)}" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'date',this.value)">
       <div>
         <div style="display:flex;gap:6px;align-items:center">
           <input type="text" value="${esc(r.content)}" placeholder="診療内容" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'content',this.value)" style="flex:1;min-width:0">
           <label class="rec-oji-label" onclick="event.stopPropagation()"><input type="checkbox" ${r.oji?'checked':''} onchange="toggleOji('${k.id}',${i},this)"> 往診</label>
-          ${ojiMemo}
+          <input type="text" class="rec-oji-memo" value="${esc(r.oji_memo||'')}" placeholder="往診元" onclick="event.stopPropagation()" onblur="updateOjiMemo('${k.id}',${i},this.value)">
         </div>
         <div class="rec-preset-sub">${presetChecks}</div>
       </div>
@@ -1412,8 +1411,6 @@ function selectKarte(id) {
   activeKarteId = id;
   try { localStorage.setItem('cm_active_karte', id); } catch(e){}
   renderKarteList();
-  const k = KARTES.find(x => x.id === id);
-  toast(`【${k?k.farm+' / '+k.cow:''}】を選択しました。電子カルテでB点取得を押してください`, 'success');
 }
 function deselectKarte() {
   activeKarteId = null;
