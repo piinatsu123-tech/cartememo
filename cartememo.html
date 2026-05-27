@@ -191,7 +191,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v1.1</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v1.2</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -1184,28 +1184,21 @@ function buildKarteCard(k, isDetail) {
         ${pr.label}
       </label>`;
     }).join('');
-    const ojiMemoHtml = r.oji ? `<input type="text" class="rec-oji-memo" value="${esc(r.oji_memo||'')}" placeholder="往診元メモ" onclick="event.stopPropagation()" onblur="updateOjiMemo('${k.id}',${i},this.value)">` : '';
+    const ojiMemo = r.oji ? `<input type="text" class="rec-oji-memo" value="${esc(r.oji_memo||'')}" placeholder="往診元メモ" onclick="event.stopPropagation()" onblur="updateOjiMemo('${k.id}',${i},this.value)">` : '';
     return `<div class="rec-edit-row">
       <input type="date" value="${esc(r.date)}" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'date',this.value)">
       <div>
-        <input type="text" value="${esc(r.content)}" placeholder="診療内容" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'content',this.value)" style="width:100%">
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="text" value="${esc(r.content)}" placeholder="診療内容" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'content',this.value)" style="flex:1;min-width:0">
+          <label class="rec-oji-label" onclick="event.stopPropagation()"><input type="checkbox" ${r.oji?'checked':''} onchange="toggleOji('${k.id}',${i},this)"> 往診</label>
+          ${ojiMemo}
+        </div>
         <div class="rec-preset-sub">${presetChecks}</div>
       </div>
       <input type="number" min="0" step="100" value="${r.amount>0?r.amount:''}" placeholder="0" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'amount',this.value)" onkeydown="if(event.key==='Enter')this.blur()">
       <button class="rec-del-btn" onclick="event.stopPropagation();deleteRecord('${k.id}',${i})" title="削除">×</button>
-      <div class="rec-oji-row">
-        <label class="rec-oji-label" onclick="event.stopPropagation()">
-          <input type="checkbox" ${r.oji?'checked':''} onchange="toggleOji('${k.id}',${i},this)"> 往診
-        </label>
-        ${ojiMemoHtml}
-      </div>
     </div>`;
   }).join('');
-  const presetSettingsHtml = `<div class="preset-settings">
-    <span class="preset-settings-label">プリセット金額（マスター連動）</span>
-    ${PRESETS.map(pr=>`<span class="preset-settings-item">${pr.label} <b>${pr.amount>0?pr.amount.toLocaleString()+'円':'未登録'}</b></span>`).join('')}
-    <span class="preset-settings-item">往診料 <b>${OJI_FEE>0?OJI_FEE.toLocaleString()+'円':'未登録'}</b></span>
-  </div>`;
   const elecRow = `<div class="total-row elec-row"><span style="color:var(--text2)">電子カルテ</span><div class="elec-input-wrap"><input type="number" id="elec-${k.id}" min="0" step="100" value="${k.electronic_amount!==null?k.electronic_amount:''}" placeholder="金額を入力" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter')this.blur()" onblur="autoSaveElectronic('${k.id}')"></div></div>`;
   return `<div class="karte-card" id="card-${k.id}">
     <div class="karte-hdr">
@@ -1215,7 +1208,6 @@ function buildKarteCard(k, isDetail) {
         <button class="btn btn-danger btn-xs" onclick="event.stopPropagation();deleteKarte('${k.id}')">削除</button>
       </div>
     </div>
-    ${presetSettingsHtml}
     <div class="rec-edit-rows">
       <div class="rec-edit-hdr"><span>診療日</span><span>診療内容</span><span style="text-align:right">金額(円)</span><span></span></div>
       ${editRows}
