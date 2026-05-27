@@ -1227,7 +1227,11 @@ function buildKarteCard(k, isDetail) {
 }
 
 function loadOjiFee() {
-  try { const v = localStorage.getItem('cm_oji_fee'); if(v!==null) OJI_FEE = parseInt(v)||0; } catch(e){}
+  try {
+    const v = localStorage.getItem('cm_oji_fee');
+    if(v !== null) { OJI_FEE = parseInt(v)||0; }
+    else { const m = MASTER.find(x=>x.name==='往診'); OJI_FEE = m ? Math.round(m.price*10) : 0; }
+  } catch(e){}
 }
 function saveOjiFee(val) {
   OJI_FEE = val;
@@ -1267,10 +1271,15 @@ function openNewKarteModal() {
 function loadPresets() {
   try {
     const p = localStorage.getItem('cm_presets');
-    if(p) {
-      const saved = JSON.parse(p);
-      PRESETS.forEach(pr => { if(saved[pr.key] !== undefined) pr.amount = saved[pr.key]; });
-    }
+    const saved = p ? JSON.parse(p) : {};
+    PRESETS.forEach(pr => {
+      if(saved[pr.key] !== undefined) {
+        pr.amount = saved[pr.key];
+      } else {
+        const m = MASTER.find(x => x.name === pr.label);
+        if(m) pr.amount = Math.round(m.price * 10);
+      }
+    });
   } catch(e){}
 }
 
