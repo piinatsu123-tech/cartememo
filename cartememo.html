@@ -154,6 +154,11 @@ input[type=checkbox]{width:auto;margin:0}
 .preset-settings-label{font-weight:700;letter-spacing:.06em;white-space:nowrap}
 .preset-settings-item{display:flex;align-items:center;gap:3px;color:var(--text2)}
 .preset-amt-sm{width:62px;padding:2px 5px;font-size:11px;font-family:'JetBrains Mono',monospace;text-align:right}
+.rec-oji-row{grid-column:1/-1;display:flex;align-items:center;gap:8px;padding:3px 0 2px;flex-wrap:wrap}
+.rec-oji-label{display:flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;white-space:nowrap}
+.rec-oji-label input[type=checkbox]{width:13px;height:13px;accent-color:#111;margin:0;cursor:pointer}
+.rec-oji-label:has(input:checked){color:#111}
+.rec-oji-memo{flex:1;min-width:120px;padding:3px 6px;font-size:12px}
 
 /* ===== STATS ===== */
 .stats-table{width:100%;border-collapse:collapse;font-size:13px}
@@ -186,6 +191,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v1.1</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -265,6 +271,7 @@ input[type=checkbox]{width:auto;margin:0}
     <input type="text" id="karte-filter-cow" placeholder="牛番号" oninput="renderKarteList()" style="width:120px">
     <label><input type="checkbox" id="karte-filter-unclosed" onchange="renderKarteList()"> 電子未入力のみ</label>
     <span id="karte-count" style="font-size:12px;color:var(--text3);margin-left:auto"></span>
+    <button class="btn btn-primary btn-sm" onclick="openNewKarteModal()">＋ 新規カルテ</button>
   </div>
   <div id="karteList"></div>
 </div>
@@ -438,6 +445,7 @@ let PRESETS = [
   {key:'shindansho', label:'診断書', amount:0},
   {key:'chokkei',    label:'直検',   amount:0},
 ];
+let OJI_FEE = 0;
 let FARMS = [];
 let activeResultId = null;
 let karteSaveMemoId = null;
@@ -460,6 +468,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const dl = document.getElementById('masterNamesList');
   MASTER.forEach(m => { const o = document.createElement('option'); o.value = m.name; dl.appendChild(o); });
   loadPresets();
+  loadOjiFee();
   handleUrlParams();
   cloudAutoLoad(); // 起動時にクラウドから自動読み込み
 });
@@ -1149,7 +1158,10 @@ function buildKarteCard(k, isDetail) {
     return `<div class="${cardClass}" id="card-${k.id}" onclick="handleKarteCardClick(event,'${k.id}')" style="cursor:pointer">
       <div class="karte-hdr">
         <span class="karte-title">【${esc(k.farm)} / ${esc(k.cow)}】</span>
-        <span class="karte-badge ${k.closed?'badge-closed':'badge-unclosed'}">${k.closed?'確定済':'電子未入力'}</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="karte-badge ${k.closed?'badge-closed':'badge-unclosed'}">${k.closed?'確定済':'電子未入力'}</span>
+          <button class="btn btn-danger btn-xs" onclick="event.stopPropagation();deleteKarte('${k.id}')">削除</button>
+        </div>
       </div>
       <div class="karte-summary">
         ${n}件 &nbsp;${dateRange} &nbsp;|&nbsp; 紙カルテ ¥${k.paper_total.toLocaleString()}${diffPart}
@@ -1158,7 +1170,9 @@ function buildKarteCard(k, isDetail) {
   }
 
   // ===== 詳細ビュー: 診療記録編集 + 電子カルテ入力 =====
-  const editRows = k.records.map((r,i)=>{
+  // 診療日順にソートして表示
+  const sortedRecs = k.records.map((r,i)=>({r,i})).sort((a,b)=>a.r.date.localeCompare(b.r.date));
+  const editRows = sortedRecs.map(({r,i})=>{
     const presetChecks = PRESETS.map(pr=>{
       const checked = contentHasPreset(r.content, pr.label);
       const cbId = `pcb-${pr.key}-${k.id}-${i}`;
@@ -1167,6 +1181,7 @@ function buildKarteCard(k, isDetail) {
         ${pr.label}
       </label>`;
     }).join('');
+    const ojiMemoHtml = r.oji ? `<input type="text" class="rec-oji-memo" value="${esc(r.oji_memo||'')}" placeholder="往診元メモ" onclick="event.stopPropagation()" onblur="updateOjiMemo('${k.id}',${i},this.value)">` : '';
     return `<div class="rec-edit-row">
       <input type="date" value="${esc(r.date)}" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'date',this.value)">
       <div>
@@ -1175,11 +1190,18 @@ function buildKarteCard(k, isDetail) {
       </div>
       <input type="number" min="0" step="100" value="${r.amount>0?r.amount:''}" placeholder="0" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'amount',this.value)" onkeydown="if(event.key==='Enter')this.blur()">
       <button class="rec-del-btn" onclick="event.stopPropagation();deleteRecord('${k.id}',${i})" title="削除">×</button>
+      <div class="rec-oji-row">
+        <label class="rec-oji-label" onclick="event.stopPropagation()">
+          <input type="checkbox" ${r.oji?'checked':''} onchange="toggleOji('${k.id}',${i},this)"> 往診
+        </label>
+        ${ojiMemoHtml}
+      </div>
     </div>`;
   }).join('');
   const presetSettingsHtml = `<div class="preset-settings">
     <span class="preset-settings-label">プリセット金額</span>
     ${PRESETS.map(pr=>`<span class="preset-settings-item">${pr.label}<input type="number" class="preset-amt-sm" value="${pr.amount||''}" placeholder="0" min="0" onclick="event.stopPropagation()" onblur="savePresetAmt('${pr.key}',parseInt(this.value)||0)">円</span>`).join('')}
+    <span class="preset-settings-item">往診料<input type="number" class="preset-amt-sm" value="${OJI_FEE||''}" placeholder="0" min="0" onclick="event.stopPropagation()" onblur="saveOjiFee(parseInt(this.value)||0)">円</span>
   </div>`;
   const elecRow = `<div class="total-row elec-row"><span style="color:var(--text2)">電子カルテ</span><div class="elec-input-wrap"><input type="number" id="elec-${k.id}" min="0" step="100" value="${k.electronic_amount!==null?k.electronic_amount:''}" placeholder="金額を入力" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter')this.blur()" onblur="autoSaveElectronic('${k.id}')"></div></div>`;
   return `<div class="karte-card" id="card-${k.id}">
@@ -1202,6 +1224,44 @@ function buildKarteCard(k, isDetail) {
       <div class="total-row ${diffClass}" style="margin-top:4px;padding-top:8px;border-top:1px solid var(--border)"><span style="font-weight:600">差額（電子−紙）</span><span class="total-val" style="font-size:16px">${diffText}</span></div>
     </div>
   </div>`;
+}
+
+function loadOjiFee() {
+  try { const v = localStorage.getItem('cm_oji_fee'); if(v!==null) OJI_FEE = parseInt(v)||0; } catch(e){}
+}
+function saveOjiFee(val) {
+  OJI_FEE = val;
+  try { localStorage.setItem('cm_oji_fee', val); } catch(e){}
+}
+function toggleOji(karteId, recIdx, checkbox) {
+  const k = KARTES.find(x=>x.id===karteId);
+  if(!k || recIdx<0 || recIdx>=k.records.length) return;
+  const r = k.records[recIdx];
+  r.oji = checkbox.checked;
+  if(r.oji) {
+    r.amount = (r.amount||0) + OJI_FEE;
+  } else {
+    r.amount = Math.max(0, (r.amount||0) - OJI_FEE);
+    r.oji_memo = '';
+  }
+  recalcPaperTotal(k);
+  saveToStorage();
+  renderKarteList();
+}
+function updateOjiMemo(karteId, recIdx, value) {
+  const k = KARTES.find(x=>x.id===karteId);
+  if(!k || recIdx<0 || recIdx>=k.records.length) return;
+  k.records[recIdx].oji_memo = value;
+  saveToStorage();
+}
+function openNewKarteModal() {
+  karteSaveMemoId = null;
+  document.getElementById('modal-farm').value = '';
+  document.getElementById('modal-cow').value = '';
+  document.getElementById('modal-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('modal-content').value = '';
+  document.getElementById('modal-amount').value = '';
+  document.getElementById('karteModal').style.display = 'flex';
 }
 
 function loadPresets() {
@@ -1278,18 +1338,17 @@ function recalcPaperTotal(k) {
 function addKarteRecord(karteId) {
   const k = KARTES.find(x=>x.id===karteId);
   if(!k) return;
-  // 最後のレコードの日付の翌日、なければ今日
+  // 日付順で最後のレコードの翌日、なければ今日
+  const sorted = [...k.records].sort((a,b)=>a.date.localeCompare(b.date));
   let nextDate;
-  if(k.records.length>0) {
-    const last = k.records[k.records.length-1].date;
-    if(last) {
-      const d = new Date(last);
-      d.setDate(d.getDate()+1);
-      nextDate = d.toISOString().slice(0,10);
-    }
+  if(sorted.length>0 && sorted[sorted.length-1].date) {
+    const d = new Date(sorted[sorted.length-1].date);
+    d.setDate(d.getDate()+1);
+    nextDate = d.toISOString().slice(0,10);
   }
   if(!nextDate) nextDate = new Date().toISOString().slice(0,10);
   k.records.push({date:nextDate, content:'', amount:0});
+  k.records.sort((a,b)=>a.date.localeCompare(b.date));
   saveToStorage();
   renderKarteList();
 }
@@ -1313,6 +1372,7 @@ function updateRecord(karteId, recIdx, field, value) {
   }
   if(field==='date') {
     r.date = value;
+    k.records.sort((a,b)=>a.date.localeCompare(b.date));
     saveToStorage();
     renderKarteList();
     return;
@@ -1362,7 +1422,7 @@ function renderKarteList() {
   if(cowF) list = list.filter(k=>k.cow.toLowerCase().includes(cowF));
   if(unclosedOnly) list = list.filter(k=>!k.closed);
   document.getElementById('karte-count').textContent = list.length + '件';
-  if(!list.length){el.innerHTML='<div class="empty-state"><div class="es-icon">📋</div>カルテがありません<br>一括計算タブの「カルテに保存」ボタンで追加してください</div>';return;}
+  if(!list.length){el.innerHTML='<div class="empty-state"><div class="es-icon">📋</div>カルテがありません<br>「＋ 新規カルテ」ボタンまたは一括計算タブの「カルテに保存」で追加してください</div>';return;}
   el.innerHTML = list.map(k => buildKarteCard(k, false)).join('');
 }
 
