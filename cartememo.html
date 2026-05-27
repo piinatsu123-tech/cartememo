@@ -664,12 +664,14 @@ function saveMasterItem() {
   if(masterEditIndex >= 0) { MASTER[masterEditIndex] = {name, price}; toast(`「${name}」を更新しました`, 'success'); }
   else { if(MASTER.find(m=>m.name===name)) return toast('同じ品目名がすでに存在します', 'error'); MASTER.push({name, price}); toast(`「${name}」を追加しました`, 'success'); }
   saveToStorage(); cancelMasterEdit(); renderMasterEditor(); renderMasterList();
+  loadPresets(); loadOjiFee();
   const dl = document.getElementById('masterNamesList');
   if(dl) { dl.innerHTML=''; MASTER.forEach(m=>{const o=document.createElement('option');o.value=m.name;dl.appendChild(o);}); }
 }
 function deleteMasterItem(i) {
   if(!confirm(`「${MASTER[i].name}」を削除しますか？`)) return;
-  MASTER.splice(i,1); saveToStorage(); renderMasterEditor(); renderMasterList(); toast('削除しました');
+  MASTER.splice(i,1); saveToStorage(); renderMasterEditor(); renderMasterList();
+  loadPresets(); loadOjiFee(); toast('削除しました');
 }
 function bulkImportMaster() {
   const text = document.getElementById('masterImportText').value.trim();
@@ -683,6 +685,7 @@ function bulkImportMaster() {
     if(ex) { ex.price=price; updated++; } else { MASTER.push({name,price}); added++; }
   }
   saveToStorage(); renderMasterEditor(); renderMasterList();
+  loadPresets(); loadOjiFee();
   const dl = document.getElementById('masterNamesList');
   if(dl) { dl.innerHTML=''; MASTER.forEach(m=>{const o=document.createElement('option');o.value=m.name;dl.appendChild(o);}); }
   toast(`更新: ${updated}件　追加: ${added}件`, 'success');
@@ -1199,9 +1202,9 @@ function buildKarteCard(k, isDetail) {
     </div>`;
   }).join('');
   const presetSettingsHtml = `<div class="preset-settings">
-    <span class="preset-settings-label">プリセット金額</span>
-    ${PRESETS.map(pr=>`<span class="preset-settings-item">${pr.label}<input type="number" class="preset-amt-sm" value="${pr.amount||''}" placeholder="0" min="0" onclick="event.stopPropagation()" onblur="savePresetAmt('${pr.key}',parseInt(this.value)||0)">円</span>`).join('')}
-    <span class="preset-settings-item">往診料<input type="number" class="preset-amt-sm" value="${OJI_FEE||''}" placeholder="0" min="0" onclick="event.stopPropagation()" onblur="saveOjiFee(parseInt(this.value)||0)">円</span>
+    <span class="preset-settings-label">プリセット金額（マスター連動）</span>
+    ${PRESETS.map(pr=>`<span class="preset-settings-item">${pr.label} <b>${pr.amount>0?pr.amount.toLocaleString()+'円':'未登録'}</b></span>`).join('')}
+    <span class="preset-settings-item">往診料 <b>${OJI_FEE>0?OJI_FEE.toLocaleString()+'円':'未登録'}</b></span>
   </div>`;
   const elecRow = `<div class="total-row elec-row"><span style="color:var(--text2)">電子カルテ</span><div class="elec-input-wrap"><input type="number" id="elec-${k.id}" min="0" step="100" value="${k.electronic_amount!==null?k.electronic_amount:''}" placeholder="金額を入力" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter')this.blur()" onblur="autoSaveElectronic('${k.id}')"></div></div>`;
   return `<div class="karte-card" id="card-${k.id}">
@@ -1227,16 +1230,10 @@ function buildKarteCard(k, isDetail) {
 }
 
 function loadOjiFee() {
-  try {
-    const v = localStorage.getItem('cm_oji_fee');
-    if(v !== null) { OJI_FEE = parseInt(v)||0; }
-    else { const m = MASTER.find(x=>x.name==='往診'); OJI_FEE = m ? Math.round(m.price*10) : 0; }
-  } catch(e){}
+  const m = MASTER.find(x=>x.name==='往診');
+  OJI_FEE = m ? m.price : 0;
 }
-function saveOjiFee(val) {
-  OJI_FEE = val;
-  try { localStorage.setItem('cm_oji_fee', val); } catch(e){}
-}
+function saveOjiFee(val) {} // MASTERから自動取得のため不要
 function toggleOji(karteId, recIdx, checkbox) {
   const k = KARTES.find(x=>x.id===karteId);
   if(!k || recIdx<0 || recIdx>=k.records.length) return;
@@ -1269,29 +1266,13 @@ function openNewKarteModal() {
 }
 
 function loadPresets() {
-  try {
-    const p = localStorage.getItem('cm_presets');
-    const saved = p ? JSON.parse(p) : {};
-    PRESETS.forEach(pr => {
-      if(saved[pr.key] !== undefined) {
-        pr.amount = saved[pr.key];
-      } else {
-        const m = MASTER.find(x => x.name === pr.label);
-        if(m) pr.amount = Math.round(m.price * 10);
-      }
-    });
-  } catch(e){}
+  PRESETS.forEach(pr => {
+    const m = MASTER.find(x => x.name === pr.label);
+    pr.amount = m ? m.price : 0;
+  });
 }
 
-function savePresetAmt(key, val) {
-  const pr = PRESETS.find(p=>p.key===key);
-  if(pr) pr.amount = val;
-  try {
-    const saved = {};
-    PRESETS.forEach(p => saved[p.key] = p.amount);
-    localStorage.setItem('cm_presets', JSON.stringify(saved));
-  } catch(e){}
-}
+function savePresetAmt(key, val) {} // MASTERから自動取得のため不要
 
 function contentHasPreset(content, label) {
   if(!content) return false;
