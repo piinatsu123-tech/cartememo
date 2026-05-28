@@ -454,7 +454,7 @@ let pendingElectAmt = null;
 let activeKarteId = null;
 
 // ==================== INIT ====================
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   loadKeys();
   loadJsonbinSettings();
   loadFromStorage();
@@ -469,8 +469,8 @@ document.addEventListener('DOMContentLoaded', () => {
   MASTER.forEach(m => { const o = document.createElement('option'); o.value = m.name; dl.appendChild(o); });
   loadPresets();
   loadOjiFee();
+  await cloudAutoLoad(); // 起動時にクラウドから自動読み込み（URLインポートより先に完了させる）
   handleUrlParams();
-  cloudAutoLoad(); // 起動時にクラウドから自動読み込み
 });
 window.addEventListener('pageshow', e => { if(e.persisted) handleUrlParams(); });
 
