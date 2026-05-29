@@ -397,7 +397,13 @@ input[type=checkbox]{width:auto;margin:0}
   <div class="modal-box">
     <div class="modal-title">📋 カルテに保存</div>
     <label>農場名</label>
-    <input type="text" id="modal-farm" list="farmDatalist" placeholder="A牧場" autocomplete="off">
+    <input type="text" id="modal-farm" list="farmDatalist" placeholder="A牧場" autocomplete="off" oninput="updateKarteSelect()">
+    <div id="modal-karte-wrap" style="display:none">
+      <label>診療中のカルテ</label>
+      <select id="modal-karte-select" onchange="onKarteSelectChange()" style="width:100%">
+        <option value="">新規作成</option>
+      </select>
+    </div>
     <label>牛番号</label>
     <input type="text" id="modal-cow" placeholder="0001">
     <label>日付</label>
@@ -406,7 +412,6 @@ input[type=checkbox]{width:auto;margin:0}
     <input type="text" id="modal-content">
     <label>金額（円）</label>
     <input type="number" id="modal-amount" min="0">
-    <p class="input-hint" style="margin-top:6px">※ 同じ農場名・牛番号の未確定カルテがある場合は自動的に追記されます。</p>
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn btn-primary" onclick="confirmKarteSave()">保存</button>
       <button class="btn btn-ghost" onclick="closeKarteModal()">キャンセル</button>
@@ -456,6 +461,7 @@ let karteSaveMemoId = null;
 let masterEditIndex = -1;
 let pendingElectAmt = null;
 let activeKarteId = null;
+const expandedResultIds = new Set();
 
 // ==================== INIT ====================
 document.addEventListener('DOMContentLoaded', async () => {
@@ -883,14 +889,33 @@ function renderResultsList() {
         <td><button class="del-row" onclick="removeItemFromMemo('${m.id}',${i})">×</button></td>
       </tr>`;
     }).join('');
+    const isSaved = m.karte_saved && !expandedResultIds.has(m.id);
+    if(isSaved) {
+      return `
+    <div class="result-card" id="rc-${m.id}" style="opacity:0.7" onclick="activeResultId='${m.id}'">
+      <div class="rc-header" style="cursor:pointer" onclick="toggleResultExpand('${m.id}')">
+        <div>
+          <div class="rc-patient">✓ ${m.patientNo?'['+m.patientNo+'] ':''}${m.ownerName?'🐮 '+m.ownerName:'（農場名なし）'}</div>
+          <div class="rc-time" style="color:var(--text3)">${m.time} · カルテ保存済</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <span style="font-size:11px;color:var(--text3)">▼ 展開</span>
+          <div class="rc-total">¥${Math.round(total).toLocaleString()}</div>
+        </div>
+      </div>
+    </div>`;
+    }
     return `
     <div class="result-card" id="rc-${m.id}" onclick="activeResultId='${m.id}'">
-      <div class="rc-header">
+      <div class="rc-header"${m.karte_saved?` style="cursor:pointer" onclick="toggleResultExpand('${m.id}')"`:''}>
         <div>
           <div class="rc-patient">${m.status==='processing'?'<span class="spinner" style="width:10px;height:10px;margin-right:4px"></span>':''}${m.patientNo?'['+m.patientNo+'] ':''}${m.ownerName?'🐮 '+m.ownerName:'（農場名なし）'}</div>
-          <div class="rc-time">${m.time}${m.temp?' 　🌡 '+m.temp+'℃':''}${m.symptom?' 　'+m.symptom:''}</div>
+          <div class="rc-time">${m.time}${m.temp?' 　🌡 '+m.temp+'℃':''}${m.symptom?' 　'+m.symptom:''}${m.karte_saved?' <span style="color:#1a8a4a;font-size:11px">✓ カルテ保存済</span>':''}</div>
         </div>
-        <div class="rc-total">${m.status==='processing'?'解析中...':'¥'+Math.round(total).toLocaleString()}</div>
+        <div style="display:flex;gap:10px;align-items:center">
+          ${m.karte_saved?'<span style="font-size:11px;color:var(--text3)">▲ 折りたたむ</span>':''}
+          <div class="rc-total">${m.status==='processing'?'解析中...':'¥'+Math.round(total).toLocaleString()}</div>
+        </div>
       </div>
       ${m.status==='done'?`
       <div class="rc-body">
@@ -1112,6 +1137,42 @@ function updateKarteFarmFilter() {
   sel.innerHTML = '<option value="">全農場</option>' + FARMS.map(f => `<option value="${f}"${f===cur?' selected':''}>${f}</option>`).join('');
 }
 
+function toggleResultExpand(id) {
+  if(expandedResultIds.has(id)) expandedResultIds.delete(id);
+  else expandedResultIds.add(id);
+  renderResultsList();
+}
+
+function updateKarteSelect() {
+  const farm = document.getElementById('modal-farm').value.trim();
+  const sel = document.getElementById('modal-karte-select');
+  const wrap = document.getElementById('modal-karte-wrap');
+  const actives = KARTES.filter(k => k.farm === farm && !k.closed);
+  sel.innerHTML = '<option value="">新規作成</option>';
+  actives.forEach(k => {
+    const dates = k.records.map(r=>r.date).filter(Boolean).sort();
+    const last = dates.length ? fmtDate(dates[dates.length-1]) : '';
+    const opt = document.createElement('option');
+    opt.value = k.id;
+    opt.textContent = `牛 ${k.cow}（${k.records.length}件${last?' 最終:'+last:''}）`;
+    sel.appendChild(opt);
+  });
+  wrap.style.display = actives.length ? '' : 'none';
+  // 牛番号と一致するカルテを自動選択
+  const cow = document.getElementById('modal-cow').value.trim();
+  if(cow) {
+    const match = actives.find(k => k.cow === cow);
+    if(match) sel.value = match.id;
+  }
+}
+
+function onKarteSelectChange() {
+  const sel = document.getElementById('modal-karte-select');
+  if(!sel.value) return;
+  const k = KARTES.find(x => x.id === sel.value);
+  if(k) document.getElementById('modal-cow').value = k.cow;
+}
+
 function openKarteModal(memoId) {
   const memo = memos.find(m => m.id === memoId); if(!memo) return;
   const total = Math.round((memo.items||[]).reduce((s,it)=>s+it.price*it.qty,0));
@@ -1122,6 +1183,7 @@ function openKarteModal(memoId) {
   document.getElementById('modal-date').value = new Date().toISOString().slice(0,10);
   document.getElementById('modal-content').value = formula;
   document.getElementById('modal-amount').value = total;
+  updateKarteSelect();
   document.getElementById('karteModal').style.display = 'flex';
 }
 function closeKarteModal() { document.getElementById('karteModal').style.display='none'; karteSaveMemoId=null; }
@@ -1137,7 +1199,10 @@ function confirmKarteSave() {
   if(!cow) return toast('牛番号を入力してください','error');
   if(!date) return toast('日付を入力してください','error');
   const record = {date, content, amount};
-  const existing = KARTES.find(k => k.farm===farm && k.cow===cow && !k.closed);
+  const selectedId = document.getElementById('modal-karte-select').value;
+  const existing = selectedId
+    ? KARTES.find(k => k.id === selectedId)
+    : KARTES.find(k => k.farm===farm && k.cow===cow && !k.closed);
   if(existing) {
     existing.records.push(record);
     existing.records.sort((a,b)=>a.date.localeCompare(b.date));
@@ -1147,7 +1212,12 @@ function confirmKarteSave() {
     KARTES.unshift({id:Date.now().toString(),farm,cow,records:[record],paper_total:amount,electronic_amount:null,diff:null,month:date.slice(0,7),closed:false});
   }
   if(!FARMS.includes(farm)){FARMS.push(farm);FARMS.sort((a,b)=>a.localeCompare(b,'ja'));updateFarmDatalist();}
+  if(karteSaveMemoId) {
+    const memo = memos.find(m => m.id === karteSaveMemoId);
+    if(memo) { memo.karte_saved = true; expandedResultIds.delete(karteSaveMemoId); }
+  }
   saveToStorage(); closeKarteModal();
+  renderResultsList();
   toast(`【${farm} / ${cow}】にカルテを保存しました`,'success');
 }
 
