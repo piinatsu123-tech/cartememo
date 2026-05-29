@@ -120,6 +120,10 @@ input[type=checkbox]{width:auto;margin:0}
 .karte-badge{font-size:11px;padding:2px 9px;border-radius:10px;border:1px solid;font-weight:500}
 .badge-unclosed{color:#c00;border-color:#c00}
 .badge-closed{color:var(--text3);border-color:var(--border2)}
+.badge-active{color:#1a8a4a;border-color:#1a8a4a}
+.badge-finished{color:#e07800;border-color:#e07800}
+.badge-archived{color:#aaa;border-color:#ccc}
+.karte-card.archived{opacity:0.6}
 .karte-records{margin-bottom:12px}
 .karte-rec{display:flex;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px}
 .karte-rec:last-child{border-bottom:none}
@@ -443,7 +447,7 @@ let KARTES = [];
 let PRESETS = [
   {key:'shoshin',    label:'初診',   amount:0},
   {key:'shindansho', label:'診断書', amount:0},
-  {key:'chokkei',    label:'直検',   amount:0},
+  {key:'chokkei',    label:'直検',   amount:0, noPrice:true},
 ];
 let OJI_FEE = 0;
 let FARMS = [];
@@ -1157,12 +1161,22 @@ function buildKarteCard(k, isDetail) {
     const dates = k.records.map(r=>r.date).filter(Boolean).sort();
     const dateRange = dates.length===0?'':dates.length===1?fmtDate(dates[0]):fmtDate(dates[0])+'〜'+fmtDate(dates[dates.length-1]);
     const diffPart = k.diff!==null?` &nbsp;<span class="${diffClass}" style="font-weight:600">差額 ${(k.diff>=0?'+':'')+fmtAmt(k.diff)}</span>`:'';
-    const cardClass = ['karte-card', k.closed?'':'unclosed'].filter(Boolean).join(' ');
+    const stage = k.closed ? 2 : k.finished ? 1 : 0;
+    const badgeClass = k.archived ? 'badge-archived' : stage===2 ? 'badge-closed' : stage===1 ? 'badge-unclosed' : 'badge-active';
+    const badgeText = k.archived ? 'アーカイブ' : stage===2 ? '確定済' : stage===1 ? '電子未入力' : '診療中';
+    const cardClass = ['karte-card', stage===1&&!k.archived?'unclosed':'', k.archived?'archived':''].filter(Boolean).join(' ');
+    const finishBtn = !k.closed && !k.archived
+      ? `<button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();toggleFinished('${k.id}')">${k.finished?'診療中に戻す':'終診にする'}</button>`
+      : '';
+    const archiveBtn = k.closed
+      ? `<button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();toggleArchive('${k.id}')">${k.archived?'解除':'アーカイブ'}</button>`
+      : '';
     return `<div class="${cardClass}" id="card-${k.id}" onclick="handleKarteCardClick(event,'${k.id}')" style="cursor:pointer">
       <div class="karte-hdr">
         <span class="karte-title">【${esc(k.farm)} / ${esc(k.cow)}】</span>
         <div style="display:flex;gap:8px;align-items:center">
-          <span class="karte-badge ${k.closed?'badge-closed':'badge-unclosed'}">${k.closed?'確定済':'電子未入力'}</span>
+          <span class="karte-badge ${badgeClass}">${badgeText}</span>
+          ${finishBtn}${archiveBtn}
           <button class="btn btn-danger btn-xs" onclick="event.stopPropagation();deleteKarte('${k.id}')">削除</button>
         </div>
       </div>
@@ -1203,7 +1217,7 @@ function buildKarteCard(k, isDetail) {
     <div class="karte-hdr">
       <span class="karte-title">【${esc(k.farm)} / ${esc(k.cow)}】</span>
       <div style="display:flex;gap:8px;align-items:center">
-        <span class="karte-badge ${k.closed?'badge-closed':'badge-unclosed'}">${k.closed?'確定済':'電子未入力'}</span>
+        ${(()=>{const stage=k.closed?2:k.finished?1:0;const bc=stage===2?'badge-closed':stage===1?'badge-unclosed':'badge-active';const bt=stage===2?'確定済':stage===1?'電子未入力':'診療中';return`<span class="karte-badge ${bc}">${bt}</span>`+(!k.closed?`<button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();toggleFinished('${k.id}')">${k.finished?'診療中に戻す':'終診にする'}</button>`:'');})()}
         <button class="btn btn-danger btn-xs" onclick="event.stopPropagation();deleteKarte('${k.id}')">削除</button>
       </div>
     </div>
@@ -1234,7 +1248,6 @@ function toggleOji(karteId, recIdx, checkbox) {
     r.amount = (r.amount||0) + OJI_FEE;
   } else {
     r.amount = Math.max(0, (r.amount||0) - OJI_FEE);
-    r.oji_memo = '';
   }
   recalcPaperTotal(k);
   saveToStorage();
@@ -1300,10 +1313,10 @@ function toggleRecordPreset(karteId, recIdx, presetKey, checkbox) {
   if(!pr) return;
   if(checkbox.checked) {
     r.content = r.content ? pr.label + '/' + r.content.replace(/^\//, '') : pr.label;
-    r.amount = (r.amount||0) + pr.amount;
+    if(!pr.noPrice) r.amount = (r.amount||0) + pr.amount;
   } else {
     r.content = removePresetLabel(r.content, pr.label);
-    r.amount = Math.max(0, (r.amount||0) - pr.amount);
+    if(!pr.noPrice) r.amount = Math.max(0, (r.amount||0) - pr.amount);
   }
   r.content = reorderContent(r.content);
   recalcPaperTotal(k);
@@ -1398,10 +1411,20 @@ function renderKarteList() {
   const farmF = document.getElementById('karte-filter-farm').value;
   const cowF = document.getElementById('karte-filter-cow').value.trim().toLowerCase();
   const unclosedOnly = document.getElementById('karte-filter-unclosed').checked;
+  const isSearching = !!(farmF || cowF);
   let list = [...KARTES];
   if(farmF) list = list.filter(k=>k.farm===farmF);
   if(cowF) list = list.filter(k=>k.cow.toLowerCase().includes(cowF));
+  if(!isSearching) list = list.filter(k=>!k.archived);
   if(unclosedOnly) list = list.filter(k=>!k.closed);
+  const getStage = k => k.closed ? 2 : k.finished ? 1 : 0;
+  list.sort((a,b) => {
+    const sd = getStage(a) - getStage(b);
+    if(sd !== 0) return sd;
+    const da = a.records.map(r=>r.date).filter(Boolean).sort().pop() || '';
+    const db = b.records.map(r=>r.date).filter(Boolean).sort().pop() || '';
+    return db.localeCompare(da);
+  });
   document.getElementById('karte-count').textContent = list.length + '件';
   if(!list.length){el.innerHTML='<div class="empty-state"><div class="es-icon">📋</div>カルテがありません<br>「＋ 新規カルテ」ボタンまたは一括計算タブの「カルテに保存」で追加してください</div>';return;}
   el.innerHTML = list.map(k => buildKarteCard(k, false)).join('');
@@ -1436,6 +1459,20 @@ function autoSaveElectronic(id) {
   k.electronic_amount=val;k.diff=val-k.paper_total;k.closed=true;
   saveToStorage();renderKarteList();
   toast(`差額: ${k.diff>=0?'+':''}${fmtAmt(k.diff)}`, k.diff<0?'error':'success');
+}
+function toggleFinished(id) {
+  const k = KARTES.find(x=>x.id===id);
+  if(!k) return;
+  k.finished = !k.finished;
+  saveToStorage();
+  renderKarteList();
+}
+function toggleArchive(id) {
+  const k = KARTES.find(x=>x.id===id);
+  if(!k) return;
+  k.archived = !k.archived;
+  saveToStorage();
+  renderKarteList();
 }
 function deleteKarte(id){
   if(!confirm('このカルテを削除しますか？'))return;
