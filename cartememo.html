@@ -1429,7 +1429,13 @@ function addKarteRecord(karteId) {
 function amountOnlyKeydown(karteId, recIdx, event) {
   if(event.key === 'Enter') {
     event.preventDefault();
-    updateRecord(karteId, recIdx, 'amount', event.target.value);
+    const k = KARTES.find(x=>x.id===karteId);
+    if(k && k.records[recIdx] !== undefined) {
+      const v = parseInt(event.target.value);
+      k.records[recIdx].amount = (isNaN(v)||v<0) ? 0 : v;
+      recalcPaperTotal(k);
+      saveToStorage();
+    }
     addAmountOnlyRecord(karteId);
   } else if(event.key === 'Escape') {
     event.target.blur();
