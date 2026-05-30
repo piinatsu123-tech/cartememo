@@ -195,7 +195,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v1.4</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v1.8</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -1284,7 +1284,7 @@ function buildKarteCard(k, isDetail) {
         </div>
         <div class="rec-preset-sub">${presetChecks}</div>
       </div>
-      <input type="number" min="0" step="100" value="${r.amount>0?r.amount:''}" placeholder="0" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'amount',this.value)" onkeydown="if(event.key==='Enter')this.blur()">
+      <input type="number" min="0" step="100" value="${r.amount>0?r.amount:''}" placeholder="0" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'amount',this.value)" onkeydown="${!r.date?`amountOnlyKeydown('${k.id}',${i},event)`:`if(event.key==='Enter')this.blur()`}">
       <button class="rec-del-btn" onclick="event.stopPropagation();deleteRecord('${k.id}',${i})" title="削除">×</button>
     </div>`;
   }).join('');
@@ -1424,6 +1424,16 @@ function addKarteRecord(karteId) {
   k.records.sort((a,b)=>a.date.localeCompare(b.date));
   saveToStorage();
   renderKarteList();
+}
+
+function amountOnlyKeydown(karteId, recIdx, event) {
+  if(event.key === 'Enter') {
+    event.preventDefault();
+    updateRecord(karteId, recIdx, 'amount', event.target.value);
+    addAmountOnlyRecord(karteId);
+  } else if(event.key === 'Escape') {
+    event.target.blur();
+  }
 }
 
 function addAmountOnlyRecord(karteId) {
