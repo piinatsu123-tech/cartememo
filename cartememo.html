@@ -1205,9 +1205,10 @@ function confirmKarteSave() {
     : KARTES.find(k => k.farm===farm && k.cow===cow && !k.closed);
   if(existing) {
     existing.records.push(record);
-    existing.records.sort((a,b)=>a.date.localeCompare(b.date));
+    existing.records.sort((a,b)=>{if(!a.date&&!b.date)return 0;if(!a.date)return 1;if(!b.date)return -1;return a.date.localeCompare(b.date);});
     existing.paper_total = existing.records.reduce((s,r)=>s+r.amount,0);
-    existing.month = existing.records[0].date.slice(0,7);
+    const firstDated = existing.records.find(r=>r.date);
+    if(firstDated) existing.month = firstDated.date.slice(0,7);
   } else {
     KARTES.unshift({id:Date.now().toString(),farm,cow,records:[record],paper_total:amount,electronic_amount:null,diff:null,month:date.slice(0,7),closed:false});
   }
@@ -1257,8 +1258,13 @@ function buildKarteCard(k, isDetail) {
   }
 
   // ===== 詳細ビュー: 診療記録編集 + 電子カルテ入力 =====
-  // 診療日順にソートして表示
-  const sortedRecs = k.records.map((r,i)=>({r,i})).sort((a,b)=>a.r.date.localeCompare(b.r.date));
+  // 診療日順にソート（日付なしは末尾）
+  const sortedRecs = k.records.map((r,i)=>({r,i})).sort((a,b)=>{
+    if(!a.r.date && !b.r.date) return 0;
+    if(!a.r.date) return 1;
+    if(!b.r.date) return -1;
+    return a.r.date.localeCompare(b.r.date);
+  });
   const editRows = sortedRecs.map(({r,i})=>{
     const presetChecks = PRESETS.map(pr=>{
       const checked = contentHasPreset(r.content, pr.label);
@@ -1294,7 +1300,10 @@ function buildKarteCard(k, isDetail) {
     <div class="rec-edit-rows">
       <div class="rec-edit-hdr"><span>診療日</span><span>診療内容</span><span style="text-align:right">金額(円)</span><span></span></div>
       ${editRows}
-      <button class="rec-add-btn" onclick="event.stopPropagation();addKarteRecord('${k.id}')">＋ 診療日を追加</button>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button class="rec-add-btn" style="flex:1" onclick="event.stopPropagation();addKarteRecord('${k.id}')">＋ 診療日を追加</button>
+        <button class="rec-add-btn" style="flex:1;color:var(--text2)" onclick="event.stopPropagation();addAmountOnlyRecord('${k.id}')">＋ 金額のみ</button>
+      </div>
     </div>
     <div class="karte-totals">
       <div class="total-row"><span style="color:var(--text2)">紙カルテ合計</span><span class="total-val">¥${k.paper_total.toLocaleString()}</span></div>
@@ -1415,6 +1424,18 @@ function addKarteRecord(karteId) {
   k.records.sort((a,b)=>a.date.localeCompare(b.date));
   saveToStorage();
   renderKarteList();
+}
+
+function addAmountOnlyRecord(karteId) {
+  const k = KARTES.find(x=>x.id===karteId);
+  if(!k) return;
+  k.records.push({date:'', content:'', amount:0});
+  saveToStorage();
+  renderKarteList();
+  setTimeout(() => {
+    const rows = document.querySelectorAll(`#card-${karteId} .rec-edit-row`);
+    if(rows.length) rows[rows.length-1].querySelector('input[type=number]')?.focus();
+  }, 50);
 }
 
 function updateRecord(karteId, recIdx, field, value) {
