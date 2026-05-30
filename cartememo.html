@@ -195,7 +195,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v1.9</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v2.0</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -740,7 +740,7 @@ async function pasteFromClipboard() {
 }
 
 // ==================== MEMO QUEUE ====================
-function addMemo(silent=false) {
+async function addMemo(silent=false) {
   const text = document.getElementById('newMemoText').value.trim();
   if(!text) return toast('メモを入力してください');
   const memo = {
@@ -756,7 +756,10 @@ function addMemo(silent=false) {
   document.getElementById('newOwnerName').value='';
   saveToStorage(); renderMemoQueue(); updateBadge();
   if(!silent) toast('メモを保存しました', 'success');
-  if(document.getElementById('anthropicKey').value.trim()) processSingle(memo.id);
+  if(document.getElementById('anthropicKey').value.trim()) {
+    await processSingle(memo.id);
+    switchTab('calc');
+  }
 }
 function renderMemoQueue() {
   const el = document.getElementById('memoQueue');
@@ -840,7 +843,7 @@ async function processSingle(id) {
     if(!memo.symptom&&result.symptom) memo.symptom=result.symptom;
     memo.status='done'; toast(`${memo.ownerName||'メモ'} の解析完了`, 'success');
   } catch(e) { memo.status='pending'; toast('エラー: '+e.message,'error'); }
-  saveToStorage(); renderMemoQueue(); updateBadge();
+  saveToStorage(); renderMemoQueue(); updateBadge(); renderResultsList();
 }
 
 // ==================== BATCH PROCESS ====================
@@ -875,7 +878,7 @@ async function batchProcess() {
 // ==================== RESULTS LIST ====================
 function renderResultsList() {
   const el = document.getElementById('resultsList');
-  const done = [...memos].reverse().filter(m=>m.status==='done'||m.status==='processing');
+  const done = [...memos].reverse().filter(m=>(m.status==='done'||m.status==='processing')&&!m.hidden);
   if(!done.length) { el.innerHTML='<div class="empty-state"><div class="es-icon">📋</div>「往診メモ」タブでメモを追加してから<br>「まとめてAI解析」を押してください</div>'; return; }
   el.innerHTML = done.map(m => {
     const total = (m.items||[]).reduce((s,it)=>s+it.price*it.qty,0);
@@ -934,10 +937,12 @@ function renderResultsList() {
         <button class="btn btn-discord btn-sm" onclick="sendOneToDiscord('${m.id}')">Discord送信</button>
         <button class="btn btn-ghost btn-sm" onclick="copyMemoFormula('${m.id}')">B1形式コピー</button>
         <button class="btn btn-ghost btn-sm" onclick="reparse('${m.id}')">再解析</button>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto;color:var(--text3)" onclick="hideResult('${m.id}')">非表示</button>
       </div>`:''}</div>`;
   }).join('');
 }
 
+function hideResult(id){const m=memos.find(x=>x.id===id);if(!m)return;m.hidden=true;saveToStorage();renderResultsList();}
 function updateItemQty(memoId,idx,val){const m=memos.find(x=>x.id===memoId);if(!m||!m.items)return;m.items[idx].qty=parseFloat(val)||0;saveToStorage();renderResultsList();}
 function updateItemName(memoId,idx,val){const m=memos.find(x=>x.id===memoId);if(!m||!m.items)return;const name=val.trim();const master=MASTER.find(x=>x.name===name);m.items[idx].name=name;m.items[idx].price=master?master.price:0;m.items[idx].unknown=!master;saveToStorage();renderResultsList();}
 function addItemToMemo(memoId){const m=memos.find(x=>x.id===memoId);if(!m)return;if(!m.items)m.items=[];m.items.push({name:'',qty:1,unit:'',price:0,unknown:true});saveToStorage();renderResultsList();}
