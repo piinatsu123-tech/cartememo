@@ -195,7 +195,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v2.0</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v2.1</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -253,6 +253,7 @@ input[type=checkbox]{width:auto;margin:0}
     <div class="batch-progress"><div class="batch-progress-bar" id="batchBar" style="width:0%"></div></div>
     <button class="btn btn-green" id="batchBtn" onclick="batchProcess()">⚡ まとめてAI解析</button>
     <button class="btn btn-discord btn-sm" id="sendAllBtn" onclick="sendAllToDiscord()" style="display:none">一括Discord送信</button>
+    <button class="btn btn-ghost btn-sm" id="showHiddenBtn" onclick="toggleShowHidden()" style="margin-left:auto;display:none">非表示を表示</button>
   </div>
   <div class="results-list" id="resultsList">
     <div class="empty-state"><div class="es-icon">📋</div>「往診メモ」タブでメモを追加してから<br>「まとめてAI解析」を押してください</div>
@@ -462,6 +463,7 @@ let masterEditIndex = -1;
 let pendingElectAmt = null;
 let activeKarteId = null;
 const expandedResultIds = new Set();
+let showHidden = false;
 
 // ==================== INIT ====================
 document.addEventListener('DOMContentLoaded', async () => {
@@ -878,7 +880,10 @@ async function batchProcess() {
 // ==================== RESULTS LIST ====================
 function renderResultsList() {
   const el = document.getElementById('resultsList');
-  const done = [...memos].reverse().filter(m=>(m.status==='done'||m.status==='processing')&&!m.hidden);
+  const hiddenCount = memos.filter(m=>(m.status==='done'||m.status==='processing')&&m.hidden).length;
+  const btn = document.getElementById('showHiddenBtn');
+  if(btn) { btn.style.display = hiddenCount ? '' : 'none'; btn.textContent = showHidden ? `非表示を隠す（${hiddenCount}件）` : `非表示を表示（${hiddenCount}件）`; }
+  const done = [...memos].reverse().filter(m=>(m.status==='done'||m.status==='processing')&&(showHidden||!m.hidden));
   if(!done.length) { el.innerHTML='<div class="empty-state"><div class="es-icon">📋</div>「往診メモ」タブでメモを追加してから<br>「まとめてAI解析」を押してください</div>'; return; }
   el.innerHTML = done.map(m => {
     const total = (m.items||[]).reduce((s,it)=>s+it.price*it.qty,0);
@@ -937,12 +942,16 @@ function renderResultsList() {
         <button class="btn btn-discord btn-sm" onclick="sendOneToDiscord('${m.id}')">Discord送信</button>
         <button class="btn btn-ghost btn-sm" onclick="copyMemoFormula('${m.id}')">B1形式コピー</button>
         <button class="btn btn-ghost btn-sm" onclick="reparse('${m.id}')">再解析</button>
-        <button class="btn btn-ghost btn-sm" style="margin-left:auto;color:var(--text3)" onclick="hideResult('${m.id}')">非表示</button>
+        ${m.hidden
+          ? `<button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="unhideResult('${m.id}')">再表示</button>`
+          : `<button class="btn btn-ghost btn-sm" style="margin-left:auto;color:var(--text3)" onclick="hideResult('${m.id}')">非表示</button>`}
       </div>`:''}</div>`;
   }).join('');
 }
 
 function hideResult(id){const m=memos.find(x=>x.id===id);if(!m)return;m.hidden=true;saveToStorage();renderResultsList();}
+function unhideResult(id){const m=memos.find(x=>x.id===id);if(!m)return;m.hidden=false;saveToStorage();renderResultsList();}
+function toggleShowHidden(){showHidden=!showHidden;renderResultsList();}
 function updateItemQty(memoId,idx,val){const m=memos.find(x=>x.id===memoId);if(!m||!m.items)return;m.items[idx].qty=parseFloat(val)||0;saveToStorage();renderResultsList();}
 function updateItemName(memoId,idx,val){const m=memos.find(x=>x.id===memoId);if(!m||!m.items)return;const name=val.trim();const master=MASTER.find(x=>x.name===name);m.items[idx].name=name;m.items[idx].price=master?master.price:0;m.items[idx].unknown=!master;saveToStorage();renderResultsList();}
 function addItemToMemo(memoId){const m=memos.find(x=>x.id===memoId);if(!m)return;if(!m.items)m.items=[];m.items.push({name:'',qty:1,unit:'',price:0,unknown:true});saveToStorage();renderResultsList();}
