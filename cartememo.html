@@ -195,7 +195,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v2.1</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v2.2</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -1215,17 +1215,19 @@ function confirmKarteSave() {
   if(!date) return toast('日付を入力してください','error');
   const record = {date, content, amount};
   const selectedId = document.getElementById('modal-karte-select').value;
-  const existing = selectedId
+  let savedKarte = selectedId
     ? KARTES.find(k => k.id === selectedId)
     : KARTES.find(k => k.farm===farm && k.cow===cow && !k.closed);
-  if(existing) {
-    existing.records.push(record);
-    existing.records.sort((a,b)=>{if(!a.date&&!b.date)return 0;if(!a.date)return 1;if(!b.date)return -1;return a.date.localeCompare(b.date);});
-    existing.paper_total = existing.records.reduce((s,r)=>s+r.amount,0);
-    const firstDated = existing.records.find(r=>r.date);
-    if(firstDated) existing.month = firstDated.date.slice(0,7);
+  if(savedKarte) {
+    savedKarte.records.push(record);
+    savedKarte.records.sort((a,b)=>{if(!a.date&&!b.date)return 0;if(!a.date)return 1;if(!b.date)return -1;return a.date.localeCompare(b.date);});
+    savedKarte.paper_total = savedKarte.records.reduce((s,r)=>s+r.amount,0);
+    const firstDated = savedKarte.records.find(r=>r.date);
+    if(firstDated) savedKarte.month = firstDated.date.slice(0,7);
   } else {
-    KARTES.unshift({id:Date.now().toString(),farm,cow,records:[record],paper_total:amount,electronic_amount:null,diff:null,month:date.slice(0,7),closed:false});
+    const newId = Date.now().toString();
+    KARTES.unshift({id:newId,farm,cow,records:[record],paper_total:amount,electronic_amount:null,diff:null,month:date.slice(0,7),closed:false});
+    savedKarte = KARTES[0];
   }
   if(!FARMS.includes(farm)){FARMS.push(farm);FARMS.sort((a,b)=>a.localeCompare(b,'ja'));updateFarmDatalist();}
   if(karteSaveMemoId) {
@@ -1235,6 +1237,9 @@ function confirmKarteSave() {
   saveToStorage(); closeKarteModal();
   renderResultsList();
   toast(`【${farm} / ${cow}】にカルテを保存しました`,'success');
+  switchTab('karte');
+  updateKarteFarmFilter();
+  selectKarte(savedKarte.id);
 }
 
 function buildKarteCard(k, isDetail) {
