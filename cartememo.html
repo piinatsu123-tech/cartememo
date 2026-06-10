@@ -195,7 +195,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v2.3</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v2.4</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -1326,7 +1326,7 @@ function buildKarteCard(k, isDetail) {
       </div>
     </div>
     <div class="karte-totals">
-      <div class="total-row"><span style="color:var(--text2)">紙カルテ合計</span><span class="total-val">¥${k.paper_total.toLocaleString()}</span></div>
+      <div class="total-row"><span style="color:var(--text2)">紙カルテ合計</span><span class="total-val" id="paper-total-${k.id}">¥${k.paper_total.toLocaleString()}</span></div>
       ${elecRow}
       <div class="total-row ${diffClass}" style="margin-top:4px;padding-top:8px;border-top:1px solid var(--border)"><span style="font-weight:600">差額（電子−紙）</span><span class="total-val" style="font-size:16px">${diffText}</span></div>
     </div>
@@ -1455,6 +1455,8 @@ function amountOnlyKeydown(karteId, recIdx, event) {
       k.records[recIdx].amount = (isNaN(v)||v<0) ? 0 : v;
       recalcPaperTotal(k);
       saveToStorage();
+      const totalEl = document.getElementById(`paper-total-${karteId}`);
+      if(totalEl) totalEl.textContent = '¥' + k.paper_total.toLocaleString();
     }
     addAmountOnlyRecord(karteId);
   } else if(event.key === 'Escape') {
@@ -1462,15 +1464,43 @@ function amountOnlyKeydown(karteId, recIdx, event) {
   }
 }
 
+function buildAmountOnlyRowHtml(karteId, i) {
+  const presetChecks = PRESETS.map(pr =>
+    `<label class="rec-preset-item" onclick="event.stopPropagation()"><input type="checkbox" onchange="toggleRecordPreset('${karteId}',${i},'${pr.key}',this)"> ${pr.label}</label>`
+  ).join('');
+  return `
+    <input type="date" value="" onclick="event.stopPropagation()" onblur="updateRecord('${karteId}',${i},'date',this.value)">
+    <div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input type="text" value="" placeholder="診療内容" onclick="event.stopPropagation()" onblur="updateRecord('${karteId}',${i},'content',this.value)" style="flex:1;min-width:0">
+        <label class="rec-oji-label" onclick="event.stopPropagation()"><input type="checkbox" onchange="toggleOji('${karteId}',${i},this)"> 往診</label>
+        <input type="text" class="rec-oji-memo" value="" placeholder="往診元" onclick="event.stopPropagation()" onblur="updateOjiMemo('${karteId}',${i},this.value)">
+      </div>
+      <div class="rec-preset-sub">${presetChecks}</div>
+    </div>
+    <input type="number" min="0" step="100" value="" placeholder="0" onclick="event.stopPropagation()" onblur="updateRecord('${karteId}',${i},'amount',this.value)" onkeydown="amountOnlyKeydown('${karteId}',${i},event)">
+    <button class="rec-del-btn" onclick="event.stopPropagation();deleteRecord('${karteId}',${i})" title="削除">×</button>`;
+}
+
 function addAmountOnlyRecord(karteId) {
   const k = KARTES.find(x=>x.id===karteId);
   if(!k) return;
   k.records.push({date:'', content:'', amount:0});
+  const i = k.records.length - 1;
   saveToStorage();
-  renderKarteList();
-  const rows = document.querySelectorAll(`#card-${karteId} .rec-edit-row`);
-  const input = rows.length ? rows[rows.length-1].querySelector('input[type=number]') : null;
-  if(input) input.focus();
+  // DOMに直接挿入してフォーカス（iOSでは innerHTML 書き換え後の focus() が効かないため）
+  const editRowsEl = document.querySelector(`#card-${karteId} .rec-edit-rows`);
+  if(editRowsEl) {
+    const addBtnsDiv = editRowsEl.querySelector('div[style*="margin-top"]');
+    const rowEl = document.createElement('div');
+    rowEl.className = 'rec-edit-row';
+    rowEl.innerHTML = buildAmountOnlyRowHtml(karteId, i);
+    if(addBtnsDiv) editRowsEl.insertBefore(rowEl, addBtnsDiv);
+    else editRowsEl.appendChild(rowEl);
+    rowEl.querySelector('input[type=number]').focus();
+  } else {
+    renderKarteList();
+  }
 }
 
 function updateRecord(karteId, recIdx, field, value) {
