@@ -152,6 +152,8 @@ input[type=checkbox]{width:auto;margin:0}
 .rec-preset-item{display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:var(--text3);font-weight:500;user-select:none}
 .rec-preset-item input[type=checkbox]{width:13px;height:13px;cursor:pointer;accent-color:#111;margin:0;flex-shrink:0}
 .rec-preset-item:has(input:checked){color:#111;font-weight:700}
+.rec-quick-row{display:grid;grid-template-columns:112px 1fr 88px 26px;gap:5px;align-items:center;padding:6px 0;border-top:1px dashed var(--border2);margin-top:4px}
+.rec-quick-row input{padding:4px 6px;font-size:13px;font-family:'JetBrains Mono',monospace;border:1px solid var(--border2);border-radius:4px;width:100%;text-align:right}
 .rec-add-btn{margin-top:8px;font-size:12px;color:var(--text2);background:none;border:1px dashed var(--border2);border-radius:5px;padding:7px 0;cursor:pointer;width:100%;text-align:center;font-family:'Noto Sans JP',sans-serif;font-weight:600;transition:all .12s}
 .rec-add-btn:hover{background:var(--surface);border-color:#888;color:#111}
 .preset-settings{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:7px 10px;background:var(--surface);border:1px solid var(--border);border-radius:5px;margin-bottom:10px;font-size:11px;color:var(--text3)}
@@ -195,7 +197,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v2.5</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v2.6</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -1317,13 +1319,15 @@ function buildKarteCard(k, isDetail) {
         <button class="btn btn-danger btn-xs" onclick="event.stopPropagation();deleteKarte('${k.id}')">削除</button>
       </div>
     </div>
-    <div class="rec-edit-rows">
+    <div class="rec-edit-rows" id="edit-rows-${k.id}">
       <div class="rec-edit-hdr"><span>診療日</span><span>診療内容</span><span style="text-align:right">金額(円)</span><span></span></div>
       ${editRows}
-      <div style="display:flex;gap:8px;margin-top:6px">
-        <button class="rec-add-btn" style="flex:1" onclick="event.stopPropagation();addKarteRecord('${k.id}')">＋ 診療日を追加</button>
-        <button class="rec-add-btn" style="flex:1;color:var(--text2)" onclick="event.stopPropagation();addAmountOnlyRecord('${k.id}')">＋ 金額のみ</button>
+      <div class="rec-quick-row" onclick="event.stopPropagation()">
+        <span style="grid-column:1/3;font-size:11px;color:var(--text3);align-self:center">金額のみ追加 →</span>
+        <input type="number" id="quick-add-${k.id}" min="0" step="100" placeholder="0" onclick="event.stopPropagation()" onkeydown="quickAddAmountKeydown('${k.id}',event)">
+        <div></div>
       </div>
+      <button class="rec-add-btn" onclick="event.stopPropagation();addKarteRecord('${k.id}')">＋ 診療日を追加</button>
     </div>
     <div class="karte-totals">
       <div class="total-row"><span style="color:var(--text2)">紙カルテ合計</span><span class="total-val" id="paper-total-${k.id}">¥${k.paper_total.toLocaleString()}</span></div>
@@ -1460,6 +1464,37 @@ function amountOnlyKeydown(karteId, recIdx, event) {
     }
     addAmountOnlyRecord(karteId);
   } else if(event.key === 'Escape') {
+    event.target.blur();
+  }
+}
+
+function quickAddAmountKeydown(karteId, event) {
+  if(event.key === 'Enter') {
+    event.preventDefault();
+    const v = parseInt(event.target.value);
+    if(!v || v <= 0) return;
+    const k = KARTES.find(x=>x.id===karteId);
+    if(!k) return;
+    k.records.push({date:'', content:'', amount:v});
+    recalcPaperTotal(k);
+    saveToStorage();
+    event.target.value = '';
+    // 合計表示を更新
+    const totalEl = document.getElementById(`paper-total-${karteId}`);
+    if(totalEl) totalEl.textContent = '¥' + k.paper_total.toLocaleString();
+    // 新しい行をDOMに直接挿入（再描画なし＝フォーカス維持）
+    const rowsEl = document.getElementById(`edit-rows-${karteId}`);
+    if(rowsEl) {
+      const i = k.records.length - 1;
+      const rowEl = document.createElement('div');
+      rowEl.className = 'rec-edit-row';
+      rowEl.innerHTML = buildAmountOnlyRowHtml(karteId, i);
+      const quickRow = rowsEl.querySelector('.rec-quick-row');
+      if(quickRow) rowsEl.insertBefore(rowEl, quickRow);
+    }
+    // input は破棄されていないのでフォーカスは自動で維持される
+  } else if(event.key === 'Escape') {
+    event.target.value = '';
     event.target.blur();
   }
 }
