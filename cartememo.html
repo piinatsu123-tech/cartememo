@@ -197,7 +197,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v2.6</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v2.7</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -1019,11 +1019,24 @@ async function cloudAutoLoad() {
     if(!resp.ok) throw new Error(result.message||'HTTP '+resp.status);
     const data = result.record;
     if(!Array.isArray(data.memos)) throw new Error('invalid data');
-    // クラウドのデータで全置換（クラウドが正として扱う）
-    memos = data.memos;
+
+    // メモ: クラウドを基本とし、ローカルのみのものを追加保持
+    const cloudMemoIds = new Set((data.memos||[]).map(m=>m.id));
+    const localOnlyMemos = memos.filter(m=>!cloudMemoIds.has(m.id));
+    memos = [...(data.memos||[]), ...localOnlyMemos];
+
+    // カルテ: クラウドを基本とし、レコード数が多い方を採用。ローカルのみは保持
+    const cloudKartes = data.kartes||[];
+    const cloudKarteMap = new Map(cloudKartes.map(k=>[k.id,k]));
+    const mergedKartes = cloudKartes.map(ck=>{
+      const lk = KARTES.find(x=>x.id===ck.id);
+      return (lk && lk.records.length > ck.records.length) ? lk : ck;
+    });
+    KARTES.forEach(lk=>{ if(!cloudKarteMap.has(lk.id)) mergedKartes.push(lk); });
+    KARTES = mergedKartes;
+
     if(Array.isArray(data.dictWords)) DICT_WORDS = data.dictWords;
     if(Array.isArray(data.convPairs)) convPairs = data.convPairs;
-    if(Array.isArray(data.kartes)) KARTES = data.kartes;
     if(Array.isArray(data.farms)) { FARMS = data.farms; FARMS.sort((a,b)=>a.localeCompare(b,'ja')); }
     _suppressAutoSave = true;
     saveToStorage(); // ローカルにも反映（クラウド再送信はしない）
