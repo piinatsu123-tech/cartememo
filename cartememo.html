@@ -197,7 +197,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v2.8</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v2.9</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -1020,10 +1020,19 @@ async function cloudAutoLoad() {
     const data = result.record;
     if(!Array.isArray(data.memos)) throw new Error('invalid data');
 
-    // メモ: クラウドを基本とし、ローカルのみのものを追加保持
+    // メモ: IDごとにマージ。解析が進んでいる方(done>processing>pending・項目あり)を優先し、
+    //       保存済みフラグはどちらかで立っていれば保持。ローカルのみのものは追加保持
+    const memoScore = m => (m.status==='done'?2 : m.status==='processing'?1 : 0) + ((m.items&&m.items.length)?1:0);
+    const localMemoMap = new Map(memos.map(m=>[m.id,m]));
     const cloudMemoIds = new Set((data.memos||[]).map(m=>m.id));
-    const localOnlyMemos = memos.filter(m=>!cloudMemoIds.has(m.id));
-    memos = [...(data.memos||[]), ...localOnlyMemos];
+    const mergedMemos = (data.memos||[]).map(cm=>{
+      const lm = localMemoMap.get(cm.id);
+      if(!lm) return cm;
+      const best = memoScore(lm) >= memoScore(cm) ? lm : cm;
+      return {...best, karte_saved: best.karte_saved||lm.karte_saved||cm.karte_saved};
+    });
+    memos.forEach(lm=>{ if(!cloudMemoIds.has(lm.id)) mergedMemos.push(lm); });
+    memos = mergedMemos;
 
     // カルテ: クラウドを基本とし、レコード数が多い方を採用。ローカルのみは保持
     const cloudKartes = data.kartes||[];
