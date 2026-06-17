@@ -197,7 +197,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v2.9</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v3.0</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -893,11 +893,11 @@ function renderResultsList() {
     const rows = (m.items||[]).map((it,i)=>{
       const sub=Math.round(it.price*it.qty);
       return `<tr>
-        <td><input type="text" class="name-input" value="${it.name.replace(/"/g,'&quot;')}" list="masterNamesList" onchange="updateItemName('${m.id}',${i},this.value)" style="width:100%;min-width:80px;border:1px solid ${it.unknown?'#c00':'transparent'};border-radius:4px;padding:2px 6px;font-size:12px;background:${it.unknown?'rgba(204,0,0,0.05)':'transparent'};color:#111;cursor:text"></td>
-        <td class="num-cell"><input class="qty-input" type="text" inputmode="decimal" value="${it.qty}" onchange="updateItemQty('${m.id}',${i},this.value)"></td>
+        <td><input type="text" class="name-input" value="${it.name.replace(/"/g,'&quot;')}" list="masterNamesList" onchange="updateItemName('${m.id}',${i},this.value,this)" onkeydown="nameInputKeydown(this,event)" style="width:100%;min-width:80px;border:1px solid ${it.unknown?'#c00':'transparent'};border-radius:4px;padding:2px 6px;font-size:12px;background:${it.unknown?'rgba(204,0,0,0.05)':'transparent'};color:#111;cursor:text"></td>
+        <td class="num-cell"><input class="qty-input" type="text" inputmode="decimal" value="${it.qty}" onblur="updateItemQty('${m.id}',${i},this.value,this)" onkeydown="qtyKeydown(this,event)"></td>
         <td class="price-cell">${it.price>0?'¥'+it.price.toLocaleString():'<span style="color:#c00">未登録</span>'}</td>
         <td class="sub-cell">${sub>0?'¥'+sub.toLocaleString():'—'}</td>
-        <td><button class="del-row" onclick="removeItemFromMemo('${m.id}',${i})">×</button></td>
+        <td><button class="del-row" tabindex="-1" onclick="removeItemFromMemo('${m.id}',${i})">×</button></td>
       </tr>`;
     }).join('');
     const isSaved = m.karte_saved && !expandedResultIds.has(m.id);
@@ -954,8 +954,62 @@ function renderResultsList() {
 function hideResult(id){const m=memos.find(x=>x.id===id);if(!m)return;m.hidden=true;saveToStorage();renderResultsList();}
 function unhideResult(id){const m=memos.find(x=>x.id===id);if(!m)return;m.hidden=false;saveToStorage();renderResultsList();}
 function toggleShowHidden(){showHidden=!showHidden;renderResultsList();}
-function updateItemQty(memoId,idx,val){const m=memos.find(x=>x.id===memoId);if(!m||!m.items)return;m.items[idx].qty=parseFloat(val)||0;saveToStorage();renderResultsList();}
-function updateItemName(memoId,idx,val){const m=memos.find(x=>x.id===memoId);if(!m||!m.items)return;const name=val.trim();const master=MASTER.find(x=>x.name===name);m.items[idx].name=name;m.items[idx].price=master?master.price:0;m.items[idx].unknown=!master;saveToStorage();renderResultsList();}
+function _updateCardTotals(m, card) {
+  if(!card) return;
+  const total = (m.items||[]).reduce((s,it)=>s+it.price*it.qty,0);
+  const totalEl = card.querySelector('.rc-total');
+  if(totalEl) totalEl.textContent = '¥'+Math.round(total).toLocaleString();
+  const formula = (m.items||[]).filter(it=>it.price>0).map(it=>`${it.name}*${it.qty}`).join('/');
+  const formulaEl = card.querySelector('.formula-line');
+  if(formulaEl) formulaEl.innerHTML = formula ? formula.split('/').map(p=>`<span>${p}</span>`).join('<span style="color:var(--text3)">/</span>') : '—';
+}
+function updateItemQty(memoId,idx,val,el){
+  const m=memos.find(x=>x.id===memoId);if(!m||!m.items)return;
+  m.items[idx].qty=parseFloat(val)||0;
+  saveToStorage();
+  if(el){
+    const tr=el.closest('tr');
+    if(tr){const sub=Math.round(m.items[idx].price*m.items[idx].qty);tr.querySelector('.sub-cell').textContent=sub>0?'¥'+sub.toLocaleString():'—';}
+    _updateCardTotals(m,el.closest('.result-card'));
+  } else { renderResultsList(); }
+}
+function updateItemName(memoId,idx,val,el){
+  const m=memos.find(x=>x.id===memoId);if(!m||!m.items)return;
+  const name=val.trim();const master=MASTER.find(x=>x.name===name);
+  m.items[idx].name=name;m.items[idx].price=master?master.price:0;m.items[idx].unknown=!master;
+  saveToStorage();
+  if(el){
+    el.style.border=master?'1px solid transparent':'1px solid #c00';
+    el.style.background=master?'transparent':'rgba(204,0,0,0.05)';
+    const tr=el.closest('tr');
+    if(tr){
+      const priceCell=tr.querySelector('.price-cell');
+      if(priceCell) priceCell.innerHTML=master?'¥'+master.price.toLocaleString():'<span style="color:#c00">未登録</span>';
+      const sub=master?Math.round(master.price*m.items[idx].qty):0;
+      tr.querySelector('.sub-cell').textContent=sub>0?'¥'+sub.toLocaleString():'—';
+    }
+    _updateCardTotals(m,el.closest('.result-card'));
+  } else { renderResultsList(); }
+}
+function qtyKeydown(el, event) {
+  if(event.key==='Enter'||event.key==='Tab'&&!event.shiftKey) {
+    const card=el.closest('.result-card');if(!card)return;
+    const qtys=Array.from(card.querySelectorAll('.qty-input'));
+    const idx=qtys.indexOf(el);
+    if(event.key==='Enter'){
+      event.preventDefault();
+      if(idx<qtys.length-1){qtys[idx+1].focus();qtys[idx+1].select();}
+      else el.blur();
+    }
+  }
+}
+function nameInputKeydown(el, event) {
+  if(event.key==='Enter') {
+    event.preventDefault();
+    const qtyInput=el.closest('tr')&&el.closest('tr').querySelector('.qty-input');
+    if(qtyInput){qtyInput.focus();qtyInput.select();}
+  }
+}
 function addItemToMemo(memoId){const m=memos.find(x=>x.id===memoId);if(!m)return;if(!m.items)m.items=[];m.items.push({name:'',qty:1,unit:'',price:0,unknown:true});saveToStorage();renderResultsList();}
 function removeItemFromMemo(memoId,idx){const m=memos.find(x=>x.id===memoId);if(!m||!m.items)return;m.items.splice(idx,1);saveToStorage();renderResultsList();}
 async function reparse(id){const memo=memos.find(m=>m.id===id);if(!memo)return;memo.status='pending';await processSingle(id);renderResultsList();}
