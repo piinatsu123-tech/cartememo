@@ -197,7 +197,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v3.1</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v3.2</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -320,12 +320,20 @@ input[type=checkbox]{width:auto;margin:0}
     <div class="panel-body">
       <p class="input-hint" style="margin-bottom:10px">スマホ↔PC間でメモ・カルテデータを同期できます。<br>① <b>jsonbin.io</b> で無料アカウントを作成しAPIキーを取得<br>② 両端末に同じAPIキーとBin IDを設定するだけ</p>
       <label>jsonbin.io API Key</label>
-      <input type="password" id="jsonbinKey" placeholder="$2a$10$...">
+      <div style="display:flex;gap:6px">
+        <input type="password" id="jsonbinKey" placeholder="$2a$10$..." style="flex:1;font-family:'JetBrains Mono',monospace;font-size:12px">
+        <button class="btn btn-ghost btn-xs" onclick="toggleApiKeyVisibility(this)" title="表示/非表示">👁</button>
+        <button class="btn btn-ghost btn-xs" onclick="copyApiKey()">コピー</button>
+      </div>
       <label style="margin-top:8px">Bin ID <span style="font-size:10px;font-weight:400;color:var(--text3)">（初回保存後に自動発行。他の端末にはコピーして貼り付け）</span></label>
       <div style="display:flex;gap:6px">
         <input type="text" id="jsonbinId" placeholder="初回保存後に自動入力されます" style="font-family:'JetBrains Mono',monospace;font-size:12px">
         <button class="btn btn-ghost btn-xs" onclick="copyBinId()">コピー</button>
       </div>
+      <div style="margin-top:6px">
+        <button class="btn btn-ghost btn-xs" style="width:100%;justify-content:center" onclick="copyAllSettings()">📋 APIキー＋Bin IDをまとめてコピー</button>
+      </div>
+      <p class="input-hint" style="margin-top:6px;color:#b07000">⚠️ ブラウザの履歴削除でこの設定は消えます。上のボタンでどこかにメモしておいてください。</p>
       <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
         <button class="btn btn-primary btn-sm" onclick="cloudSave()">↑ クラウドに保存</button>
         <button class="btn btn-ghost btn-sm" onclick="cloudLoad()">↓ クラウドから読み込む</button>
@@ -1162,6 +1170,23 @@ function copyBinId() {
   const id=document.getElementById('jsonbinId').value.trim();
   if(!id) return toast('Bin IDがありません。先に「クラウドに保存」してください');
   navigator.clipboard.writeText(id).then(()=>toast('Bin IDをコピーしました','success'));
+}
+function copyApiKey() {
+  const key=document.getElementById('jsonbinKey').value.trim();
+  if(!key) return toast('APIキーが入力されていません','error');
+  navigator.clipboard.writeText(key).then(()=>toast('APIキーをコピーしました','success'));
+}
+function toggleApiKeyVisibility(btn) {
+  const input=document.getElementById('jsonbinKey');
+  input.type=input.type==='password'?'text':'password';
+  btn.textContent=input.type==='password'?'👁':'🙈';
+}
+function copyAllSettings() {
+  const key=document.getElementById('jsonbinKey').value.trim();
+  const id=document.getElementById('jsonbinId').value.trim();
+  if(!key&&!id) return toast('設定がありません','error');
+  const text=`APIキー: ${key||'（未設定）'}\nBin ID: ${id||'（未設定）'}`;
+  navigator.clipboard.writeText(text).then(()=>toast('APIキー＋Bin IDをコピーしました','success'));
 }
 async function cloudSave() {
   const key=document.getElementById('jsonbinKey').value.trim();
