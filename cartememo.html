@@ -197,7 +197,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v3.0</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v3.1</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -992,15 +992,13 @@ function updateItemName(memoId,idx,val,el){
   } else { renderResultsList(); }
 }
 function qtyKeydown(el, event) {
-  if(event.key==='Enter'||event.key==='Tab'&&!event.shiftKey) {
+  if(event.key==='Enter') {
+    event.preventDefault();
     const card=el.closest('.result-card');if(!card)return;
     const qtys=Array.from(card.querySelectorAll('.qty-input'));
     const idx=qtys.indexOf(el);
-    if(event.key==='Enter'){
-      event.preventDefault();
-      if(idx<qtys.length-1){qtys[idx+1].focus();qtys[idx+1].select();}
-      else el.blur();
-    }
+    if(idx<qtys.length-1){qtys[idx+1].focus();qtys[idx+1].select();}
+    else { const memoId=card.id.replace('rc-',''); addItemToMemo(memoId); }
   }
 }
 function nameInputKeydown(el, event) {
@@ -1010,7 +1008,26 @@ function nameInputKeydown(el, event) {
     if(qtyInput){qtyInput.focus();qtyInput.select();}
   }
 }
-function addItemToMemo(memoId){const m=memos.find(x=>x.id===memoId);if(!m)return;if(!m.items)m.items=[];m.items.push({name:'',qty:1,unit:'',price:0,unknown:true});saveToStorage();renderResultsList();}
+function addItemToMemo(memoId){
+  const m=memos.find(x=>x.id===memoId);if(!m)return;
+  if(!m.items)m.items=[];
+  m.items.push({name:'',qty:1,unit:'',price:0,unknown:true});
+  const i=m.items.length-1;
+  saveToStorage();
+  const card=document.getElementById(`rc-${memoId}`);
+  const tbody=card&&card.querySelector('.items-table tbody');
+  if(!tbody){renderResultsList();return;}
+  const tr=document.createElement('tr');
+  tr.innerHTML=`
+    <td><input type="text" class="name-input" value="" list="masterNamesList" onchange="updateItemName('${memoId}',${i},this.value,this)" onkeydown="nameInputKeydown(this,event)" style="width:100%;min-width:80px;border:1px solid #c00;border-radius:4px;padding:2px 6px;font-size:12px;background:rgba(204,0,0,0.05);color:#111;cursor:text"></td>
+    <td class="num-cell"><input class="qty-input" type="text" inputmode="decimal" value="1" onblur="updateItemQty('${memoId}',${i},this.value,this)" onkeydown="qtyKeydown(this,event)"></td>
+    <td class="price-cell"><span style="color:#c00">未登録</span></td>
+    <td class="sub-cell">—</td>
+    <td><button class="del-row" tabindex="-1" onclick="removeItemFromMemo('${memoId}',${i})">×</button></td>`;
+  tbody.appendChild(tr);
+  const nameInput=tr.querySelector('.name-input');
+  if(nameInput){nameInput.focus();}
+}
 function removeItemFromMemo(memoId,idx){const m=memos.find(x=>x.id===memoId);if(!m||!m.items)return;m.items.splice(idx,1);saveToStorage();renderResultsList();}
 async function reparse(id){const memo=memos.find(m=>m.id===id);if(!memo)return;memo.status='pending';await processSingle(id);renderResultsList();}
 
