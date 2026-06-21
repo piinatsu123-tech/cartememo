@@ -197,7 +197,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v3.2</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v3.3</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -896,7 +896,9 @@ function renderResultsList() {
   const done = [...memos].reverse().filter(m=>(m.status==='done'||m.status==='processing')&&(showHidden||!m.hidden));
   if(!done.length) { el.innerHTML='<div class="empty-state"><div class="es-icon">📋</div>「往診メモ」タブでメモを追加してから<br>「まとめてAI解析」を押してください</div>'; return; }
   el.innerHTML = done.map(m => {
-    const total = (m.items||[]).reduce((s,it)=>s+it.price*it.qty,0);
+    const baseTotal = (m.items||[]).reduce((s,it)=>s+it.price*it.qty,0);
+    const mul = m.multiplier||1;
+    const total = baseTotal * mul;
     const formula = (m.items||[]).filter(it=>it.price>0).map(it=>`${it.name}*${it.qty}`).join('/');
     const rows = (m.items||[]).map((it,i)=>{
       const sub=Math.round(it.price*it.qty);
@@ -933,7 +935,7 @@ function renderResultsList() {
         </div>
         <div style="display:flex;gap:10px;align-items:center">
           ${m.karte_saved?'<span style="font-size:11px;color:var(--text3)">▲ 折りたたむ</span>':''}
-          <div class="rc-total">${m.status==='processing'?'解析中...':'¥'+Math.round(total).toLocaleString()}</div>
+          <div class="rc-total">${m.status==='processing'?'解析中...':(mul>1?`<span style="font-size:10px;color:var(--text3)">×${mul}</span> `:'')+'¥'+Math.round(total).toLocaleString()}</div>
         </div>
       </div>
       ${m.status==='done'?`
@@ -949,6 +951,7 @@ function renderResultsList() {
       </div>
       <div class="rc-actions">
         <button class="btn btn-primary btn-sm" onclick="openKarteModal('${m.id}')">📋 カルテに保存</button>
+        <button class="btn btn-ghost btn-sm${mul>1?' btn-active':''}" style="${mul>1?'color:var(--accent);font-weight:600':''}" onclick="toggleMultiplier('${m.id}')">×1.3</button>
         <button class="btn btn-discord btn-sm" onclick="sendOneToDiscord('${m.id}')">Discord送信</button>
         <button class="btn btn-ghost btn-sm" onclick="copyMemoFormula('${m.id}')">B1形式コピー</button>
         <button class="btn btn-ghost btn-sm" onclick="reparse('${m.id}')">再解析</button>
@@ -964,12 +967,20 @@ function unhideResult(id){const m=memos.find(x=>x.id===id);if(!m)return;m.hidden
 function toggleShowHidden(){showHidden=!showHidden;renderResultsList();}
 function _updateCardTotals(m, card) {
   if(!card) return;
-  const total = (m.items||[]).reduce((s,it)=>s+it.price*it.qty,0);
+  const base = (m.items||[]).reduce((s,it)=>s+it.price*it.qty,0);
+  const mul = m.multiplier||1;
+  const total = base * mul;
   const totalEl = card.querySelector('.rc-total');
-  if(totalEl) totalEl.textContent = '¥'+Math.round(total).toLocaleString();
+  if(totalEl) totalEl.innerHTML = (mul>1?`<span style="font-size:10px;color:var(--text3)">×${mul}</span> `:'')+'¥'+Math.round(total).toLocaleString();
   const formula = (m.items||[]).filter(it=>it.price>0).map(it=>`${it.name}*${it.qty}`).join('/');
   const formulaEl = card.querySelector('.formula-line');
   if(formulaEl) formulaEl.innerHTML = formula ? formula.split('/').map(p=>`<span>${p}</span>`).join('<span style="color:var(--text3)">/</span>') : '—';
+}
+function toggleMultiplier(id) {
+  const m=memos.find(x=>x.id===id); if(!m) return;
+  m.multiplier = (m.multiplier||1) > 1 ? 1 : 1.3;
+  saveToStorage();
+  renderResultsList();
 }
 function updateItemQty(memoId,idx,val,el){
   const m=memos.find(x=>x.id===memoId);if(!m||!m.items)return;
@@ -1310,7 +1321,7 @@ function onKarteSelectChange() {
 
 function openKarteModal(memoId) {
   const memo = memos.find(m => m.id === memoId); if(!memo) return;
-  const total = Math.round((memo.items||[]).reduce((s,it)=>s+it.price*it.qty,0));
+  const total = Math.round((memo.items||[]).reduce((s,it)=>s+it.price*it.qty,0) * (memo.multiplier||1));
   const formula = (memo.items||[]).filter(it=>it.price>0).map(it=>`${it.name}*${it.qty}`).join('/');
   karteSaveMemoId = memoId;
   document.getElementById('modal-farm').value = memo.ownerName || '';
