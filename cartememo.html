@@ -92,6 +92,9 @@ input[type=checkbox]{width:auto;margin:0}
 .formula-line{background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:7px 10px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);word-break:break-all;margin-top:8px}
 .formula-line span{color:#111;font-weight:600}
 .rc-actions{display:flex;gap:8px;padding:10px 16px;border-top:1px solid var(--border);flex-wrap:wrap}
+.name-ac{position:fixed;background:#fff;border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.15);z-index:9999;max-height:200px;overflow-y:auto;display:none}
+.name-ac-item{padding:6px 12px;cursor:pointer;font-size:13px;white-space:nowrap;display:flex;justify-content:space-between;gap:16px}
+.name-ac-item:hover,.name-ac-item.ac-sel{background:var(--surface)}
 .batch-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:7px}
 .batch-bar .count{font-size:12px;color:var(--text2);font-weight:500}
 .batch-progress{flex:1;min-width:120px;height:4px;background:var(--border);border-radius:2px;overflow:hidden}
@@ -197,7 +200,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v3.3</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v3.4</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -431,6 +434,7 @@ input[type=checkbox]{width:auto;margin:0}
 </div>
 
 <datalist id="masterNamesList"></datalist>
+<div id="nameAc" class="name-ac"></div>
 <div class="toast-wrap" id="toastWrap"></div>
 
 <!-- ===== 電子金額カルテ選択モーダル ===== -->
@@ -903,7 +907,7 @@ function renderResultsList() {
     const rows = (m.items||[]).map((it,i)=>{
       const sub=Math.round(it.price*it.qty);
       return `<tr>
-        <td><input type="text" class="name-input" value="${it.name.replace(/"/g,'&quot;')}" list="masterNamesList" onchange="updateItemName('${m.id}',${i},this.value,this)" onkeydown="nameInputKeydown(this,event)" style="width:100%;min-width:80px;border:1px solid ${it.unknown?'#c00':'transparent'};border-radius:4px;padding:2px 6px;font-size:12px;background:${it.unknown?'rgba(204,0,0,0.05)':'transparent'};color:#111;cursor:text"></td>
+        <td><input type="text" class="name-input" value="${it.name.replace(/"/g,'&quot;')}" onchange="updateItemName('${m.id}',${i},this.value,this)" oninput="nameInputInput(this)" onkeydown="nameInputKeydown(this,event)" onblur="nameInputBlur()" style="width:100%;min-width:80px;border:1px solid ${it.unknown?'#c00':'transparent'};border-radius:4px;padding:2px 6px;font-size:12px;background:${it.unknown?'rgba(204,0,0,0.05)':'transparent'};color:#111;cursor:text"></td>
         <td class="num-cell"><input class="qty-input" type="text" inputmode="decimal" value="${it.qty}" onblur="updateItemQty('${m.id}',${i},this.value,this)" onkeydown="qtyKeydown(this,event)"></td>
         <td class="price-cell">${it.price>0?'¥'+it.price.toLocaleString():'<span style="color:#c00">未登録</span>'}</td>
         <td class="sub-cell">${sub>0?'¥'+sub.toLocaleString():'—'}</td>
@@ -1020,11 +1024,56 @@ function qtyKeydown(el, event) {
     else { const memoId=card.id.replace('rc-',''); addItemToMemo(memoId); }
   }
 }
+let _acTarget=null, _acIdx=-1;
+function nameInputInput(el) {
+  const val=el.value.trim();
+  if(!val){closeAc();return;}
+  const matches=MASTER.filter(x=>x.name.includes(val)).slice(0,12);
+  if(!matches.length){closeAc();return;}
+  _acTarget=el; _acIdx=-1;
+  const ac=document.getElementById('nameAc');
+  const rect=el.getBoundingClientRect();
+  ac.style.left=rect.left+'px';
+  ac.style.top=(rect.bottom+window.scrollY+2)+'px';
+  ac.style.minWidth=Math.max(rect.width,160)+'px';
+  ac.innerHTML=matches.map((x,i)=>`<div class="name-ac-item" data-name="${x.name.replace(/"/g,'&quot;')}" data-i="${i}" onmousedown="event.preventDefault();pickAc(this)">${x.name}<span style="color:var(--text3);font-size:11px">¥${x.price.toLocaleString()}</span></div>`).join('');
+  ac.style.display='';
+}
+function closeAc(){document.getElementById('nameAc').style.display='none';_acTarget=null;_acIdx=-1;}
+function nameInputBlur(){setTimeout(closeAc,150);}
+function pickAc(item) {
+  if(!_acTarget)return;
+  _acTarget.value=item.dataset.name;
+  _acTarget.dispatchEvent(new Event('change'));
+  closeAc();
+  const qty=_acTarget.closest('tr')&&_acTarget.closest('tr').querySelector('.qty-input');
+  if(qty){qty.focus();qty.select();}
+}
+function _acMove(dir) {
+  const ac=document.getElementById('nameAc');
+  const items=ac.querySelectorAll('.name-ac-item');
+  if(!items.length)return;
+  items[_acIdx>=0?_acIdx:0]&&items[_acIdx>=0?_acIdx:0].classList.remove('ac-sel');
+  _acIdx=Math.max(-1,Math.min(items.length-1,_acIdx+dir));
+  if(_acIdx>=0){items[_acIdx].classList.add('ac-sel');items[_acIdx].scrollIntoView({block:'nearest'});}
+}
 function nameInputKeydown(el, event) {
-  if(event.key==='Enter') {
+  const ac=document.getElementById('nameAc');
+  const acOpen=ac.style.display!=='none';
+  if(acOpen){
+    if(event.key==='ArrowDown'){event.preventDefault();_acMove(1);return;}
+    if(event.key==='ArrowUp'){event.preventDefault();_acMove(-1);return;}
+    if(event.key==='Escape'){event.preventDefault();closeAc();return;}
+    if(event.key==='Enter'){
+      event.preventDefault();
+      if(_acIdx>=0){pickAc(ac.querySelectorAll('.name-ac-item')[_acIdx]);}
+      else{closeAc();const qty=el.closest('tr')&&el.closest('tr').querySelector('.qty-input');if(qty){qty.focus();qty.select();}}
+      return;
+    }
+  } else if(event.key==='Enter'){
     event.preventDefault();
-    const qtyInput=el.closest('tr')&&el.closest('tr').querySelector('.qty-input');
-    if(qtyInput){qtyInput.focus();qtyInput.select();}
+    const qty=el.closest('tr')&&el.closest('tr').querySelector('.qty-input');
+    if(qty){qty.focus();qty.select();}
   }
 }
 function addItemToMemo(memoId){
@@ -1038,7 +1087,7 @@ function addItemToMemo(memoId){
   if(!tbody){renderResultsList();return;}
   const tr=document.createElement('tr');
   tr.innerHTML=`
-    <td><input type="text" class="name-input" value="" list="masterNamesList" onchange="updateItemName('${memoId}',${i},this.value,this)" onkeydown="nameInputKeydown(this,event)" style="width:100%;min-width:80px;border:1px solid #c00;border-radius:4px;padding:2px 6px;font-size:12px;background:rgba(204,0,0,0.05);color:#111;cursor:text"></td>
+    <td><input type="text" class="name-input" value="" onchange="updateItemName('${memoId}',${i},this.value,this)" oninput="nameInputInput(this)" onkeydown="nameInputKeydown(this,event)" onblur="nameInputBlur()" style="width:100%;min-width:80px;border:1px solid #c00;border-radius:4px;padding:2px 6px;font-size:12px;background:rgba(204,0,0,0.05);color:#111;cursor:text"></td>
     <td class="num-cell"><input class="qty-input" type="text" inputmode="decimal" value="1" onblur="updateItemQty('${memoId}',${i},this.value,this)" onkeydown="qtyKeydown(this,event)"></td>
     <td class="price-cell"><span style="color:#c00">未登録</span></td>
     <td class="sub-cell">—</td>
