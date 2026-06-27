@@ -200,7 +200,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v3.4</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v3.5</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -1034,7 +1034,7 @@ function nameInputInput(el) {
   const ac=document.getElementById('nameAc');
   const rect=el.getBoundingClientRect();
   ac.style.left=rect.left+'px';
-  ac.style.top=(rect.bottom+window.scrollY+2)+'px';
+  ac.style.top=(rect.bottom+2)+'px';
   ac.style.minWidth=Math.max(rect.width,160)+'px';
   ac.innerHTML=matches.map((x,i)=>`<div class="name-ac-item" data-name="${x.name.replace(/"/g,'&quot;')}" data-i="${i}" onmousedown="event.preventDefault();pickAc(this)">${x.name}<span style="color:var(--text3);font-size:11px">¥${x.price.toLocaleString()}</span></div>`).join('');
   ac.style.display='';
