@@ -200,7 +200,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v3.6</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v3.7</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -1320,6 +1320,13 @@ function importData(input) {
 }
 
 function copyMemoFormula(id){const memo=memos.find(m=>m.id===id);if(!memo||!memo.items)return;const f=memo.items.filter(it=>it.price>0).map(it=>`${it.name}*${it.qty}`).join('/');navigator.clipboard.writeText(f).then(()=>toast('B1形式をコピーしました','success'));}
+function copyKarteContent(karteId){
+  const k=KARTES.find(x=>x.id===karteId);if(!k)return;
+  const contents=k.records.map(r=>(r.content||'').trim()).filter(Boolean);
+  if(!contents.length) return toast('診療内容がありません','error');
+  const text=contents.join('/');
+  navigator.clipboard.writeText(text).then(()=>toast('診療内容をコピーしました','success')).catch(()=>toast('コピーに失敗しました','error'));
+}
 
 // ==================== KARTE MANAGEMENT ====================
 function updateFarmDatalist() {
@@ -1493,6 +1500,7 @@ function buildKarteCard(k, isDetail) {
     <div class="karte-hdr">
       <span class="karte-title">【${esc(k.farm)} / ${esc(k.cow)}】</span>
       <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-primary btn-xs" onclick="event.stopPropagation();copyKarteContent('${k.id}')">📋 内容コピー</button>
         ${(()=>{const stage=k.closed?2:k.finished?1:0;const bc=stage===2?'badge-closed':stage===1?'badge-unclosed':'badge-active';const bt=stage===2?'確定済':stage===1?'電子未入力':'診療中';return`<span class="karte-badge ${bc}">${bt}</span>`+(!k.closed?`<button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();toggleFinished('${k.id}')">${k.finished?'診療中に戻す':'終診にする'}</button>`:'');})()}
         <button class="btn btn-danger btn-xs" onclick="event.stopPropagation();deleteKarte('${k.id}')">削除</button>
       </div>
