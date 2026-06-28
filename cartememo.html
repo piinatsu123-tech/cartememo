@@ -200,7 +200,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v3.8</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v3.9</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -1797,7 +1797,7 @@ function renderKarteList() {
   if(farmF) list = list.filter(k=>k.farm===farmF);
   if(cowF) list = list.filter(k=>k.cow.toLowerCase().includes(cowF));
   if(!isSearching) list = list.filter(k=>!k.archived);
-  if(unclosedOnly) list = list.filter(k=>!k.closed);
+  if(unclosedOnly) list = list.filter(k=>k.finished && !k.closed);
   const getStage = k => k.closed ? 2 : k.finished ? 1 : 0;
   list.sort((a,b) => {
     const sd = getStage(a) - getStage(b);
