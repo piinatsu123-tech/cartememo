@@ -206,7 +206,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v4.0</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v4.1</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -736,6 +736,12 @@ function exportMasterCsv() {
   a.download = `vetmemo_master_${new Date().toISOString().slice(0,10)}.csv`; a.click();
   toast('マスターデータをエクスポートしました', 'success');
 }
+function refreshMasterUI() {
+  const dl = document.getElementById('masterNamesList');
+  if(dl) { dl.innerHTML=''; MASTER.forEach(m=>{const o=document.createElement('option');o.value=m.name;dl.appendChild(o);}); }
+  if(document.getElementById('masterList')) renderMasterList();
+  if(document.getElementById('masterEditor')) renderMasterEditor();
+}
 function renderMasterList() {
   const q = document.getElementById('masterSearch').value.trim().toLowerCase();
   const filtered = q ? MASTER.filter(m=>m.name.toLowerCase().includes(q)) : MASTER;
@@ -1137,7 +1143,7 @@ function scheduleCloudAutoSave() {
 
 async function cloudAutoSave(key, binId) {
   setSyncStatus('saving');
-  const data = {version:2, savedAt:new Date().toISOString(), memos, dictWords:DICT_WORDS, convPairs, kartes:KARTES, farms:FARMS};
+  const data = {version:2, savedAt:new Date().toISOString(), memos, dictWords:DICT_WORDS, convPairs, kartes:KARTES, farms:FARMS, master:MASTER};
   try {
     const resp = await fetch(`https://api.jsonbin.io/v3/b/${binId}`, {
       method:'PUT',
@@ -1192,12 +1198,19 @@ async function cloudAutoLoad() {
     if(Array.isArray(data.dictWords)) DICT_WORDS = data.dictWords;
     if(Array.isArray(data.convPairs)) convPairs = data.convPairs;
     if(Array.isArray(data.farms)) { FARMS = data.farms; FARMS.sort((a,b)=>a.localeCompare(b,'ja')); }
+    // master: クラウドを基準に、ローカルのみの品目を保持
+    if(Array.isArray(data.master) && data.master.length) {
+      const cloudNames = new Set(data.master.map(m=>m.name));
+      const localOnly = MASTER.filter(m=>!cloudNames.has(m.name));
+      MASTER = [...data.master, ...localOnly];
+    }
     _suppressAutoSave = true;
     saveToStorage(); // ローカルにも反映（クラウド再送信はしない）
     _suppressAutoSave = false;
     // 画面を再描画
     renderMemoQueue(); renderResultsList(); renderDict(); updateBadge();
     updateFarmDatalist(); updateKarteFarmFilter(); renderKarteList();
+    refreshMasterUI();
     setSyncStatus('synced');
     document.getElementById('cloudInfo').textContent = `起動時読み込み: ${new Date().toLocaleString('ja-JP')}（メモ${memos.length}件・カルテ${KARTES.length}件）`;
   } catch(e) {
@@ -1257,7 +1270,7 @@ function copyAllSettings() {
 async function cloudSave() {
   const key=document.getElementById('jsonbinKey').value.trim();
   if(!key) return toast('jsonbin.io APIキーを入力してください','error');
-  const data={version:2,savedAt:new Date().toISOString(),memos,dictWords:DICT_WORDS,convPairs,kartes:KARTES,farms:FARMS};
+  const data={version:2,savedAt:new Date().toISOString(),memos,dictWords:DICT_WORDS,convPairs,kartes:KARTES,farms:FARMS,master:MASTER};
   const binId=document.getElementById('jsonbinId').value.trim();
   try {
     let resp;
@@ -1289,6 +1302,7 @@ async function cloudLoad() {
     let newKartes=0;
     if(Array.isArray(data.kartes)){const eIds=new Set(KARTES.map(k=>k.id));const added=data.kartes.filter(k=>!eIds.has(k.id));KARTES=[...KARTES,...added];newKartes=added.length;}
     if(Array.isArray(data.farms)){data.farms.forEach(f=>{if(!FARMS.includes(f))FARMS.push(f);});FARMS.sort((a,b)=>a.localeCompare(b,'ja'));updateFarmDatalist();}
+    if(Array.isArray(data.master)){const names=new Set(MASTER.map(m=>m.name));data.master.forEach(m=>{if(!names.has(m.name))MASTER.push(m);});refreshMasterUI();}
     saveToStorage(); saveJsonbinSettings();
     renderMemoQueue();renderResultsList();renderDict();updateBadge();
     document.getElementById('cloudInfo').textContent=`最終読み込み: ${new Date().toLocaleString('ja-JP')}（メモ${newMemos.length}件・カルテ${newKartes}件追加）`;
@@ -1298,7 +1312,7 @@ async function cloudLoad() {
 
 // ==================== JSON BACKUP ====================
 function exportData() {
-  const data={version:2,exportedAt:new Date().toISOString(),memos,dictWords:DICT_WORDS,convPairs,kartes:KARTES,farms:FARMS};
+  const data={version:2,exportedAt:new Date().toISOString(),memos,dictWords:DICT_WORDS,convPairs,kartes:KARTES,farms:FARMS,master:MASTER};
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
   a.download=`cartememo_${new Date().toISOString().slice(0,10)}.json`;a.click();
@@ -1317,6 +1331,7 @@ function importData(input) {
       let newKartes=0;
       if(Array.isArray(data.kartes)){const eIds3=new Set(KARTES.map(k=>k.id));const added=data.kartes.filter(k=>!eIds3.has(k.id));KARTES=[...KARTES,...added];newKartes=added.length;}
       if(Array.isArray(data.farms)){data.farms.forEach(f=>{if(!FARMS.includes(f))FARMS.push(f);});FARMS.sort((a,b)=>a.localeCompare(b,'ja'));updateFarmDatalist();}
+      if(Array.isArray(data.master)){const mnames=new Set(MASTER.map(m=>m.name));data.master.forEach(m=>{if(!mnames.has(m.name))MASTER.push(m);});refreshMasterUI();}
       saveToStorage();renderMemoQueue();renderResultsList();renderDict();updateBadge();
       toast(`メモ${newMemos.length}件・カルテ${newKartes}件を追加しました`,'success');
     } catch(err){toast('読み込みエラー: '+err.message,'error');}
