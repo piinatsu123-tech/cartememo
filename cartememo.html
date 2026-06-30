@@ -120,6 +120,9 @@ input[type=checkbox]{width:auto;margin:0}
 .karte-card.selected{border:2px solid #111;border-left:2px solid #111}
 .karte-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px}
 .karte-title{font-size:16px;font-weight:700;color:#111}
+.karte-title-edit{font-size:16px;font-weight:700;color:#111;border:1px solid transparent;border-radius:4px;padding:1px 4px;background:transparent;font-family:inherit}
+.karte-title-edit:hover{border-color:var(--border2)}
+.karte-title-edit:focus{border-color:var(--accent);background:#fff;outline:none}
 .karte-badge{font-size:11px;padding:2px 9px;border-radius:10px;border:1px solid;font-weight:500}
 .badge-unclosed{color:#c00;border-color:#c00}
 .badge-closed{color:var(--text3);border-color:var(--border2)}
@@ -206,7 +209,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v4.1</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v4.2</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -1520,7 +1523,7 @@ function buildKarteCard(k, isDetail) {
   const elecRow = `<div class="total-row elec-row"><span style="color:var(--text2)">電子カルテ</span><div class="elec-input-wrap"><input type="number" id="elec-${k.id}" min="0" step="100" value="${k.electronic_amount!==null?k.electronic_amount:''}" placeholder="金額を入力" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter')this.blur()" onblur="autoSaveElectronic('${k.id}')"></div></div>`;
   return `<div class="karte-card" id="card-${k.id}">
     <div class="karte-hdr">
-      <span class="karte-title">【${esc(k.farm)} / ${esc(k.cow)}】</span>
+      <span class="karte-title" style="display:inline-flex;align-items:center;gap:4px">【<input type="text" class="karte-title-edit" value="${esc(k.farm)}" onclick="event.stopPropagation()" onblur="updateKarteField('${k.id}','farm',this.value)" onkeydown="if(event.key==='Enter')this.blur()" title="農場名" style="width:8em"> / <input type="text" class="karte-title-edit" value="${esc(k.cow)}" onclick="event.stopPropagation()" onblur="updateKarteField('${k.id}','cow',this.value)" onkeydown="if(event.key==='Enter')this.blur()" title="牛番号" style="width:5em">】</span>
       <div style="display:flex;gap:8px;align-items:center">
         ${(()=>{const stage=k.closed?2:k.finished?1:0;const bc=stage===2?'badge-closed':stage===1?'badge-unclosed':'badge-active';const bt=stage===2?'確定済':stage===1?'電子未入力':'診療中';return`<span class="karte-badge ${bc}">${bt}</span>`+(!k.closed?`<button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();toggleFinished('${k.id}')">${k.finished?'診療中に戻す':'終診にする'}</button>`:'');})()}
         <button class="btn btn-danger btn-xs" onclick="event.stopPropagation();deleteKarte('${k.id}')">削除</button>
@@ -1773,6 +1776,24 @@ function updateRecord(karteId, recIdx, field, value) {
     renderKarteList();
     return;
   }
+}
+
+function updateKarteField(karteId, field, value) {
+  const k = KARTES.find(x=>x.id===karteId);
+  if(!k) return;
+  const v = (value||'').trim();
+  if(field==='farm') {
+    if(!v) return toast('農場名は空にできません','error');
+    k.farm = v;
+    if(!FARMS.includes(v)){FARMS.push(v);FARMS.sort((a,b)=>a.localeCompare(b,'ja'));updateFarmDatalist();updateKarteFarmFilter();}
+  } else if(field==='cow') {
+    if(!v) return toast('牛番号は空にできません','error');
+    k.cow = v;
+  } else return;
+  saveToStorage();
+  const label=document.getElementById('karte-active-label');
+  if(label) label.textContent=`【${k.farm} / ${k.cow}】`;
+  toast('カルテ情報を更新しました','success');
 }
 
 function deleteRecord(karteId, recIdx) {
