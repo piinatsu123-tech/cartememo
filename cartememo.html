@@ -47,6 +47,11 @@ input[type=checkbox]{width:auto;margin:0}
 .master-list{max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
 .m-row{display:flex;justify-content:space-between;align-items:center;background:#fff;border:1px solid var(--border);border-radius:4px;padding:5px 8px;font-size:12px;cursor:pointer;transition:background .12s}
 .m-row:hover{background:var(--surface2)}.m-name{color:#111;font-weight:500}.m-price{color:var(--text2);font-family:'JetBrains Mono',monospace;font-size:11px}
+.fd-list{display:flex;flex-direction:column;gap:4px;max-height:300px;overflow-y:auto}
+.fd-row{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--border);border-radius:5px;padding:6px 10px}
+.fd-row .fd-name{flex:1;min-width:0;font-size:14px;color:#111;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fd-row input{width:88px;font-size:16px;text-align:right;padding:6px 8px;border:1px solid var(--border2);border-radius:5px;font-family:'JetBrains Mono',monospace}
+.fd-row .fd-unit{font-size:13px;color:var(--text3)}
 .btn{border:none;border-radius:5px;cursor:pointer;font-family:'Noto Sans JP',sans-serif;font-weight:600;font-size:13px;padding:8px 16px;transition:all .12s;display:inline-flex;align-items:center;gap:6px}
 .btn-primary{background:#111;color:#fff}.btn-primary:hover{background:#333}.btn-primary:disabled{opacity:.35;cursor:not-allowed}
 .btn-ghost{background:#fff;color:#333;border:1px solid var(--border2)}.btn-ghost:hover{background:var(--surface);border-color:#aaa}
@@ -230,7 +235,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v4.3</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v4.4</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -412,6 +417,14 @@ input[type=checkbox]{width:auto;margin:0}
   </div>
 
   <div class="panel">
+    <div class="panel-hdr"><h2>🚗 農家ごとの距離設定</h2></div>
+    <div class="panel-body">
+      <p class="input-hint" style="margin-bottom:10px">農家ごとに往診距離(km)を登録すると、d-karte出力時に距離欄へ自動で入ります。空欄なら距離なしで出力します。</p>
+      <div id="farmDistList"></div>
+    </div>
+  </div>
+
+  <div class="panel">
     <div class="panel-hdr"><h2>📖 専門用語辞書</h2></div>
     <div class="panel-body">
       <p class="input-hint" style="margin-bottom:10px">✅ 正しい表記を登録するだけでOK。AIが音声誤変換を自動補正します。</p>
@@ -501,6 +514,7 @@ let PRESETS = [
 ];
 let OJI_FEE = 0;
 let FARMS = [];
+let FARM_DIST = {}; // 農家名 -> 距離(km) の辞書
 let activeResultId = null;
 let karteSaveMemoId = null;
 let masterEditIndex = -1;
@@ -598,6 +612,7 @@ function switchTab(name) {
   if(name === 'calc') renderResultsList();
   if(name === 'karte') { updateKarteFarmFilter(); renderKarteList(); }
   if(name === 'stats') renderStats();
+  if(name === 'settings') renderFarmDistList();
 }
 
 // ==================== STORAGE ====================
@@ -611,6 +626,7 @@ function saveToStorage() {
     localStorage.setItem('cm_convpairs', JSON.stringify(convPairs));
     localStorage.setItem('cm_kartes', JSON.stringify(KARTES));
     localStorage.setItem('cm_farms', JSON.stringify(FARMS));
+    localStorage.setItem('cm_farmdist', JSON.stringify(FARM_DIST));
   } catch(e){}
   if(!_suppressAutoSave) scheduleCloudAutoSave();
 }
@@ -623,6 +639,7 @@ function loadFromStorage() {
     const cp = localStorage.getItem('cm_convpairs'); if(cp) convPairs = JSON.parse(cp);
     const k = localStorage.getItem('cm_kartes'); if(k) KARTES = JSON.parse(k);
     const f = localStorage.getItem('cm_farms'); if(f) FARMS = JSON.parse(f);
+    const fd = localStorage.getItem('cm_farmdist'); if(fd) FARM_DIST = JSON.parse(fd);
     const ak = localStorage.getItem('cm_active_karte'); if(ak) activeKarteId = ak;
   } catch(e){}
 }
@@ -1167,7 +1184,7 @@ function scheduleCloudAutoSave() {
 
 async function cloudAutoSave(key, binId) {
   setSyncStatus('saving');
-  const data = {version:2, savedAt:new Date().toISOString(), memos, dictWords:DICT_WORDS, convPairs, kartes:KARTES, farms:FARMS, master:MASTER};
+  const data = {version:2, savedAt:new Date().toISOString(), memos, dictWords:DICT_WORDS, convPairs, kartes:KARTES, farms:FARMS, master:MASTER, farmDist:FARM_DIST};
   try {
     const resp = await fetch(`https://api.jsonbin.io/v3/b/${binId}`, {
       method:'PUT',
@@ -1222,6 +1239,7 @@ async function cloudAutoLoad() {
     if(Array.isArray(data.dictWords)) DICT_WORDS = data.dictWords;
     if(Array.isArray(data.convPairs)) convPairs = data.convPairs;
     if(Array.isArray(data.farms)) { FARMS = data.farms; FARMS.sort((a,b)=>a.localeCompare(b,'ja')); }
+    if(data.farmDist && typeof data.farmDist==='object') FARM_DIST = {...FARM_DIST, ...data.farmDist};
     // master: クラウドを基準に、ローカルのみの品目を保持
     if(Array.isArray(data.master) && data.master.length) {
       const cloudNames = new Set(data.master.map(m=>m.name));
@@ -1294,7 +1312,7 @@ function copyAllSettings() {
 async function cloudSave() {
   const key=document.getElementById('jsonbinKey').value.trim();
   if(!key) return toast('jsonbin.io APIキーを入力してください','error');
-  const data={version:2,savedAt:new Date().toISOString(),memos,dictWords:DICT_WORDS,convPairs,kartes:KARTES,farms:FARMS,master:MASTER};
+  const data={version:2,savedAt:new Date().toISOString(),memos,dictWords:DICT_WORDS,convPairs,kartes:KARTES,farms:FARMS,master:MASTER,farmDist:FARM_DIST};
   const binId=document.getElementById('jsonbinId').value.trim();
   try {
     let resp;
@@ -1327,6 +1345,7 @@ async function cloudLoad() {
     if(Array.isArray(data.kartes)){const eIds=new Set(KARTES.map(k=>k.id));const added=data.kartes.filter(k=>!eIds.has(k.id));KARTES=[...KARTES,...added];newKartes=added.length;}
     if(Array.isArray(data.farms)){data.farms.forEach(f=>{if(!FARMS.includes(f))FARMS.push(f);});FARMS.sort((a,b)=>a.localeCompare(b,'ja'));updateFarmDatalist();}
     if(Array.isArray(data.master)){const names=new Set(MASTER.map(m=>m.name));data.master.forEach(m=>{if(!names.has(m.name))MASTER.push(m);});refreshMasterUI();}
+    if(data.farmDist&&typeof data.farmDist==='object'){Object.keys(data.farmDist).forEach(f=>{if(FARM_DIST[f]==null)FARM_DIST[f]=data.farmDist[f];});}
     saveToStorage(); saveJsonbinSettings();
     renderMemoQueue();renderResultsList();renderDict();updateBadge();
     document.getElementById('cloudInfo').textContent=`最終読み込み: ${new Date().toLocaleString('ja-JP')}（メモ${newMemos.length}件・カルテ${newKartes}件追加）`;
@@ -1336,7 +1355,7 @@ async function cloudLoad() {
 
 // ==================== JSON BACKUP ====================
 function exportData() {
-  const data={version:2,exportedAt:new Date().toISOString(),memos,dictWords:DICT_WORDS,convPairs,kartes:KARTES,farms:FARMS,master:MASTER};
+  const data={version:2,exportedAt:new Date().toISOString(),memos,dictWords:DICT_WORDS,convPairs,kartes:KARTES,farms:FARMS,master:MASTER,farmDist:FARM_DIST};
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
   a.download=`cartememo_${new Date().toISOString().slice(0,10)}.json`;a.click();
@@ -1356,6 +1375,7 @@ function importData(input) {
       if(Array.isArray(data.kartes)){const eIds3=new Set(KARTES.map(k=>k.id));const added=data.kartes.filter(k=>!eIds3.has(k.id));KARTES=[...KARTES,...added];newKartes=added.length;}
       if(Array.isArray(data.farms)){data.farms.forEach(f=>{if(!FARMS.includes(f))FARMS.push(f);});FARMS.sort((a,b)=>a.localeCompare(b,'ja'));updateFarmDatalist();}
       if(Array.isArray(data.master)){const mnames=new Set(MASTER.map(m=>m.name));data.master.forEach(m=>{if(!mnames.has(m.name))MASTER.push(m);});refreshMasterUI();}
+      if(data.farmDist&&typeof data.farmDist==='object'){Object.keys(data.farmDist).forEach(f=>{if(FARM_DIST[f]==null)FARM_DIST[f]=data.farmDist[f];});}
       saveToStorage();renderMemoQueue();renderResultsList();renderDict();updateBadge();
       toast(`メモ${newMemos.length}件・カルテ${newKartes}件を追加しました`,'success');
     } catch(err){toast('読み込みエラー: '+err.message,'error');}
@@ -1380,8 +1400,9 @@ function toKarteLine(k, r) {
   const san = s => String(s==null?'':s).replace(/\|/g, '｜').trim();
   const date = (r.date||'').replace(/-/g, '');            // YYYYMMDD
   const time = '';                                        // カルテレコードに時間情報なし
-  const dest = san((r.oji && (r.oji_memo||r.ojiMemo)) ? (r.oji_memo||r.ojiMemo) : (k.farm||''));
-  const dist = '';                                        // d-karte側の農家辞書が自動補完
+  const dest = san(r.oji_memo||r.ojiMemo||'');            // 往診元欄の値（空欄なら空欄）
+  const distVal = (k && FARM_DIST[k.farm]!=null && FARM_DIST[k.farm]!=='') ? FARM_DIST[k.farm] : '';
+  const dist = san(distVal);                              // 農家ごとに登録した距離(km)
   const temp = '';                                        // カルテレコードに体温情報なし
   const symptom = '';                                     // カルテレコードに症状情報なし
   const content = san(r.content);                         // 略称/略称*用量 の / 区切り列
@@ -1457,6 +1478,29 @@ async function copyKarteQueue(karteId) {
 function updateFarmDatalist() {
   const dl = document.getElementById('farmDatalist');
   if(dl) dl.innerHTML = FARMS.map(f => `<option value="${f}">`).join('');
+}
+function renderFarmDistList() {
+  const el = document.getElementById('farmDistList');
+  if(!el) return;
+  // FARMS とカルテに登場する農家の和集合
+  const set = new Set(FARMS);
+  KARTES.forEach(k=>{ if(k.farm) set.add(k.farm); });
+  const farms = [...set].sort((a,b)=>a.localeCompare(b,'ja'));
+  if(!farms.length){ el.innerHTML = '<p class="input-hint">まだ農家がありません。カルテを保存すると表示されます。</p>'; return; }
+  el.innerHTML = '<div class="fd-list">' + farms.map(f=>{
+    const v = (FARM_DIST[f]!=null && FARM_DIST[f]!=='') ? FARM_DIST[f] : '';
+    return `<div class="fd-row">
+      <span class="fd-name" title="${esc(f)}">${esc(f)}</span>
+      <input type="number" min="0" step="0.1" inputmode="decimal" value="${v}" placeholder="—" data-farm="${esc(f)}" onchange="setFarmDist(this.dataset.farm,this.value)">
+      <span class="fd-unit">km</span>
+    </div>`;
+  }).join('') + '</div>';
+}
+function setFarmDist(farm, val) {
+  const s = String(val==null?'':val).trim();
+  if(s==='') { delete FARM_DIST[farm]; }
+  else { const n = parseFloat(s); if(isNaN(n)||n<0){ toast('正しい距離を入力してください','error'); return; } FARM_DIST[farm] = n; }
+  saveToStorage();
 }
 function updateKarteFarmFilter() {
   const sel = document.getElementById('karte-filter-farm');
