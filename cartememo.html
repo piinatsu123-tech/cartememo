@@ -161,6 +161,27 @@ input[type=checkbox]{width:auto;margin:0}
 .rec-quick-row{display:grid;grid-template-columns:112px 1fr 88px 26px;gap:5px;align-items:center;padding:6px 0;border-top:1px dashed var(--border2);margin-top:4px}
 .rec-quick-row input{padding:4px 6px;font-size:13px;font-family:'JetBrains Mono',monospace;border:1px solid var(--border2);border-radius:4px;width:100%;text-align:right}
 .rec-add-btn{margin-top:8px;font-size:12px;color:var(--text2);background:none;border:1px dashed var(--border2);border-radius:5px;padding:7px 0;cursor:pointer;width:100%;text-align:center;font-family:'Noto Sans JP',sans-serif;font-weight:600;transition:all .12s}
+.dk-export{margin-top:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface)}
+.dk-export>summary{cursor:pointer;font-size:16px;font-weight:700;color:var(--text2);padding:12px 14px;user-select:none;list-style:none;display:flex;align-items:center;gap:8px}
+.dk-export>summary::-webkit-details-marker{display:none}
+.dk-export>summary::before{content:'▸';font-size:12px;color:var(--text3)}
+.dk-export[open]>summary::before{content:'▾'}
+.dk-export-body{padding:0 14px 14px}
+.dk-controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.dk-controls button{min-height:44px;font-size:16px;border-radius:6px;padding:0 14px;cursor:pointer;font-family:'Noto Sans JP',sans-serif;font-weight:600}
+.dk-controls .dk-sel{background:#fff;border:1px solid var(--border2);color:var(--text2)}
+.dk-controls .dk-copy{margin-left:auto;background:#111;border:1px solid #111;color:#fff}
+.dk-rows{display:flex;flex-direction:column;gap:2px}
+.dk-row{display:flex;align-items:center;gap:10px;padding:8px 6px;border-radius:5px;cursor:pointer;font-size:16px;border-bottom:1px solid var(--border)}
+.dk-row:last-child{border-bottom:none}
+.dk-row input[type=checkbox]{width:22px;height:22px;flex-shrink:0;accent-color:#111;margin:0}
+.dk-row .dk-date{font-family:'JetBrains Mono',monospace;font-size:14px;color:var(--text2);flex-shrink:0;width:52px}
+.dk-row .dk-content{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px}
+.dk-row.dk-done{opacity:0.5}
+.dk-row .dk-badge{font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:4px;padding:1px 5px;flex-shrink:0}
+.dk-fallback-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px}
+.dk-fallback-box{background:#fff;border-radius:10px;padding:16px;width:100%;max-width:520px;display:flex;flex-direction:column;gap:10px}
+.dk-fallback-box textarea{width:100%;min-height:180px;font-family:'JetBrains Mono',monospace;font-size:14px;border:1px solid var(--border);border-radius:6px;padding:10px}
 .rec-add-btn:hover{background:var(--surface);border-color:#888;color:#111}
 .preset-settings{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:7px 10px;background:var(--surface);border:1px solid var(--border);border-radius:5px;margin-bottom:10px;font-size:11px;color:var(--text3)}
 .preset-settings-label{font-weight:700;letter-spacing:.06em;white-space:nowrap}
@@ -209,7 +230,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v4.2</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v4.3</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -1352,6 +1373,86 @@ function copyRecordContent(karteId, recIdx){
   navigator.clipboard.writeText(text).then(()=>toast('診療内容をコピーしました','success')).catch(()=>toast('コピーに失敗しました','error'));
 }
 
+// ==================== d-karte キュー出力 ====================
+// フォーマット: 日付｜時間｜往診先｜距離｜体温｜症状｜診療内容 （全角パイプ U+FF5C、常に6本）
+function toKarteLine(k, r) {
+  const P = '｜';
+  const san = s => String(s==null?'':s).replace(/\|/g, '｜').trim();
+  const date = (r.date||'').replace(/-/g, '');            // YYYYMMDD
+  const time = '';                                        // カルテレコードに時間情報なし
+  const dest = san((r.oji && (r.oji_memo||r.ojiMemo)) ? (r.oji_memo||r.ojiMemo) : (k.farm||''));
+  const dist = '';                                        // d-karte側の農家辞書が自動補完
+  const temp = '';                                        // カルテレコードに体温情報なし
+  const symptom = '';                                     // カルテレコードに症状情報なし
+  const content = san(r.content);                         // 略称/略称*用量 の / 区切り列
+  return [date, time, dest, dist, temp, symptom, content].join(P);
+}
+function dkSelect(karteId, mode) {
+  const k = KARTES.find(x=>x.id===karteId); if(!k) return;
+  const container = document.getElementById(`dk-rows-${karteId}`); if(!container) return;
+  container.querySelectorAll('.dk-chk').forEach(c=>{
+    const r = k.records[parseInt(c.dataset.i)];
+    if(mode==='all') c.checked = true;
+    else if(mode==='none') c.checked = false;
+    else if(mode==='new') c.checked = !!r && !r.karteExported && (r.content||'').trim().length>0;
+  });
+}
+function copyToClipboard(text) {
+  return new Promise(resolve=>{
+    if(navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(()=>resolve(true)).catch(()=>resolve(fallbackCopy(text)));
+    } else resolve(fallbackCopy(text));
+  });
+}
+function fallbackCopy(text) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position='fixed'; ta.style.top='0'; ta.style.left='0'; ta.style.opacity='0';
+    ta.readOnly = false; ta.contentEditable = 'true';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    try { const range=document.createRange(); range.selectNodeContents(ta); const sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(range); } catch(e){}
+    ta.setSelectionRange(0, text.length);
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch(e){ return false; }
+}
+function showCopyFallback(text) {
+  const ov = document.createElement('div');
+  ov.className = 'dk-fallback-overlay';
+  ov.innerHTML = `<div class="dk-fallback-box">
+    <div style="font-weight:700;font-size:15px">下のテキストを長押しで全選択→コピーしてください</div>
+    <textarea readonly></textarea>
+    <button class="btn btn-primary" style="min-height:44px;font-size:16px" onclick="this.closest('.dk-fallback-overlay').remove()">閉じる</button>
+  </div>`;
+  ov.addEventListener('click', e=>{ if(e.target===ov) ov.remove(); });
+  document.body.appendChild(ov);
+  const ta = ov.querySelector('textarea');
+  ta.value = text; ta.focus(); ta.select();
+}
+async function copyKarteQueue(karteId) {
+  const k = KARTES.find(x=>x.id===karteId); if(!k) return;
+  const container = document.getElementById(`dk-rows-${karteId}`); if(!container) return;
+  const checks = [...container.querySelectorAll('.dk-chk:checked')];
+  if(!checks.length) return toast('レコードを選択してください','error');
+  const idxs = checks.map(c=>parseInt(c.dataset.i)).filter(i=>k.records[i]);
+  const text = idxs.map(i=>toKarteLine(k, k.records[i])).join('\n');
+  const ok = await copyToClipboard(text);
+  if(ok) {
+    const now = new Date().toISOString();
+    idxs.forEach(i=>{ k.records[i].karteExported = true; k.records[i].karteExportedAt = now; });
+    saveToStorage();
+    renderKarteList();
+    const det = document.querySelector(`#card-${karteId} .dk-export`);
+    if(det) det.open = true;
+    toast(`${idxs.length}件コピーしました`,'success');
+  } else {
+    showCopyFallback(text);
+  }
+}
+
 // ==================== KARTE MANAGEMENT ====================
 function updateFarmDatalist() {
   const dl = document.getElementById('farmDatalist');
@@ -1544,7 +1645,34 @@ function buildKarteCard(k, isDetail) {
       ${elecRow}
       <div class="total-row ${diffClass}" style="margin-top:4px;padding-top:8px;border-top:1px solid var(--border)"><span style="font-weight:600">差額（電子−紙）</span><span class="total-val" style="font-size:16px">${diffText}</span></div>
     </div>
+    ${buildDkExport(k, sortedRecs)}
   </div>`;
+}
+
+function buildDkExport(k, sortedRecs) {
+  const rows = sortedRecs.map(({r,i})=>{
+    const hasContent = (r.content||'').trim().length>0;
+    const defChk = hasContent && !r.karteExported;
+    const dateLabel = r.date ? r.date.slice(5).replace('-','/') : '—';
+    return `<label class="dk-row ${r.karteExported?'dk-done':''}" onclick="event.stopPropagation()">
+      <input type="checkbox" class="dk-chk" data-i="${i}" ${defChk?'checked':''}>
+      <span class="dk-date">${dateLabel}</span>
+      <span class="dk-content">${esc(r.content||'（内容なし）')}</span>
+      ${r.karteExported?'<span class="dk-badge">出力済</span>':''}
+    </label>`;
+  }).join('');
+  return `<details class="dk-export">
+    <summary>📋 d-karte用に出力</summary>
+    <div class="dk-export-body">
+      <div class="dk-controls">
+        <button class="dk-sel" onclick="event.stopPropagation();dkSelect('${k.id}','all')">全選択</button>
+        <button class="dk-sel" onclick="event.stopPropagation();dkSelect('${k.id}','new')">未出力のみ</button>
+        <button class="dk-sel" onclick="event.stopPropagation();dkSelect('${k.id}','none')">解除</button>
+        <button class="dk-copy" onclick="event.stopPropagation();copyKarteQueue('${k.id}')">📋 コピー</button>
+      </div>
+      <div class="dk-rows" id="dk-rows-${k.id}">${rows}</div>
+    </div>
+  </details>`;
 }
 
 function loadOjiFee() {
