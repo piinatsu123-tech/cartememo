@@ -94,6 +94,10 @@ input[type=checkbox]{width:auto;margin:0}
 .sub-cell{font-family:'JetBrains Mono',monospace;color:#111;text-align:right;font-weight:600}
 .qty-input{width:55px;padding:2px 5px;font-size:12px;font-family:'JetBrains Mono',monospace;text-align:right}
 .del-row{background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 3px}.del-row:hover{color:#c00}
+.row-actions{white-space:nowrap;text-align:right}
+.move-row{background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;padding:0 2px;line-height:1}
+.move-row:hover:not(:disabled){color:#111}
+.move-row:disabled{color:var(--border2);cursor:default}
 .formula-line{background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:7px 10px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);word-break:break-all;margin-top:8px}
 .formula-line span{color:#111;font-weight:600}
 .rc-actions{display:flex;gap:8px;padding:10px 16px;border-top:1px solid var(--border);flex-wrap:wrap}
@@ -237,7 +241,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v4.5</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v4.6</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -966,7 +970,11 @@ function renderResultsList() {
         <td class="num-cell"><input class="qty-input" type="text" inputmode="decimal" value="${it.qty}" onblur="updateItemQty('${m.id}',${i},this.value,this)" onkeydown="qtyKeydown(this,event)"></td>
         <td class="price-cell">${it.price>0?'¥'+it.price.toLocaleString():'<span style="color:#c00">未登録</span>'}</td>
         <td class="sub-cell">${sub>0?'¥'+sub.toLocaleString():'—'}</td>
-        <td><button class="del-row" tabindex="-1" onclick="removeItemFromMemo('${m.id}',${i})">×</button></td>
+        <td class="row-actions">
+          <button class="move-row" tabindex="-1" ${i===0?'disabled':''} onclick="moveItem('${m.id}',${i},-1)" title="上へ">▲</button>
+          <button class="move-row" tabindex="-1" ${i===(m.items||[]).length-1?'disabled':''} onclick="moveItem('${m.id}',${i},1)" title="下へ">▼</button>
+          <button class="del-row" tabindex="-1" onclick="removeItemFromMemo('${m.id}',${i})">×</button>
+        </td>
       </tr>`;
     }).join('');
     const isSaved = m.karte_saved && !expandedResultIds.has(m.id);
@@ -1152,6 +1160,13 @@ function addItemToMemo(memoId){
   if(nameInput){nameInput.focus();}
 }
 function removeItemFromMemo(memoId,idx){const m=memos.find(x=>x.id===memoId);if(!m||!m.items)return;m.items.splice(idx,1);saveToStorage();renderResultsList();}
+function moveItem(memoId,idx,dir){
+  const m=memos.find(x=>x.id===memoId);if(!m||!m.items)return;
+  const j=idx+dir;
+  if(j<0||j>=m.items.length)return;
+  const t=m.items[idx];m.items[idx]=m.items[j];m.items[j]=t;
+  saveToStorage();renderResultsList();
+}
 async function reparse(id){const memo=memos.find(m=>m.id===id);if(!memo)return;memo.status='pending';await processSingle(id);renderResultsList();}
 
 // ==================== DISCORD ====================
