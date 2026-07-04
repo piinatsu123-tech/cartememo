@@ -241,7 +241,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v4.6</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v4.7</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -1764,14 +1764,12 @@ function toggleOjiNoFee(karteId, recIdx) {
   const k = KARTES.find(x=>x.id===karteId);
   if(!k || recIdx<0 || recIdx>=k.records.length) return;
   const r = k.records[recIdx];
-  _normOjiFee(r);
-  if(r.oji && !r.ojiFeeAdded) {     // すでに「往診（料金なし）」→ オフ
+  if(r.oji && r.ojiFeeAdded===false) {  // すでに「往診（料金なし）」→ オフ
     r.oji = false;
-  } else {                          // 「往診（料金なし）」にする（料金が付いていれば外す）
-    if(r.ojiFeeAdded) { r.amount = Math.max(0, (r.amount||0) - OJI_FEE); r.ojiFeeAdded = false; }
+  } else {                              // 「往診（料金なし）」にする（金額は一切変更しない）
     r.oji = true;
+    r.ojiFeeAdded = false;
   }
-  recalcPaperTotal(k);
   saveToStorage();
   renderKarteList();
 }
