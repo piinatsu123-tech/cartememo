@@ -196,6 +196,8 @@ input[type=checkbox]{width:auto;margin:0}
 .rec-oji-label{display:flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;white-space:nowrap}
 .rec-oji-label input[type=checkbox]{width:13px;height:13px;accent-color:#111;margin:0;cursor:pointer}
 .rec-oji-label:has(input:checked){color:#111}
+.rec-oji-nofee{flex-shrink:0;font-size:11px;font-weight:600;color:var(--text3);background:#fff;border:1px solid var(--border2);border-radius:4px;padding:3px 6px;cursor:pointer;white-space:nowrap;font-family:'Noto Sans JP',sans-serif}
+.rec-oji-nofee.active{color:#fff;background:#111;border-color:#111}
 .rec-oji-memo{flex:1;min-width:120px;padding:3px 6px;font-size:12px}
 
 /* ===== STATS ===== */
@@ -235,7 +237,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v4.4</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v4.5</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -1656,7 +1658,8 @@ function buildKarteCard(k, isDetail) {
         <div style="display:flex;gap:6px;align-items:center">
           <input type="text" value="${esc(r.content)}" placeholder="診療内容" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'content',this.value)" style="flex:1;min-width:0">
           <button class="btn btn-ghost btn-xs" style="flex-shrink:0;padding:2px 6px" onclick="event.stopPropagation();copyRecordContent('${k.id}',${i})" title="この診療内容をコピー">📋</button>
-          <label class="rec-oji-label" onclick="event.stopPropagation()"><input type="checkbox" ${r.oji?'checked':''} onchange="toggleOji('${k.id}',${i},this)"> 往診</label>
+          <label class="rec-oji-label" onclick="event.stopPropagation()"><input type="checkbox" ${(r.oji&&r.ojiFeeAdded!==false)?'checked':''} onchange="toggleOji('${k.id}',${i},this)"> 往診</label>
+          <button type="button" class="rec-oji-nofee ${(r.oji&&r.ojiFeeAdded===false)?'active':''}" onclick="event.stopPropagation();toggleOjiNoFee('${k.id}',${i})" title="金額を足さずに往診チェック">往診¥なし</button>
           <input type="text" class="rec-oji-memo" value="${esc(r.oji_memo||'')}" placeholder="往診元" onclick="event.stopPropagation()" onblur="updateOjiMemo('${k.id}',${i},this.value)">
         </div>
         <div class="rec-preset-sub">${presetChecks}</div>
@@ -1724,15 +1727,34 @@ function loadOjiFee() {
   OJI_FEE = m ? m.price : 0;
 }
 function saveOjiFee(val) {} // MASTERから自動取得のため不要
+// 旧データ互換: r.oji=true で ojiFeeAdded 未定義なら「料金あり」とみなす
+function _normOjiFee(r){ if(r.oji && r.ojiFeeAdded===undefined) r.ojiFeeAdded=true; }
 function toggleOji(karteId, recIdx, checkbox) {
   const k = KARTES.find(x=>x.id===karteId);
   if(!k || recIdx<0 || recIdx>=k.records.length) return;
   const r = k.records[recIdx];
-  r.oji = checkbox.checked;
-  if(r.oji) {
-    r.amount = (r.amount||0) + OJI_FEE;
-  } else {
-    r.amount = Math.max(0, (r.amount||0) - OJI_FEE);
+  _normOjiFee(r);
+  if(checkbox.checked) {           // 往診（料金あり）にする
+    r.oji = true;
+    if(!r.ojiFeeAdded) { r.amount = (r.amount||0) + OJI_FEE; r.ojiFeeAdded = true; }
+  } else {                          // 往診オフ
+    if(r.ojiFeeAdded) { r.amount = Math.max(0, (r.amount||0) - OJI_FEE); r.ojiFeeAdded = false; }
+    r.oji = false;
+  }
+  recalcPaperTotal(k);
+  saveToStorage();
+  renderKarteList();
+}
+function toggleOjiNoFee(karteId, recIdx) {
+  const k = KARTES.find(x=>x.id===karteId);
+  if(!k || recIdx<0 || recIdx>=k.records.length) return;
+  const r = k.records[recIdx];
+  _normOjiFee(r);
+  if(r.oji && !r.ojiFeeAdded) {     // すでに「往診（料金なし）」→ オフ
+    r.oji = false;
+  } else {                          // 「往診（料金なし）」にする（料金が付いていれば外す）
+    if(r.ojiFeeAdded) { r.amount = Math.max(0, (r.amount||0) - OJI_FEE); r.ojiFeeAdded = false; }
+    r.oji = true;
   }
   recalcPaperTotal(k);
   saveToStorage();
@@ -1893,8 +1915,9 @@ function buildAmountOnlyRowHtml(karteId, i) {
       <div style="display:flex;gap:6px;align-items:center">
         <input type="text" value="${(rec.content||'').replace(/"/g,'&quot;')}" placeholder="診療内容" onclick="event.stopPropagation()" onblur="updateRecord('${karteId}',${i},'content',this.value)" style="flex:1;min-width:0">
         <button class="btn btn-ghost btn-xs" style="flex-shrink:0;padding:2px 6px" onclick="event.stopPropagation();copyRecordContent('${karteId}',${i})" title="この診療内容をコピー">📋</button>
-        <label class="rec-oji-label" onclick="event.stopPropagation()"><input type="checkbox" ${rec.oji?'checked':''} onchange="toggleOji('${karteId}',${i},this)"> 往診</label>
-        <input type="text" class="rec-oji-memo" value="${(rec.ojiMemo||'').replace(/"/g,'&quot;')}" placeholder="往診元" onclick="event.stopPropagation()" onblur="updateOjiMemo('${karteId}',${i},this.value)">
+        <label class="rec-oji-label" onclick="event.stopPropagation()"><input type="checkbox" ${(rec.oji&&rec.ojiFeeAdded!==false)?'checked':''} onchange="toggleOji('${karteId}',${i},this)"> 往診</label>
+        <button type="button" class="rec-oji-nofee ${(rec.oji&&rec.ojiFeeAdded===false)?'active':''}" onclick="event.stopPropagation();toggleOjiNoFee('${karteId}',${i})" title="金額を足さずに往診チェック">往診¥なし</button>
+        <input type="text" class="rec-oji-memo" value="${(rec.oji_memo||rec.ojiMemo||'').replace(/"/g,'&quot;')}" placeholder="往診元" onclick="event.stopPropagation()" onblur="updateOjiMemo('${karteId}',${i},this.value)">
       </div>
       <div class="rec-preset-sub">${presetChecks}</div>
     </div>
