@@ -202,6 +202,9 @@ input[type=checkbox]{width:auto;margin:0}
 .rec-oji-label:has(input:checked){color:#111}
 .rec-oji-nofee{flex-shrink:0;font-size:11px;font-weight:600;color:var(--text3);background:#fff;border:1px solid var(--border2);border-radius:4px;padding:3px 6px;cursor:pointer;white-space:nowrap;font-family:'Noto Sans JP',sans-serif}
 .rec-oji-nofee.active{color:#fff;background:#111;border-color:#111}
+.rec-detail-sub{display:flex;align-items:center;gap:5px;margin-top:4px;flex-wrap:wrap}
+.rec-detail-sub input{padding:3px 6px;font-size:12px;border:1px solid var(--border2);border-radius:4px}
+.rds-label{font-size:11px;color:var(--text3);font-weight:600;white-space:nowrap;flex-shrink:0}
 .rec-oji-memo{flex:1;min-width:120px;padding:3px 6px;font-size:12px}
 
 /* ===== STATS ===== */
@@ -241,7 +244,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v4.7</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v4.8</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -469,8 +472,16 @@ input[type=checkbox]{width:auto;margin:0}
     </div>
     <label>牛番号</label>
     <input type="text" id="modal-cow" placeholder="0001">
-    <label>日付</label>
-    <input type="date" id="modal-date">
+    <div style="display:flex;gap:8px">
+      <div style="flex:1"><label>日付</label><input type="date" id="modal-date"></div>
+      <div style="width:110px"><label>時間</label><input type="time" id="modal-time"></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <div style="width:110px"><label>体温(℃)</label><input type="text" inputmode="decimal" id="modal-temp" placeholder="39.5"></div>
+      <div style="flex:1"><label>症状</label><input type="text" id="modal-symptom" placeholder="軟便など"></div>
+    </div>
+    <label>往診元</label>
+    <input type="text" id="modal-oji" placeholder="空欄可">
     <label>診療内容（B1形式）</label>
     <input type="text" id="modal-content">
     <label>金額（円）</label>
@@ -1416,12 +1427,12 @@ function toKarteLine(k, r) {
   const P = '｜';
   const san = s => String(s==null?'':s).replace(/\|/g, '｜').trim();
   const date = (r.date||'').replace(/-/g, '');            // YYYYMMDD
-  const time = '';                                        // カルテレコードに時間情報なし
+  const time = san((r.time||'').replace(':',''));         // HHMM
   const dest = san(r.oji_memo||r.ojiMemo||'');            // 往診元欄の値（空欄なら空欄）
   const distVal = (k && FARM_DIST[k.farm]!=null && FARM_DIST[k.farm]!=='') ? FARM_DIST[k.farm] : '';
   const dist = san(distVal);                              // 農家ごとに登録した距離(km)
-  const temp = '';                                        // カルテレコードに体温情報なし
-  const symptom = '';                                     // カルテレコードに症状情報なし
+  const temp = san(r.temp||'');                           // 例 39.5
+  const symptom = san(r.symptom||'');
   const content = san(r.content);                         // 略称/略称*用量 の / 区切り列
   return [date, time, dest, dist, temp, symptom, content].join(P);
 }
@@ -1569,6 +1580,11 @@ function openKarteModal(memoId) {
   document.getElementById('modal-farm').value = memo.ownerName || '';
   document.getElementById('modal-cow').value = memo.patientNo || '';
   document.getElementById('modal-date').value = new Date().toISOString().slice(0,10);
+  const tm = (memo.time||'').match(/(\d{1,2}):(\d{2})\s*$/);
+  document.getElementById('modal-time').value = tm ? `${tm[1].padStart(2,'0')}:${tm[2]}` : '';
+  document.getElementById('modal-temp').value = memo.temp || '';
+  document.getElementById('modal-symptom').value = memo.symptom || '';
+  document.getElementById('modal-oji').value = '';
   document.getElementById('modal-content').value = formula;
   document.getElementById('modal-amount').value = total;
   updateKarteSelect();
@@ -1581,12 +1597,17 @@ function confirmKarteSave() {
   const farm = document.getElementById('modal-farm').value.trim();
   const cow = document.getElementById('modal-cow').value.trim();
   const date = document.getElementById('modal-date').value;
+  const time = document.getElementById('modal-time').value;
+  const temp = document.getElementById('modal-temp').value.trim();
+  const symptom = document.getElementById('modal-symptom').value.trim();
+  const ojiMemoVal = document.getElementById('modal-oji').value.trim();
   const content = document.getElementById('modal-content').value.trim();
   const amount = parseInt(document.getElementById('modal-amount').value) || 0;
   if(!farm) return toast('農場名を入力してください','error');
   if(!cow) return toast('牛番号を入力してください','error');
   if(!date) return toast('日付を入力してください','error');
-  const record = {date, content, amount};
+  const record = {date, time, temp, symptom, content, amount};
+  if(ojiMemoVal) { record.oji_memo = ojiMemoVal; }
   const selectedId = document.getElementById('modal-karte-select').value;
   let savedKarte = selectedId
     ? KARTES.find(k => k.id === selectedId)
@@ -1673,9 +1694,15 @@ function buildKarteCard(k, isDetail) {
         <div style="display:flex;gap:6px;align-items:center">
           <input type="text" value="${esc(r.content)}" placeholder="診療内容" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'content',this.value)" style="flex:1;min-width:0">
           <button class="btn btn-ghost btn-xs" style="flex-shrink:0;padding:2px 6px" onclick="event.stopPropagation();copyRecordContent('${k.id}',${i})" title="この診療内容をコピー">📋</button>
+          <button class="btn btn-ghost btn-xs" style="flex-shrink:0;padding:2px 6px" onclick="event.stopPropagation();duplicateRecord('${k.id}',${i})" title="この行を複製して新しい行を追加">⧉ 複製</button>
           <label class="rec-oji-label" onclick="event.stopPropagation()"><input type="checkbox" ${(r.oji&&r.ojiFeeAdded!==false)?'checked':''} onchange="toggleOji('${k.id}',${i},this)"> 往診</label>
           <button type="button" class="rec-oji-nofee ${(r.oji&&r.ojiFeeAdded===false)?'active':''}" onclick="event.stopPropagation();toggleOjiNoFee('${k.id}',${i})" title="金額を足さずに往診チェック">往診¥なし</button>
           <input type="text" class="rec-oji-memo" value="${esc(r.oji_memo||'')}" placeholder="往診元" onclick="event.stopPropagation()" onblur="updateOjiMemo('${k.id}',${i},this.value)">
+        </div>
+        <div class="rec-detail-sub">
+          <span class="rds-label">時間</span><input type="time" value="${esc(r.time||'')}" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'time',this.value)">
+          <span class="rds-label">体温</span><input type="text" inputmode="decimal" value="${esc(r.temp||'')}" placeholder="—" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'temp',this.value)" style="width:52px">
+          <span class="rds-label">症状</span><input type="text" value="${esc(r.symptom||'')}" placeholder="—" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'symptom',this.value)" style="flex:1;min-width:60px">
         </div>
         <div class="rec-preset-sub">${presetChecks}</div>
       </div>
@@ -1932,6 +1959,11 @@ function buildAmountOnlyRowHtml(karteId, i) {
         <button type="button" class="rec-oji-nofee ${(rec.oji&&rec.ojiFeeAdded===false)?'active':''}" onclick="event.stopPropagation();toggleOjiNoFee('${karteId}',${i})" title="金額を足さずに往診チェック">往診¥なし</button>
         <input type="text" class="rec-oji-memo" value="${(rec.oji_memo||rec.ojiMemo||'').replace(/"/g,'&quot;')}" placeholder="往診元" onclick="event.stopPropagation()" onblur="updateOjiMemo('${karteId}',${i},this.value)">
       </div>
+      <div class="rec-detail-sub">
+        <span class="rds-label">時間</span><input type="time" value="${rec.time||''}" onclick="event.stopPropagation()" onblur="updateRecord('${karteId}',${i},'time',this.value)">
+        <span class="rds-label">体温</span><input type="text" inputmode="decimal" value="${(rec.temp||'').toString().replace(/"/g,'&quot;')}" placeholder="—" onclick="event.stopPropagation()" onblur="updateRecord('${karteId}',${i},'temp',this.value)" style="width:52px">
+        <span class="rds-label">症状</span><input type="text" value="${(rec.symptom||'').replace(/"/g,'&quot;')}" placeholder="—" onclick="event.stopPropagation()" onblur="updateRecord('${karteId}',${i},'symptom',this.value)" style="flex:1;min-width:60px">
+      </div>
       <div class="rec-preset-sub">${presetChecks}</div>
     </div>
     <input type="number" min="0" step="100" value="${rec.amount||''}" placeholder="0" onclick="event.stopPropagation()" onblur="updateRecord('${karteId}',${i},'amount',this.value)" onkeydown="amountOnlyKeydown('${karteId}',${i},event)">
@@ -1964,8 +1996,8 @@ function updateRecord(karteId, recIdx, field, value) {
   const k = KARTES.find(x=>x.id===karteId);
   if(!k || recIdx<0 || recIdx>=k.records.length) return;
   const r = k.records[recIdx];
-  if(field==='content') {
-    r.content = value;
+  if(field==='content'||field==='time'||field==='temp'||field==='symptom') {
+    r[field] = value.trim ? value.trim() : value;
     saveToStorage();
     return; // 再描画不要
   }
@@ -2012,6 +2044,20 @@ function deleteRecord(karteId, recIdx) {
   recalcPaperTotal(k);
   saveToStorage();
   renderKarteList();
+}
+
+function duplicateRecord(karteId, recIdx) {
+  const k = KARTES.find(x=>x.id===karteId);
+  if(!k || recIdx<0 || recIdx>=k.records.length) return;
+  const src = k.records[recIdx];
+  const copy = {...src};
+  delete copy.karteExported; delete copy.karteExportedAt; // 複製は未出力扱い
+  k.records.push(copy);
+  k.records.sort((a,b)=>{if(!a.date&&!b.date)return 0;if(!a.date)return 1;if(!b.date)return -1;return a.date.localeCompare(b.date);});
+  recalcPaperTotal(k);
+  saveToStorage();
+  renderKarteList();
+  toast('診療記録を複製しました。内容を編集してください','success');
 }
 
 function handleKarteCardClick(e, karteId) {
