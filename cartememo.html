@@ -205,6 +205,12 @@ input[type=checkbox]{width:auto;margin:0}
 .rec-detail-sub{display:flex;align-items:center;gap:5px;margin-top:4px;flex-wrap:wrap}
 .rec-detail-sub input{padding:3px 6px;font-size:12px;border:1px solid var(--border2);border-radius:4px}
 .rds-label{font-size:11px;color:var(--text3);font-weight:600;white-space:nowrap;flex-shrink:0}
+.temp-quick{flex-shrink:0;font-size:13px;font-weight:700;color:var(--text2);background:#fff;border:1px solid var(--border2);border-radius:4px;padding:6px 8px;cursor:pointer;font-family:'JetBrains Mono',monospace}
+.temp-quick:hover{background:var(--surface);color:#111}
+.rec-date-wrap{display:flex;align-items:center;gap:2px}
+.rec-date-wrap input[type=date]{flex:1;min-width:0}
+.date-step{flex-shrink:0;font-size:12px;font-weight:700;color:var(--text2);background:#fff;border:1px solid var(--border2);border-radius:4px;padding:3px 5px;cursor:pointer;line-height:1;font-family:'JetBrains Mono',monospace}
+.date-step:hover{background:var(--surface);color:#111}
 .rec-oji-memo{flex:1;min-width:120px;padding:3px 6px;font-size:12px}
 
 /* ===== STATS ===== */
@@ -244,7 +250,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v4.8</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v4.9</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -477,7 +483,13 @@ input[type=checkbox]{width:auto;margin:0}
       <div style="width:110px"><label>時間</label><input type="time" id="modal-time"></div>
     </div>
     <div style="display:flex;gap:8px">
-      <div style="width:110px"><label>体温(℃)</label><input type="text" inputmode="decimal" id="modal-temp" placeholder="39.5"></div>
+      <div style="width:150px"><label>体温(℃)</label>
+        <div style="display:flex;gap:4px;align-items:center">
+          <input type="text" inputmode="decimal" id="modal-temp" placeholder="39.5" style="flex:1;min-width:0">
+          <button type="button" class="temp-quick" onclick="document.getElementById('modal-temp').value='39'">39</button>
+          <button type="button" class="temp-quick" onclick="document.getElementById('modal-temp').value='40'">40</button>
+        </div>
+      </div>
       <div style="flex:1"><label>症状</label><input type="text" id="modal-symptom" placeholder="軟便など"></div>
     </div>
     <label>往診元</label>
@@ -1580,8 +1592,7 @@ function openKarteModal(memoId) {
   document.getElementById('modal-farm').value = memo.ownerName || '';
   document.getElementById('modal-cow').value = memo.patientNo || '';
   document.getElementById('modal-date').value = new Date().toISOString().slice(0,10);
-  const tm = (memo.time||'').match(/(\d{1,2}):(\d{2})\s*$/);
-  document.getElementById('modal-time').value = tm ? `${tm[1].padStart(2,'0')}:${tm[2]}` : '';
+  document.getElementById('modal-time').value = ''; // 時間はデフォルト空欄
   document.getElementById('modal-temp').value = memo.temp || '';
   document.getElementById('modal-symptom').value = memo.symptom || '';
   document.getElementById('modal-oji').value = '';
@@ -1700,8 +1711,9 @@ function buildKarteCard(k, isDetail) {
           <input type="text" class="rec-oji-memo" value="${esc(r.oji_memo||'')}" placeholder="往診元" onclick="event.stopPropagation()" onblur="updateOjiMemo('${k.id}',${i},this.value)">
         </div>
         <div class="rec-detail-sub">
+          <span class="rds-label">日付</span><button type="button" class="date-step" onclick="event.stopPropagation();stepRecordDate('${k.id}',${i},-1)">−1日</button><button type="button" class="date-step" onclick="event.stopPropagation();stepRecordDate('${k.id}',${i},1)">＋1日</button>
           <span class="rds-label">時間</span><input type="time" value="${esc(r.time||'')}" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'time',this.value)">
-          <span class="rds-label">体温</span><input type="text" inputmode="decimal" value="${esc(r.temp||'')}" placeholder="—" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'temp',this.value)" style="width:52px">
+          <span class="rds-label">体温</span><input type="text" inputmode="decimal" value="${esc(r.temp||'')}" placeholder="—" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'temp',this.value)" style="width:52px"><button type="button" class="temp-quick" style="padding:3px 6px;font-size:11px" onclick="event.stopPropagation();setRecordTemp('${k.id}',${i},'39')">39</button><button type="button" class="temp-quick" style="padding:3px 6px;font-size:11px" onclick="event.stopPropagation();setRecordTemp('${k.id}',${i},'40')">40</button>
           <span class="rds-label">症状</span><input type="text" value="${esc(r.symptom||'')}" placeholder="—" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'symptom',this.value)" style="flex:1;min-width:60px">
         </div>
         <div class="rec-preset-sub">${presetChecks}</div>
@@ -1960,8 +1972,9 @@ function buildAmountOnlyRowHtml(karteId, i) {
         <input type="text" class="rec-oji-memo" value="${(rec.oji_memo||rec.ojiMemo||'').replace(/"/g,'&quot;')}" placeholder="往診元" onclick="event.stopPropagation()" onblur="updateOjiMemo('${karteId}',${i},this.value)">
       </div>
       <div class="rec-detail-sub">
+        <span class="rds-label">日付</span><button type="button" class="date-step" onclick="event.stopPropagation();stepRecordDate('${karteId}',${i},-1)">−1日</button><button type="button" class="date-step" onclick="event.stopPropagation();stepRecordDate('${karteId}',${i},1)">＋1日</button>
         <span class="rds-label">時間</span><input type="time" value="${rec.time||''}" onclick="event.stopPropagation()" onblur="updateRecord('${karteId}',${i},'time',this.value)">
-        <span class="rds-label">体温</span><input type="text" inputmode="decimal" value="${(rec.temp||'').toString().replace(/"/g,'&quot;')}" placeholder="—" onclick="event.stopPropagation()" onblur="updateRecord('${karteId}',${i},'temp',this.value)" style="width:52px">
+        <span class="rds-label">体温</span><input type="text" inputmode="decimal" value="${(rec.temp||'').toString().replace(/"/g,'&quot;')}" placeholder="—" onclick="event.stopPropagation()" onblur="updateRecord('${karteId}',${i},'temp',this.value)" style="width:52px"><button type="button" class="temp-quick" style="padding:3px 6px;font-size:11px" onclick="event.stopPropagation();setRecordTemp('${karteId}',${i},'39')">39</button><button type="button" class="temp-quick" style="padding:3px 6px;font-size:11px" onclick="event.stopPropagation();setRecordTemp('${karteId}',${i},'40')">40</button>
         <span class="rds-label">症状</span><input type="text" value="${(rec.symptom||'').replace(/"/g,'&quot;')}" placeholder="—" onclick="event.stopPropagation()" onblur="updateRecord('${karteId}',${i},'symptom',this.value)" style="flex:1;min-width:60px">
       </div>
       <div class="rec-preset-sub">${presetChecks}</div>
@@ -2016,6 +2029,28 @@ function updateRecord(karteId, recIdx, field, value) {
     renderKarteList();
     return;
   }
+}
+
+function stepRecordDate(karteId, recIdx, delta) {
+  const k = KARTES.find(x=>x.id===karteId);
+  if(!k || recIdx<0 || recIdx>=k.records.length) return;
+  const r = k.records[recIdx];
+  const base = r.date ? new Date(r.date+'T00:00:00') : new Date();
+  base.setDate(base.getDate() + delta);
+  const y=base.getFullYear(), m=String(base.getMonth()+1).padStart(2,'0'), d=String(base.getDate()).padStart(2,'0');
+  r.date = `${y}-${m}-${d}`;
+  k.records.sort((a,b)=>{if(!a.date&&!b.date)return 0;if(!a.date)return 1;if(!b.date)return -1;return a.date.localeCompare(b.date);});
+  const firstDated = k.records.find(x=>x.date);
+  if(firstDated) k.month = firstDated.date.slice(0,7);
+  saveToStorage();
+  renderKarteList();
+}
+function setRecordTemp(karteId, recIdx, val) {
+  const k = KARTES.find(x=>x.id===karteId);
+  if(!k || recIdx<0 || recIdx>=k.records.length) return;
+  k.records[recIdx].temp = val;
+  saveToStorage();
+  renderKarteList();
 }
 
 function updateKarteField(karteId, field, value) {
