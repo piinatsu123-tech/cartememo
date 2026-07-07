@@ -250,7 +250,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v5.1</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v5.2</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -1890,6 +1890,11 @@ function recalcPaperTotal(k) {
   k.paper_total = k.records.reduce((s,r)=>s+(r.amount||0), 0);
   if(k.electronic_amount !== null) k.diff = k.electronic_amount - k.paper_total;
 }
+// k.records の配列順は保持したまま月を再計算（表示順は描画時にソートするため配列は並べ替えない）
+function _recalcMonth(k) {
+  const dated = k.records.map(r=>r.date).filter(Boolean).sort();
+  if(dated.length) k.month = dated[0].slice(0,7);
+}
 
 function addKarteRecord(karteId) {
   const k = KARTES.find(x=>x.id===karteId);
@@ -1904,7 +1909,7 @@ function addKarteRecord(karteId) {
   }
   if(!nextDate) nextDate = new Date().toISOString().slice(0,10);
   k.records.push({date:nextDate, content:'', amount:0});
-  k.records.sort((a,b)=>a.date.localeCompare(b.date));
+  _recalcMonth(k);
   saveToStorage();
   renderKarteList();
 }
@@ -2027,7 +2032,7 @@ function updateRecord(karteId, recIdx, field, value) {
   }
   if(field==='date') {
     r.date = value;
-    k.records.sort((a,b)=>a.date.localeCompare(b.date));
+    _recalcMonth(k);
     saveToStorage();
     renderKarteList();
     return;
@@ -2042,9 +2047,7 @@ function stepRecordDate(karteId, recIdx, delta) {
   base.setDate(base.getDate() + delta);
   const y=base.getFullYear(), m=String(base.getMonth()+1).padStart(2,'0'), d=String(base.getDate()).padStart(2,'0');
   r.date = `${y}-${m}-${d}`;
-  k.records.sort((a,b)=>{if(!a.date&&!b.date)return 0;if(!a.date)return 1;if(!b.date)return -1;return a.date.localeCompare(b.date);});
-  const firstDated = k.records.find(x=>x.date);
-  if(firstDated) k.month = firstDated.date.slice(0,7);
+  _recalcMonth(k);
   saveToStorage();
   renderKarteList();
 }
@@ -2090,8 +2093,9 @@ function duplicateRecord(karteId, recIdx) {
   const src = k.records[recIdx];
   const copy = {...src};
   delete copy.karteExported; delete copy.karteExportedAt; // 複製は未出力扱い
+  // 配列末尾に追加（並べ替えはしない＝既存行のインデックスを保持）。表示順は描画時にソートされる
   k.records.push(copy);
-  k.records.sort((a,b)=>{if(!a.date&&!b.date)return 0;if(!a.date)return 1;if(!b.date)return -1;return a.date.localeCompare(b.date);});
+  _recalcMonth(k);
   recalcPaperTotal(k);
   saveToStorage();
   renderKarteList();
