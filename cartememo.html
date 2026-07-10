@@ -259,7 +259,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v5.3</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v5.4</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -451,7 +451,7 @@ input[type=checkbox]{width:auto;margin:0}
   <div class="panel">
     <div class="panel-hdr"><h2>💊 よく使う治療パターン</h2></div>
     <div class="panel-body">
-      <p class="input-hint" style="margin-bottom:10px">頻出する診療内容をパターン登録しておくと、カルテ保存時や診療内容欄の「💊」ボタンから検索してワンタッチで挿入できます。</p>
+      <p class="input-hint" style="margin-bottom:10px">頻出する診療内容をパターン登録しておくと、一括計算の「💊 定型」・カルテ保存時・診療内容欄の「💊」ボタンから検索してワンタッチで挿入できます。</p>
       <button class="btn btn-primary btn-sm" onclick="openTemplateManager()">パターンを管理・追加</button>
     </div>
   </div>
@@ -1086,6 +1086,7 @@ function renderResultsList() {
       <div class="rc-actions">
         <button class="btn btn-primary btn-sm" onclick="openKarteModal('${m.id}')">📋 カルテに保存</button>
         <button class="btn btn-ghost btn-sm${mul>1?' btn-active':''}" style="${mul>1?'color:var(--accent);font-weight:600':''}" onclick="toggleMultiplier('${m.id}')">×1.3</button>
+        <button class="btn btn-ghost btn-sm" onclick="openTemplateForMemo('${m.id}')">💊 定型</button>
         <button class="btn btn-discord btn-sm" onclick="sendOneToDiscord('${m.id}')">Discord送信</button>
         <button class="btn btn-ghost btn-sm" onclick="copyMemoFormula('${m.id}')">B1形式コピー</button>
         <button class="btn btn-ghost btn-sm" onclick="reparse('${m.id}')">再解析</button>
@@ -1504,6 +1505,32 @@ function openTemplateForRecord(karteId, recIdx) {
   const r = k.records[recIdx]; if(!r) return;
   _tplTarget = { apply: c => { r.content = c; saveToStorage(); renderKarteList(); } };
   _openTemplateModal((r.content||'').trim());
+}
+function openTemplateForMemo(memoId) {
+  const m = memos.find(x=>x.id===memoId); if(!m) return;
+  const formula = (m.items||[]).filter(it=>it.price>0).map(it=>`${it.name}*${it.qty}`).join('/');
+  _tplTarget = { apply: c => applyTemplateToMemo(memoId, c) };
+  _openTemplateModal(formula);
+}
+// パターン内容(B1形式)を品目リストに展開して一括計算カードへ反映
+function applyTemplateToMemo(memoId, content) {
+  const m = memos.find(x=>x.id===memoId); if(!m) return;
+  const items = [];
+  content.split('/').map(s=>s.trim()).filter(Boolean).forEach(tok => {
+    const mm = tok.match(/^(.+?)\*([\d.]+)$/);
+    const name = (mm ? mm[1] : tok).trim();
+    const qty = mm ? (parseFloat(mm[2])||1) : 1;
+    const master = MASTER.find(x=>x.name===name);
+    items.push({name, qty, unit:'', price: master?master.price:0, unknown: !master});
+  });
+  if(!items.length) return toast('パターンの内容が空です','error');
+  if(m.items && m.items.length) {
+    if(!confirm('既存の品目をパターンの内容で置き換えます。よろしいですか？')) return;
+  }
+  m.items = items;
+  if(m.status!=='done') m.status='done';
+  saveToStorage();
+  renderResultsList();
 }
 function openTemplateManager() {
   _tplTarget = null; // 挿入先なし（管理のみ）
