@@ -205,6 +205,15 @@ input[type=checkbox]{width:auto;margin:0}
 .rec-detail-sub{display:flex;align-items:center;gap:5px;margin-top:4px;flex-wrap:wrap}
 .rec-detail-sub input{padding:3px 6px;font-size:12px;border:1px solid var(--border2);border-radius:4px}
 .rds-label{font-size:11px;color:var(--text3);font-weight:600;white-space:nowrap;flex-shrink:0}
+.tpl-list{margin-top:10px;display:flex;flex-direction:column;gap:4px;max-height:300px;overflow-y:auto}
+.tpl-item{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:6px;padding:8px 10px;background:#fff}
+.tpl-item .tpl-main{flex:1;min-width:0;cursor:pointer}
+.tpl-item .tpl-name{font-size:14px;font-weight:700;color:#111}
+.tpl-item .tpl-content{font-size:12px;color:var(--text2);font-family:'JetBrains Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tpl-item .tpl-insert{flex-shrink:0;font-size:12px;font-weight:700;color:#fff;background:#111;border:none;border-radius:5px;padding:7px 10px;cursor:pointer}
+.tpl-item .tpl-del{flex-shrink:0;background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px}
+.tpl-item .tpl-del:hover{color:#c00}
+.tpl-empty{font-size:13px;color:var(--text3);text-align:center;padding:16px}
 .temp-quick{flex-shrink:0;font-size:13px;font-weight:700;color:var(--text2);background:#fff;border:1px solid var(--border2);border-radius:4px;padding:6px 8px;cursor:pointer;font-family:'JetBrains Mono',monospace}
 .temp-quick:hover{background:var(--surface);color:#111}
 .rec-date-wrap{display:flex;align-items:center;gap:2px}
@@ -250,7 +259,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v5.2</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v5.3</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -440,6 +449,14 @@ input[type=checkbox]{width:auto;margin:0}
   </div>
 
   <div class="panel">
+    <div class="panel-hdr"><h2>💊 よく使う治療パターン</h2></div>
+    <div class="panel-body">
+      <p class="input-hint" style="margin-bottom:10px">頻出する診療内容をパターン登録しておくと、カルテ保存時や診療内容欄の「💊」ボタンから検索してワンタッチで挿入できます。</p>
+      <button class="btn btn-primary btn-sm" onclick="openTemplateManager()">パターンを管理・追加</button>
+    </div>
+  </div>
+
+  <div class="panel">
     <div class="panel-hdr"><h2>📖 専門用語辞書</h2></div>
     <div class="panel-body">
       <p class="input-hint" style="margin-bottom:10px">✅ 正しい表記を登録するだけでOK。AIが音声誤変換を自動補正します。</p>
@@ -495,12 +512,35 @@ input[type=checkbox]{width:auto;margin:0}
     <label>往診元</label>
     <input type="text" id="modal-oji" placeholder="空欄可">
     <label>診療内容（B1形式）</label>
-    <input type="text" id="modal-content">
+    <div style="display:flex;gap:6px">
+      <input type="text" id="modal-content" style="flex:1;min-width:0">
+      <button type="button" class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="openTemplateForModal()">💊 定型</button>
+    </div>
     <label>金額（円）</label>
     <input type="number" id="modal-amount" min="0">
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn btn-primary" onclick="confirmKarteSave()">保存</button>
       <button class="btn btn-ghost" onclick="closeKarteModal()">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 治療パターン（テンプレ）モーダル ===== -->
+<div id="templateModal" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <div class="modal-title">💊 よく使う治療パターン</div>
+    <input type="text" id="tpl-search" placeholder="🔍 名前・内容で検索" oninput="renderTemplatePicker()" autocomplete="off">
+    <div id="tpl-list" class="tpl-list"></div>
+    <details id="tpl-new-details" style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+      <summary style="cursor:pointer;font-size:14px;font-weight:700;color:var(--text2);user-select:none">＋ 新しいパターンを保存</summary>
+      <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
+        <input type="text" id="tpl-new-name" placeholder="パターン名（例: 下痢セット）" autocomplete="off">
+        <input type="text" id="tpl-new-content" placeholder="診療内容 例: iv/メトクロ*10/スタマー*150" autocomplete="off">
+        <button class="btn btn-primary btn-sm" onclick="saveTemplate()">保存</button>
+      </div>
+    </details>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-ghost" style="margin-left:auto" onclick="closeTemplateModal()">閉じる</button>
     </div>
   </div>
 </div>
@@ -544,6 +584,8 @@ let PRESETS = [
 let OJI_FEE = 0;
 let FARMS = [];
 let FARM_DIST = {}; // 農家名 -> 距離(km) の辞書
+let TEMPLATES = []; // よく使う治療パターン {id,name,content}
+let _tplTarget = null; // テンプレ挿入先
 let activeResultId = null;
 let karteSaveMemoId = null;
 let masterEditIndex = -1;
@@ -656,6 +698,7 @@ function saveToStorage() {
     localStorage.setItem('cm_kartes', JSON.stringify(KARTES));
     localStorage.setItem('cm_farms', JSON.stringify(FARMS));
     localStorage.setItem('cm_farmdist', JSON.stringify(FARM_DIST));
+    localStorage.setItem('cm_templates', JSON.stringify(TEMPLATES));
   } catch(e){}
   if(!_suppressAutoSave) scheduleCloudAutoSave();
 }
@@ -669,6 +712,7 @@ function loadFromStorage() {
     const k = localStorage.getItem('cm_kartes'); if(k) KARTES = JSON.parse(k);
     const f = localStorage.getItem('cm_farms'); if(f) FARMS = JSON.parse(f);
     const fd = localStorage.getItem('cm_farmdist'); if(fd) FARM_DIST = JSON.parse(fd);
+    const tp = localStorage.getItem('cm_templates'); if(tp) TEMPLATES = JSON.parse(tp);
     const ak = localStorage.getItem('cm_active_karte'); if(ak) activeKarteId = ak;
   } catch(e){}
 }
@@ -1224,7 +1268,7 @@ function scheduleCloudAutoSave() {
 
 async function cloudAutoSave(key, binId) {
   setSyncStatus('saving');
-  const data = {version:2, savedAt:new Date().toISOString(), memos, dictWords:DICT_WORDS, convPairs, kartes:KARTES, farms:FARMS, master:MASTER, farmDist:FARM_DIST};
+  const data = {version:2, savedAt:new Date().toISOString(), memos, dictWords:DICT_WORDS, convPairs, kartes:KARTES, farms:FARMS, master:MASTER, farmDist:FARM_DIST,templates:TEMPLATES};
   try {
     const resp = await fetch(`https://api.jsonbin.io/v3/b/${binId}`, {
       method:'PUT',
@@ -1285,6 +1329,12 @@ async function cloudAutoLoad() {
       const cloudNames = new Set(data.master.map(m=>m.name));
       const localOnly = MASTER.filter(m=>!cloudNames.has(m.name));
       MASTER = [...data.master, ...localOnly];
+    }
+    // テンプレ: IDごとにマージ（クラウド基準＋ローカルのみ保持）
+    if(Array.isArray(data.templates)) {
+      const cloudTplIds = new Set(data.templates.map(t=>t.id));
+      const localOnlyTpl = TEMPLATES.filter(t=>!cloudTplIds.has(t.id));
+      TEMPLATES = [...data.templates, ...localOnlyTpl];
     }
     _suppressAutoSave = true;
     saveToStorage(); // ローカルにも反映（クラウド再送信はしない）
@@ -1352,7 +1402,7 @@ function copyAllSettings() {
 async function cloudSave() {
   const key=document.getElementById('jsonbinKey').value.trim();
   if(!key) return toast('jsonbin.io APIキーを入力してください','error');
-  const data={version:2,savedAt:new Date().toISOString(),memos,dictWords:DICT_WORDS,convPairs,kartes:KARTES,farms:FARMS,master:MASTER,farmDist:FARM_DIST};
+  const data={version:2,savedAt:new Date().toISOString(),memos,dictWords:DICT_WORDS,convPairs,kartes:KARTES,farms:FARMS,master:MASTER,farmDist:FARM_DIST,templates:TEMPLATES};
   const binId=document.getElementById('jsonbinId').value.trim();
   try {
     let resp;
@@ -1386,6 +1436,7 @@ async function cloudLoad() {
     if(Array.isArray(data.farms)){data.farms.forEach(f=>{if(!FARMS.includes(f))FARMS.push(f);});FARMS.sort((a,b)=>a.localeCompare(b,'ja'));updateFarmDatalist();}
     if(Array.isArray(data.master)){const names=new Set(MASTER.map(m=>m.name));data.master.forEach(m=>{if(!names.has(m.name))MASTER.push(m);});refreshMasterUI();}
     if(data.farmDist&&typeof data.farmDist==='object'){Object.keys(data.farmDist).forEach(f=>{if(FARM_DIST[f]==null)FARM_DIST[f]=data.farmDist[f];});}
+    if(Array.isArray(data.templates)){const ids=new Set(TEMPLATES.map(t=>t.id));data.templates.forEach(t=>{if(!ids.has(t.id))TEMPLATES.push(t);});}
     saveToStorage(); saveJsonbinSettings();
     renderMemoQueue();renderResultsList();renderDict();updateBadge();
     document.getElementById('cloudInfo').textContent=`最終読み込み: ${new Date().toLocaleString('ja-JP')}（メモ${newMemos.length}件・カルテ${newKartes}件追加）`;
@@ -1395,7 +1446,7 @@ async function cloudLoad() {
 
 // ==================== JSON BACKUP ====================
 function exportData() {
-  const data={version:2,exportedAt:new Date().toISOString(),memos,dictWords:DICT_WORDS,convPairs,kartes:KARTES,farms:FARMS,master:MASTER,farmDist:FARM_DIST};
+  const data={version:2,exportedAt:new Date().toISOString(),memos,dictWords:DICT_WORDS,convPairs,kartes:KARTES,farms:FARMS,master:MASTER,farmDist:FARM_DIST,templates:TEMPLATES};
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
   a.download=`cartememo_${new Date().toISOString().slice(0,10)}.json`;a.click();
@@ -1416,6 +1467,7 @@ function importData(input) {
       if(Array.isArray(data.farms)){data.farms.forEach(f=>{if(!FARMS.includes(f))FARMS.push(f);});FARMS.sort((a,b)=>a.localeCompare(b,'ja'));updateFarmDatalist();}
       if(Array.isArray(data.master)){const mnames=new Set(MASTER.map(m=>m.name));data.master.forEach(m=>{if(!mnames.has(m.name))MASTER.push(m);});refreshMasterUI();}
       if(data.farmDist&&typeof data.farmDist==='object'){Object.keys(data.farmDist).forEach(f=>{if(FARM_DIST[f]==null)FARM_DIST[f]=data.farmDist[f];});}
+      if(Array.isArray(data.templates)){const ids=new Set(TEMPLATES.map(t=>t.id));data.templates.forEach(t=>{if(!ids.has(t.id))TEMPLATES.push(t);});}
       saveToStorage();renderMemoQueue();renderResultsList();renderDict();updateBadge();
       toast(`メモ${newMemos.length}件・カルテ${newKartes}件を追加しました`,'success');
     } catch(err){toast('読み込みエラー: '+err.message,'error');}
@@ -1431,6 +1483,78 @@ function copyRecordContent(karteId, recIdx){
   const text=(r.content||'').trim();
   if(!text) return toast('診療内容がありません','error');
   navigator.clipboard.writeText(text).then(()=>toast('診療内容をコピーしました','success')).catch(()=>toast('コピーに失敗しました','error'));
+}
+
+// ==================== 治療パターン（テンプレ） ====================
+function _openTemplateModal(prefillContent) {
+  document.getElementById('tpl-search').value = '';
+  document.getElementById('tpl-new-name').value = '';
+  document.getElementById('tpl-new-content').value = prefillContent || '';
+  document.getElementById('tpl-new-details').open = false;
+  renderTemplatePicker();
+  document.getElementById('templateModal').style.display = 'flex';
+}
+function openTemplateForModal() {
+  const cur = document.getElementById('modal-content').value.trim();
+  _tplTarget = { apply: c => { document.getElementById('modal-content').value = c; } };
+  _openTemplateModal(cur);
+}
+function openTemplateForRecord(karteId, recIdx) {
+  const k = KARTES.find(x=>x.id===karteId); if(!k) return;
+  const r = k.records[recIdx]; if(!r) return;
+  _tplTarget = { apply: c => { r.content = c; saveToStorage(); renderKarteList(); } };
+  _openTemplateModal((r.content||'').trim());
+}
+function openTemplateManager() {
+  _tplTarget = null; // 挿入先なし（管理のみ）
+  _openTemplateModal('');
+}
+function closeTemplateModal() { document.getElementById('templateModal').style.display='none'; _tplTarget=null; }
+document.getElementById('templateModal').addEventListener('click', e => { if(e.target===document.getElementById('templateModal')) closeTemplateModal(); });
+function renderTemplatePicker() {
+  const el = document.getElementById('tpl-list');
+  const q = (document.getElementById('tpl-search').value||'').trim().toLowerCase();
+  let list = TEMPLATES;
+  if(q) list = TEMPLATES.filter(t => (t.name||'').toLowerCase().includes(q) || (t.content||'').toLowerCase().includes(q));
+  if(!list.length) { el.innerHTML = `<div class="tpl-empty">${TEMPLATES.length?'一致するパターンがありません':'まだパターンがありません。下の「＋ 新しいパターンを保存」から追加できます'}</div>`; return; }
+  el.innerHTML = list.map(t => `<div class="tpl-item">
+    <div class="tpl-main" onclick="applyTemplate('${t.id}')">
+      <div class="tpl-name">${esc(t.name||'（無名）')}</div>
+      <div class="tpl-content">${esc(t.content||'')}</div>
+    </div>
+    ${_tplTarget?`<button class="tpl-insert" onclick="applyTemplate('${t.id}')">挿入</button>`:''}
+    <button class="tpl-del" onclick="deleteTemplate('${t.id}')" title="削除">×</button>
+  </div>`).join('');
+}
+function applyTemplate(id) {
+  const t = TEMPLATES.find(x=>x.id===id); if(!t) return;
+  if(_tplTarget && typeof _tplTarget.apply==='function') {
+    _tplTarget.apply(t.content||'');
+    closeTemplateModal();
+    toast('パターンを挿入しました','success');
+  } else {
+    toast('挿入先がありません（診療内容欄の💊から開いてください）','error');
+  }
+}
+function saveTemplate() {
+  const name = document.getElementById('tpl-new-name').value.trim();
+  const content = document.getElementById('tpl-new-content').value.trim();
+  if(!name) return toast('パターン名を入力してください','error');
+  if(!content) return toast('診療内容を入力してください','error');
+  TEMPLATES.unshift({ id: Date.now().toString(), name, content });
+  saveToStorage();
+  document.getElementById('tpl-new-name').value = '';
+  document.getElementById('tpl-new-content').value = '';
+  document.getElementById('tpl-new-details').open = false;
+  renderTemplatePicker();
+  toast(`「${name}」を保存しました`,'success');
+}
+function deleteTemplate(id) {
+  const t = TEMPLATES.find(x=>x.id===id); if(!t) return;
+  if(!confirm(`パターン「${t.name}」を削除しますか？`)) return;
+  TEMPLATES = TEMPLATES.filter(x=>x.id!==id);
+  saveToStorage();
+  renderTemplatePicker();
 }
 
 // ==================== d-karte キュー出力 ====================
@@ -1704,6 +1828,7 @@ function buildKarteCard(k, isDetail) {
       <div>
         <div style="display:flex;gap:6px;align-items:center">
           <input type="text" value="${esc(r.content)}" placeholder="診療内容" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'content',this.value)" style="flex:1;min-width:0">
+          <button class="btn btn-ghost btn-xs" style="flex-shrink:0;padding:2px 6px" onclick="event.stopPropagation();openTemplateForRecord('${k.id}',${i})" title="よく使う治療パターンから挿入／保存">💊</button>
           <button class="btn btn-ghost btn-xs" style="flex-shrink:0;padding:2px 6px" onclick="event.stopPropagation();copyRecordContent('${k.id}',${i})" title="この診療内容をコピー">📋</button>
           <button class="btn btn-ghost btn-xs" style="flex-shrink:0;padding:2px 6px" onclick="event.stopPropagation();duplicateRecord('${k.id}',${i})" title="この行を複製して新しい行を追加">⧉ 複製</button>
           <label class="rec-oji-label" onclick="event.stopPropagation()"><input type="checkbox" ${(r.oji&&r.ojiFeeAdded!==false)?'checked':''} onchange="toggleOji('${k.id}',${i},this)"> 往診</label>
