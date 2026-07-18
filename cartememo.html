@@ -11,7 +11,7 @@
   --border:#e0e0e0;--border2:#c8c8c8;
   --accent:#111;--accent2:#333;--accent-glow:rgba(0,0,0,.04);
   --green:#111;--green-glow:transparent;
-  --warn:#c00;--danger:#c00;--discord:#555;
+  --warn:#c00;--danger:#c00;
   --text:#111;--text2:#555;--text3:#999;
 }
 *{box-sizing:border-box;margin:0;padding:0}
@@ -57,7 +57,6 @@ input[type=checkbox]{width:auto;margin:0}
 .btn-ghost{background:#fff;color:#333;border:1px solid var(--border2)}.btn-ghost:hover{background:var(--surface);border-color:#aaa}
 .btn-green{background:#111;color:#fff;font-weight:700}.btn-green:hover{background:#333}.btn-green:disabled{opacity:.35;cursor:not-allowed}
 .btn-danger{background:#c00;color:#fff}.btn-danger:hover{background:#a00}
-.btn-discord{background:#555;color:#fff}.btn-discord:hover{background:#444}.btn-discord:disabled{opacity:.35;cursor:not-allowed}
 .btn-sm{padding:6px 12px;font-size:12px}.btn-xs{padding:3px 8px;font-size:11px}.btn-full{width:100%;justify-content:center}
 .panel{background:#fff;border:1px solid var(--border);border-radius:7px;overflow:hidden}
 .panel-hdr{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;background:var(--surface)}
@@ -100,7 +99,13 @@ input[type=checkbox]{width:auto;margin:0}
 .move-row:disabled{color:var(--border2);cursor:default}
 .formula-line{background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:7px 10px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);word-break:break-all;margin-top:8px}
 .formula-line span{color:#111;font-weight:600}
-.rc-actions{display:flex;gap:8px;padding:10px 16px;border-top:1px solid var(--border);flex-wrap:wrap}
+.rc-actions{display:flex;gap:8px;padding:10px 16px;border-top:1px solid var(--border);flex-wrap:wrap;align-items:center}
+.rc-more{position:relative;margin-left:auto}
+.rc-menu{position:absolute;right:0;bottom:calc(100% + 4px);background:#fff;border:1px solid var(--border);border-radius:7px;box-shadow:0 4px 16px rgba(0,0,0,.14);display:none;flex-direction:column;min-width:180px;z-index:500;overflow:hidden}
+.rc-menu.open{display:flex}
+.rc-menu button{background:none;border:none;text-align:left;padding:11px 14px;font-size:13px;cursor:pointer;font-family:'Noto Sans JP',sans-serif;color:#111;white-space:nowrap;border-bottom:1px solid var(--border)}
+.rc-menu button:last-child{border-bottom:none}
+.rc-menu button:hover{background:var(--surface)}
 .name-ac{position:fixed;background:#fff;border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.15);z-index:9999;max-height:200px;overflow-y:auto;display:none}
 .name-ac-item{padding:6px 12px;cursor:pointer;font-size:13px;white-space:nowrap;display:flex;justify-content:space-between;gap:16px}
 .name-ac-item:hover,.name-ac-item.ac-sel{background:var(--surface)}
@@ -262,7 +267,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v5.5</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v5.6</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -319,7 +324,7 @@ input[type=checkbox]{width:auto;margin:0}
     <div class="count">未処理: <b id="pendingCount">0</b>件</div>
     <div class="batch-progress"><div class="batch-progress-bar" id="batchBar" style="width:0%"></div></div>
     <button class="btn btn-green" id="batchBtn" onclick="batchProcess()">⚡ まとめてAI解析</button>
-    <button class="btn btn-discord btn-sm" id="sendAllBtn" onclick="sendAllToDiscord()" style="display:none">一括Discord送信</button>
+    <button class="btn btn-ghost btn-sm" onclick="newMemoFromTemplate()">💊 定型から追加</button>
     <button class="btn btn-ghost btn-sm" id="showHiddenBtn" onclick="toggleShowHidden()" style="margin-left:auto;display:none">非表示を表示</button>
   </div>
   <div class="results-list" id="resultsList">
@@ -370,8 +375,6 @@ input[type=checkbox]{width:auto;margin:0}
     <div class="panel-body">
       <label>Gemini API Key</label>
       <input type="password" id="anthropicKey" placeholder="AIza..." oninput="checkKeys()">
-      <label>Discord Webhook URL</label>
-      <input type="password" id="discordUrl" placeholder="https://discord.com/api/webhooks/...">
       <p class="input-hint">ブラウザにのみ保存されます。外部に送信されません。</p>
       <div style="display:flex;gap:8px;margin-top:12px">
         <button class="btn btn-primary" onclick="saveKeys()">保存</button>
@@ -744,14 +747,13 @@ function migrateFromVetMemo() {
 
 // ==================== KEYS ====================
 function saveKeys() {
-  try { localStorage.setItem('cm_ak', document.getElementById('anthropicKey').value); localStorage.setItem('cm_dw', document.getElementById('discordUrl').value); } catch(e){}
+  try { localStorage.setItem('cm_ak', document.getElementById('anthropicKey').value); } catch(e){}
   checkKeys(); toast('設定を保存しました', 'success');
 }
 function loadKeys() {
   try {
-    const ak = localStorage.getItem('cm_ak')||''; const dw = localStorage.getItem('cm_dw')||'';
+    const ak = localStorage.getItem('cm_ak')||'';
     if(ak) document.getElementById('anthropicKey').value = ak;
-    if(dw) document.getElementById('discordUrl').value = dw;
   } catch(e){}
   checkKeys();
 }
@@ -939,7 +941,6 @@ function updateBadge() {
   const badge = document.getElementById('pendingBadge');
   badge.textContent=count; badge.style.display=count>0?'':'none';
   document.getElementById('pendingCount').textContent=count;
-  document.getElementById('sendAllBtn').style.display=memos.some(m=>m.status==='done')?'':'none';
 }
 
 // ==================== AI PARSE ====================
@@ -1095,17 +1096,31 @@ function renderResultsList() {
       <div class="rc-actions">
         <button class="btn btn-primary btn-sm" onclick="openKarteModal('${m.id}')">📋 カルテに保存</button>
         <button class="btn btn-ghost btn-sm${mul>1?' btn-active':''}" style="${mul>1?'color:var(--accent);font-weight:600':''}" onclick="toggleMultiplier('${m.id}')">×1.3</button>
-        <button class="btn btn-ghost btn-sm" onclick="openTemplateForMemo('${m.id}')">💊 定型</button>
-        <button class="btn btn-discord btn-sm" onclick="sendOneToDiscord('${m.id}')">Discord送信</button>
-        <button class="btn btn-ghost btn-sm" onclick="copyMemoFormula('${m.id}')">B1形式コピー</button>
-        <button class="btn btn-ghost btn-sm" onclick="reparse('${m.id}')">再解析</button>
-        ${m.hidden
-          ? `<button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="unhideResult('${m.id}')">再表示</button>`
-          : `<button class="btn btn-ghost btn-sm" style="margin-left:auto;color:var(--text3)" onclick="hideResult('${m.id}')">非表示</button>`}
+        <button class="btn btn-ghost btn-sm" onclick="copyMemoFormula('${m.id}')">B1コピー</button>
+        <div class="rc-more">
+          <button class="btn btn-ghost btn-sm" onclick="toggleRcMenu('${m.id}',event)">⋯</button>
+          <div class="rc-menu" id="rc-menu-${m.id}">
+            <button onclick="closeAllRcMenus();openTemplateForMemo('${m.id}')">💊 定型パターンに保存</button>
+            <button onclick="closeAllRcMenus();reparse('${m.id}')">🔄 再解析</button>
+            ${m.hidden
+              ? `<button onclick="closeAllRcMenus();unhideResult('${m.id}')">👁 再表示</button>`
+              : `<button onclick="closeAllRcMenus();hideResult('${m.id}')">🙈 非表示</button>`}
+          </div>
+        </div>
       </div>`:''}</div>`;
   }).join('');
 }
 
+function closeAllRcMenus(){document.querySelectorAll('.rc-menu.open').forEach(m=>m.classList.remove('open'));}
+function toggleRcMenu(id, ev){
+  ev.stopPropagation();
+  const menu=document.getElementById('rc-menu-'+id);
+  if(!menu)return;
+  const wasOpen=menu.classList.contains('open');
+  closeAllRcMenus();
+  if(!wasOpen)menu.classList.add('open');
+}
+document.addEventListener('click', ()=>closeAllRcMenus());
 function hideResult(id){const m=memos.find(x=>x.id===id);if(!m)return;m.hidden=true;saveToStorage();renderResultsList();}
 function unhideResult(id){const m=memos.find(x=>x.id===id);if(!m)return;m.hidden=false;saveToStorage();renderResultsList();}
 function toggleShowHidden(){showHidden=!showHidden;renderResultsList();}
@@ -1246,25 +1261,6 @@ function moveItem(memoId,idx,dir){
 }
 async function reparse(id){const memo=memos.find(m=>m.id===id);if(!memo)return;memo.status='pending';await processSingle(id);renderResultsList();}
 
-// ==================== DISCORD ====================
-function buildDiscordMsg(memo) {
-  const items=memo.items||[],total=items.reduce((s,it)=>s+it.price*it.qty,0);
-  const formula=items.filter(it=>it.price>0).map(it=>`${it.name}*${it.qty}`).join('/');
-  const lines=items.map(it=>`  ${it.name.padEnd(10,'　')}¥${it.price.toLocaleString()} × ${it.qty}${it.unit?'('+it.unit+')':''} = ¥${Math.round(it.price*it.qty).toLocaleString()}`).join('\n');
-  return `📋 診療記録  ${memo.time}\n患者番号: ${memo.patientNo||'—'}　農場: ${memo.ownerName||'—'}\n──────────────────────\n${lines||'  （品目なし）'}\n──────────────────────\n合計: ¥${Math.round(total).toLocaleString()}\n📝 B1形式: ${formula||'—'}`;
-}
-async function sendOneToDiscord(id) {
-  const memo=memos.find(m=>m.id===id);if(!memo)return;
-  const url=document.getElementById('discordUrl').value.trim();if(!url)return toast('Discord Webhook URLを設定してください（設定タブ）');
-  try{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:'```\n'+buildDiscordMsg(memo)+'\n```'})});if(r.ok)toast(`${memo.ownerName||'メモ'} をDiscordに送信しました`,'success');else throw new Error('HTTP '+r.status);}catch(e){toast('送信エラー: '+e.message,'error');}
-}
-async function sendAllToDiscord() {
-  const done=memos.filter(m=>m.status==='done');if(!done.length)return toast('完了済みのメモがありません');
-  const url=document.getElementById('discordUrl').value.trim();if(!url)return toast('Discord Webhook URLを設定してください（設定タブ）');
-  const btn=document.getElementById('sendAllBtn');btn.disabled=true;let ok=0;
-  for(const memo of done){try{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:'```\n'+buildDiscordMsg(memo)+'\n```'})});if(r.ok)ok++;await new Promise(r=>setTimeout(r,400));}catch(e){}}
-  btn.disabled=false;toast(`${ok}件をDiscordに送信しました`,'success');
-}
 
 // ==================== AUTO CLOUD SYNC ====================
 let _autoSaveTimer = null;
@@ -1531,14 +1527,18 @@ function openTemplateForRecord(karteId, recIdx) {
   _openTemplateModal((r.content||'').trim(), 'karte', true);
 }
 function openTemplateForMemo(memoId) {
+  // カードの内容をパターン保存する用（挿入すると新規カードが作られる）
   const m = memos.find(x=>x.id===memoId); if(!m) return;
   const formula = (m.items||[]).filter(it=>it.price>0).map(it=>`${it.name}*${it.qty}`).join('/');
-  _tplTarget = { apply: c => applyTemplateToMemo(memoId, c) };
+  _tplTarget = { apply: c => createMemoFromTemplate(c) };
   _openTemplateModal(formula, 'calc', true);
 }
-// パターン内容(B1形式)を品目リストに展開して一括計算カードへ反映
-function applyTemplateToMemo(memoId, content) {
-  const m = memos.find(x=>x.id===memoId); if(!m) return;
+function newMemoFromTemplate() {
+  _tplTarget = { apply: c => createMemoFromTemplate(c) };
+  _openTemplateModal('', 'calc', true);
+}
+// パターン内容(B1形式)を品目リストに展開して新規カードとして追加
+function createMemoFromTemplate(content) {
   const items = [];
   content.split('/').map(s=>s.trim()).filter(Boolean).forEach(tok => {
     const mm = tok.match(/^(.+?)\*([\d.]+)$/);
@@ -1548,13 +1548,16 @@ function applyTemplateToMemo(memoId, content) {
     items.push({name, qty, unit:'', price: master?master.price:0, unknown: !master});
   });
   if(!items.length) return toast('パターンの内容が空です','error');
-  if(m.items && m.items.length) {
-    if(!confirm('既存の品目をパターンの内容で置き換えます。よろしいですか？')) return;
-  }
-  m.items = items;
-  if(m.status!=='done') m.status='done';
+  const memo = {
+    id: Date.now().toString(),
+    time: new Date().toLocaleString('ja-JP',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}),
+    patientNo:'', ownerName:'', text:'（定型から作成）',
+    status:'done', items, temp:'', symptom:''
+  };
+  memos.push(memo);
   saveToStorage();
-  renderResultsList();
+  renderMemoQueue(); updateBadge(); renderResultsList();
+  toast('定型から新しいカードを追加しました','success');
 }
 function openTemplateManager() {
   _tplTarget = null; // 挿入先なし（管理のみ・タブで種別切替可能）
