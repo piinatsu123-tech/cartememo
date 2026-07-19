@@ -267,7 +267,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v5.6</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v5.7</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -1096,15 +1096,14 @@ function renderResultsList() {
       <div class="rc-actions">
         <button class="btn btn-primary btn-sm" onclick="openKarteModal('${m.id}')">📋 カルテに保存</button>
         <button class="btn btn-ghost btn-sm${mul>1?' btn-active':''}" style="${mul>1?'color:var(--accent);font-weight:600':''}" onclick="toggleMultiplier('${m.id}')">×1.3</button>
-        <button class="btn btn-ghost btn-sm" onclick="copyMemoFormula('${m.id}')">B1コピー</button>
+        ${m.hidden
+          ? `<button class="btn btn-ghost btn-sm" onclick="unhideResult('${m.id}')">👁 再表示</button>`
+          : `<button class="btn btn-ghost btn-sm" onclick="hideResult('${m.id}')">🙈 非表示</button>`}
         <div class="rc-more">
           <button class="btn btn-ghost btn-sm" onclick="toggleRcMenu('${m.id}',event)">⋯</button>
           <div class="rc-menu" id="rc-menu-${m.id}">
             <button onclick="closeAllRcMenus();openTemplateForMemo('${m.id}')">💊 定型パターンに保存</button>
             <button onclick="closeAllRcMenus();reparse('${m.id}')">🔄 再解析</button>
-            ${m.hidden
-              ? `<button onclick="closeAllRcMenus();unhideResult('${m.id}')">👁 再表示</button>`
-              : `<button onclick="closeAllRcMenus();hideResult('${m.id}')">🙈 非表示</button>`}
           </div>
         </div>
       </div>`:''}</div>`;
@@ -1482,7 +1481,6 @@ function importData(input) {
   reader.readAsText(file);
 }
 
-function copyMemoFormula(id){const memo=memos.find(m=>m.id===id);if(!memo||!memo.items)return;const f=memo.items.filter(it=>it.price>0).map(it=>`${it.name}*${it.qty}`).join('/');navigator.clipboard.writeText(f).then(()=>toast('B1形式をコピーしました','success'));}
 function copyRecordContent(karteId, recIdx){
   const k=KARTES.find(x=>x.id===karteId);if(!k)return;
   const r=k.records[recIdx];if(!r)return;
