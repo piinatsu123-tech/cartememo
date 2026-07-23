@@ -267,7 +267,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v5.7</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v5.8</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -1907,6 +1907,7 @@ function buildKarteCard(k, isDetail) {
       <span class="karte-title" style="display:inline-flex;align-items:center;gap:4px">【<input type="text" class="karte-title-edit" value="${esc(k.farm)}" onclick="event.stopPropagation()" onblur="updateKarteField('${k.id}','farm',this.value)" onkeydown="if(event.key==='Enter')this.blur()" title="農場名" style="width:8em"> / <input type="text" class="karte-title-edit" value="${esc(k.cow)}" onclick="event.stopPropagation()" onblur="updateKarteField('${k.id}','cow',this.value)" onkeydown="if(event.key==='Enter')this.blur()" title="牛番号" style="width:5em">】</span>
       <div style="display:flex;gap:8px;align-items:center">
         ${(()=>{const stage=k.closed?2:k.finished?1:0;const bc=stage===2?'badge-closed':stage===1?'badge-unclosed':'badge-active';const bt=stage===2?'確定済':stage===1?'電子未入力':'診療中';return`<span class="karte-badge ${bc}">${bt}</span>`+(!k.closed?`<button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();toggleFinished('${k.id}')">${k.finished?'診療中に戻す':'終診にする'}</button>`:'');})()}
+        <button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();duplicateKarte('${k.id}')" title="このカルテ全体を複製して編集">⧉ カルテ複製</button>
         <button class="btn btn-danger btn-xs" onclick="event.stopPropagation();deleteKarte('${k.id}')">削除</button>
       </div>
     </div>
@@ -2376,6 +2377,22 @@ function deleteKarte(id){
   if(!confirm('このカルテを削除しますか？'))return;
   if(activeKarteId===id) deselectKarte();
   KARTES=KARTES.filter(k=>k.id!==id);saveToStorage();renderKarteList();
+}
+function duplicateKarte(id){
+  const src = KARTES.find(k=>k.id===id); if(!src) return;
+  const copy = JSON.parse(JSON.stringify(src));
+  copy.id = Date.now().toString();
+  copy.closed = false;
+  copy.finished = false;
+  copy.electronic_amount = null;
+  copy.diff = null;
+  copy.records.forEach(r=>{ delete r.karteExported; delete r.karteExportedAt; });
+  KARTES.unshift(copy);
+  saveToStorage();
+  renderKarteList();
+  updateKarteFarmFilter();
+  toast('カルテを複製しました。内容を編集してください','success');
+  selectKarte(copy.id);
 }
 
 // ==================== STATS ====================
