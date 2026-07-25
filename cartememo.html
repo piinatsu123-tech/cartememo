@@ -267,7 +267,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v5.8</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v5.9</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -1619,8 +1619,9 @@ function toKarteLine(k, r) {
   const date = (r.date||'').replace(/-/g, '');            // YYYYMMDD
   const time = san((r.time||'').replace(':',''));         // HHMM
   const dest = san(r.oji_memo||r.ojiMemo||'');            // 往診元欄の値（空欄なら空欄）
-  const distVal = (k && FARM_DIST[k.farm]!=null && FARM_DIST[k.farm]!=='') ? FARM_DIST[k.farm] : '';
-  const dist = san(distVal);                              // 農家ごとに登録した距離(km)
+  // 距離は往診ありのレコードのみ出力（農家ごとに登録した距離km）
+  const distVal = (r.oji && k && FARM_DIST[k.farm]!=null && FARM_DIST[k.farm]!=='') ? FARM_DIST[k.farm] : '';
+  const dist = san(distVal);
   const temp = san(r.temp||'');                           // 例 39.5
   const symptom = san(r.symptom||'');
   const content = san(r.content);                         // 略称/略称*用量 の / 区切り列
