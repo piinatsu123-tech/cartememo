@@ -246,6 +246,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 /* ===== MODAL ===== */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;display:flex;align-items:center;justify-content:center}
+#templateModal{z-index:600} /* 他モーダルの上に重ねる */
 .modal-box{background:#fff;border:1px solid var(--border2);border-radius:8px;padding:24px;width:420px;max-width:90vw;max-height:90vh;overflow-y:auto;box-shadow:0 4px 24px rgba(0,0,0,.12)}
 .modal-title{font-size:17px;font-weight:700;margin-bottom:16px;color:#111}
 
@@ -267,7 +268,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v6.3</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v6.4</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -578,6 +579,49 @@ input[type=checkbox]{width:auto;margin:0}
     </details>
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn btn-ghost" style="margin-left:auto" onclick="closeTemplateModal()">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 複数日まとめて追加モーダル ===== -->
+<div id="bulkAddModal" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <div class="modal-title">📅 複数日まとめて追加</div>
+    <div id="bulk-karte-label" style="font-size:13px;color:var(--text2);margin-bottom:10px;font-weight:600"></div>
+    <div style="display:flex;gap:8px">
+      <div style="flex:1"><label>開始日</label><input type="date" id="bulk-from" onchange="updateBulkPreview()"></div>
+      <div style="flex:1"><label>終了日</label><input type="date" id="bulk-to" onchange="updateBulkPreview()"></div>
+    </div>
+    <label style="margin-top:8px">診療内容</label>
+    <div style="display:flex;gap:6px">
+      <input type="text" id="bulk-content" placeholder="例: iv/アンピ" style="flex:1;min-width:0">
+      <button type="button" class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="openTemplateForBulk()">💊</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <div style="width:150px"><label>体温(℃)</label>
+        <div style="display:flex;gap:4px;align-items:center">
+          <input type="text" inputmode="decimal" id="bulk-temp" placeholder="—" style="flex:1;min-width:0">
+          <button type="button" class="temp-quick" onclick="document.getElementById('bulk-temp').value='39'">39</button>
+          <button type="button" class="temp-quick" onclick="document.getElementById('bulk-temp').value='40'">40</button>
+        </div>
+      </div>
+      <div style="flex:1"><label>症状</label>
+        <div style="display:flex;gap:4px">
+          <input type="text" id="bulk-symptom" placeholder="—" style="flex:1;min-width:0">
+          <button type="button" class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="openSymptomTemplateForBulk()">💊</button>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <div style="width:110px"><label>時間</label><input type="time" id="bulk-time"></div>
+      <div style="flex:1"><label>往診元</label><input type="text" id="bulk-oji" placeholder="空欄可"></div>
+    </div>
+    <label style="margin-top:8px">1日あたりの金額（円）</label>
+    <input type="number" id="bulk-amount" min="0" placeholder="0" oninput="updateBulkPreview()">
+    <div id="bulk-preview" style="margin-top:12px;font-size:12px;color:var(--text2);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px"></div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-primary" onclick="confirmBulkAdd()">まとめて追加</button>
+      <button class="btn btn-ghost" onclick="closeBulkAdd()">キャンセル</button>
     </div>
   </div>
 </div>
@@ -1707,6 +1751,83 @@ function newMemoFromTemplate() {
   _tplTarget = { apply: c => createMemoFromTemplate(c) };
   _openTemplateModal('', 'calc', true);
 }
+// ===== 複数日まとめて追加 =====
+let _bulkKarteId = null;
+function openBulkAdd(karteId) {
+  const k = KARTES.find(x=>x.id===karteId); if(!k) return;
+  _bulkKarteId = karteId;
+  document.getElementById('bulk-karte-label').textContent = `【${k.farm} / ${k.cow}】に追加`;
+  // 直近の診療日の翌日を初期値に
+  const dates = k.records.map(r=>r.date).filter(Boolean).sort();
+  let start;
+  if(dates.length) { const d=new Date(dates[dates.length-1]+'T00:00:00'); d.setDate(d.getDate()+1); start=_ymd(d); }
+  else start = new Date().toISOString().slice(0,10);
+  document.getElementById('bulk-from').value = start;
+  document.getElementById('bulk-to').value = start;
+  ['bulk-content','bulk-temp','bulk-symptom','bulk-time','bulk-oji','bulk-amount'].forEach(id=>document.getElementById(id).value='');
+  updateBulkPreview();
+  document.getElementById('bulkAddModal').style.display = 'flex';
+}
+function closeBulkAdd(){ document.getElementById('bulkAddModal').style.display='none'; _bulkKarteId=null; }
+document.getElementById('bulkAddModal').addEventListener('click', e => { if(e.target===document.getElementById('bulkAddModal')) closeBulkAdd(); });
+function _ymd(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function _bulkDates() {
+  const from = document.getElementById('bulk-from').value;
+  const to = document.getElementById('bulk-to').value;
+  if(!from || !to) return [];
+  if(to < from) return [];
+  const out = [];
+  const d = new Date(from+'T00:00:00'), end = new Date(to+'T00:00:00');
+  while(d <= end && out.length < 366) { out.push(_ymd(d)); d.setDate(d.getDate()+1); }
+  return out;
+}
+function updateBulkPreview() {
+  const el = document.getElementById('bulk-preview'); if(!el) return;
+  const from = document.getElementById('bulk-from').value;
+  const to = document.getElementById('bulk-to').value;
+  const dates = _bulkDates();
+  if(!from || !to) { el.innerHTML = '<span style="color:var(--text3)">開始日と終了日を選んでください</span>'; return; }
+  if(to < from) { el.innerHTML = '<span style="color:#c00">終了日は開始日以降にしてください</span>'; return; }
+  const amt = parseInt(document.getElementById('bulk-amount').value)||0;
+  el.innerHTML = `<b>${dates.length}日分</b>の診療記録を追加します<br>
+    <span style="font-family:'JetBrains Mono',monospace;font-size:11px">${dates.slice(0,5).join(' / ')}${dates.length>5?` … ${dates[dates.length-1]}`:''}</span>
+    ${amt>0?`<br>金額合計: <b>¥${(amt*dates.length).toLocaleString()}</b>（¥${amt.toLocaleString()} × ${dates.length}日）`:''}`;
+}
+function openTemplateForBulk() {
+  const cur = document.getElementById('bulk-content').value.trim();
+  _tplTarget = { apply: c => { document.getElementById('bulk-content').value = c; } };
+  _openTemplateModal(cur, 'karte', true);
+}
+function openSymptomTemplateForBulk() {
+  const cur = document.getElementById('bulk-symptom').value.trim();
+  _tplTarget = { apply: c => { document.getElementById('bulk-symptom').value = c; } };
+  _openTemplateModal(cur, 'symptom', true);
+}
+function confirmBulkAdd() {
+  const k = KARTES.find(x=>x.id===_bulkKarteId); if(!k) return;
+  const dates = _bulkDates();
+  if(!dates.length) return toast('日付の範囲を正しく指定してください','error');
+  const content = document.getElementById('bulk-content').value.trim();
+  const temp = document.getElementById('bulk-temp').value.trim();
+  const symptom = document.getElementById('bulk-symptom').value.trim();
+  const time = document.getElementById('bulk-time').value;
+  const ojiMemo = document.getElementById('bulk-oji').value.trim();
+  const amount = parseInt(document.getElementById('bulk-amount').value)||0;
+  if(!content && !symptom && !amount) return toast('診療内容・症状・金額のいずれかを入力してください','error');
+  if(dates.length > 31 && !confirm(`${dates.length}日分を追加します。よろしいですか？`)) return;
+  dates.forEach(date => {
+    const rec = {date, time, temp, symptom, content, amount};
+    if(ojiMemo) { rec.oji = true; rec.ojiFeeAdded = false; rec.oji_memo = ojiMemo; }
+    k.records.push(rec);
+  });
+  _recalcMonth(k);
+  recalcPaperTotal(k);
+  saveToStorage();
+  closeBulkAdd();
+  renderKarteList();
+  toast(`${dates.length}日分の診療記録を追加しました`,'success');
+}
+
 // ===== 症状テンプレ =====
 function openSymptomTemplateForModal() {
   const cur = document.getElementById('modal-symptom').value.trim();
@@ -2119,7 +2240,10 @@ function buildKarteCard(k, isDetail) {
         <input type="number" id="quick-add-${k.id}" min="0" step="100" placeholder="0" onclick="event.stopPropagation()" onkeydown="quickAddAmountKeydown('${k.id}',event)">
         <div></div>
       </div>
-      <button class="rec-add-btn" onclick="event.stopPropagation();addKarteRecord('${k.id}')">＋ 診療日を追加</button>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <button class="rec-add-btn" style="margin-top:0;flex:1" onclick="event.stopPropagation();addKarteRecord('${k.id}')">＋ 診療日を追加</button>
+        <button class="rec-add-btn" style="margin-top:0;flex:1" onclick="event.stopPropagation();openBulkAdd('${k.id}')">📅 複数日まとめて追加</button>
+      </div>
     </div>
     <div class="karte-totals">
       <div class="total-row"><span style="color:var(--text2)">紙カルテ合計</span><span class="total-val" id="paper-total-${k.id}">¥${k.paper_total.toLocaleString()}</span></div>
