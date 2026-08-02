@@ -267,7 +267,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v6.0</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v6.1</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -422,8 +422,11 @@ input[type=checkbox]{width:auto;margin:0}
           <option value="12">確定済は直近12ヶ月のみ</option>
           <option value="6">確定済は直近6ヶ月のみ</option>
           <option value="3">確定済は直近3ヶ月のみ</option>
+          <option value="2">確定済は直近2ヶ月のみ</option>
+          <option value="1">確定済は直近1ヶ月のみ</option>
+          <option value="-1">確定済は同期しない（診療中・電子未入力のみ）</option>
         </select>
-        <p class="input-hint" style="margin-top:6px">容量が上限に近づいたら同期範囲を絞れます。<b>診療中・電子未入力のカルテは常に全件同期</b>され、除外されるのは確定済の古いカルテだけです。<br>⚠️ 除外したデータは<b>今の端末のローカルには残ります</b>が、他の端末には共有されません。長期保存は「JSONをダウンロード」でバックアップしてください。</p>
+        <p class="input-hint" style="margin-top:6px">容量が上限に近づいたら同期範囲を絞れます。どの設定でも<b>診療中・電子未入力のカルテは常に全件同期</b>され、除外されるのは確定済カルテだけです。<br>⚠️ 除外したデータは<b>今の端末のローカルには残ります</b>が、他の端末には共有されません。長期保存は「JSONをダウンロード」でバックアップしてください。</p>
       </div>
     </div>
   </div>
@@ -1312,7 +1315,9 @@ function _slimMemo(m) {
   return o;
 }
 function _syncTargetKartes() {
-  if(SYNC_KARTE_MONTHS <= 0) return KARTES;
+  if(SYNC_KARTE_MONTHS === 0) return KARTES;
+  // -1 = 確定済は一切同期しない
+  if(SYNC_KARTE_MONTHS < 0) return KARTES.filter(k => !k.closed);
   const d = new Date(); d.setMonth(d.getMonth() - SYNC_KARTE_MONTHS);
   const cutoff = d.toISOString().slice(0,7);
   // 確定済かつ古いカルテのみ除外（診療中・電子未入力は必ず同期）
