@@ -247,6 +247,19 @@ input[type=checkbox]{width:auto;margin:0}
 /* ===== MODAL ===== */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;display:flex;align-items:center;justify-content:center}
 #templateModal{z-index:600} /* 他モーダルの上に重ねる */
+.bedit-range{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.bedit-range input[type=date]{flex:1;min-width:120px}
+.bedit-selbar{display:flex;align-items:center;gap:6px;margin-top:8px}
+.bedit-list{margin-top:6px;max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;background:#fff}
+.bedit-row{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--border);cursor:pointer;font-size:14px}
+.bedit-row:last-child{border-bottom:none}
+.bedit-row input[type=checkbox]{width:20px;height:20px;flex-shrink:0;accent-color:#111;margin:0}
+.bedit-row .bd-date{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text2);flex-shrink:0;width:76px}
+.bedit-row .bd-content{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+.bedit-row .bd-amt{flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text3)}
+.bedit-empty{font-size:13px;color:var(--text3);text-align:center;padding:14px}
+.bedit-field{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;margin-bottom:4px}
+.bedit-field input[type=checkbox]{width:18px;height:18px;accent-color:#111;margin:0}
 .modal-box{background:#fff;border:1px solid var(--border2);border-radius:8px;padding:24px;width:420px;max-width:90vw;max-height:90vh;overflow-y:auto;box-shadow:0 4px 24px rgba(0,0,0,.12)}
 .modal-title{font-size:17px;font-weight:700;margin-bottom:16px;color:#111}
 
@@ -268,7 +281,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v6.4</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v6.5</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -622,6 +635,75 @@ input[type=checkbox]{width:auto;margin:0}
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn btn-primary" onclick="confirmBulkAdd()">まとめて追加</button>
       <button class="btn btn-ghost" onclick="closeBulkAdd()">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 複数日まとめて編集モーダル ===== -->
+<div id="bulkEditModal" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <div class="modal-title">✏️ 複数日まとめて編集</div>
+    <div id="bedit-karte-label" style="font-size:13px;color:var(--text2);margin-bottom:8px;font-weight:600"></div>
+
+    <label>対象の診療日</label>
+    <div class="bedit-range">
+      <input type="date" id="bedit-from" onchange="renderBeditList()">
+      <span style="color:var(--text3)">〜</span>
+      <input type="date" id="bedit-to" onchange="renderBeditList()">
+      <button type="button" class="btn btn-ghost btn-xs" onclick="beditSelectRange()">範囲を選択</button>
+    </div>
+    <div class="bedit-selbar">
+      <button type="button" class="btn btn-ghost btn-xs" onclick="beditSelectAll(true)">全選択</button>
+      <button type="button" class="btn btn-ghost btn-xs" onclick="beditSelectAll(false)">解除</button>
+      <span id="bedit-count" style="margin-left:auto;font-size:12px;color:var(--text2);font-weight:600"></span>
+    </div>
+    <div id="bedit-list" class="bedit-list"></div>
+
+    <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px">
+      <div style="font-size:13px;font-weight:700;color:var(--text2);margin-bottom:8px">変更する項目にチェック（チェックした項目だけ上書きします）</div>
+
+      <label class="bedit-field"><input type="checkbox" id="bedit-use-content"> 診療内容</label>
+      <div style="display:flex;gap:6px;margin-bottom:8px">
+        <input type="text" id="bedit-content" placeholder="例: iv/アンピ" style="flex:1;min-width:0" oninput="document.getElementById('bedit-use-content').checked=true">
+        <button type="button" class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="openTemplateForBedit()">💊</button>
+      </div>
+
+      <label class="bedit-field"><input type="checkbox" id="bedit-use-symptom"> 症状</label>
+      <div style="display:flex;gap:6px;margin-bottom:8px">
+        <input type="text" id="bedit-symptom" placeholder="例: 軟便" style="flex:1;min-width:0" oninput="document.getElementById('bedit-use-symptom').checked=true">
+        <button type="button" class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="openSymptomTemplateForBedit()">💊</button>
+      </div>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div style="flex:1;min-width:150px">
+          <label class="bedit-field"><input type="checkbox" id="bedit-use-temp"> 体温(℃)</label>
+          <div style="display:flex;gap:4px;align-items:center">
+            <input type="text" inputmode="decimal" id="bedit-temp" placeholder="—" style="flex:1;min-width:0" oninput="document.getElementById('bedit-use-temp').checked=true">
+            <button type="button" class="temp-quick" onclick="document.getElementById('bedit-temp').value='39';document.getElementById('bedit-use-temp').checked=true">39</button>
+            <button type="button" class="temp-quick" onclick="document.getElementById('bedit-temp').value='40';document.getElementById('bedit-use-temp').checked=true">40</button>
+          </div>
+        </div>
+        <div style="flex:1;min-width:110px">
+          <label class="bedit-field"><input type="checkbox" id="bedit-use-time"> 時間</label>
+          <input type="time" id="bedit-time" style="width:100%" oninput="document.getElementById('bedit-use-time').checked=true">
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
+        <div style="flex:1;min-width:150px">
+          <label class="bedit-field"><input type="checkbox" id="bedit-use-oji"> 往診元</label>
+          <input type="text" id="bedit-oji" placeholder="空欄可" style="width:100%" oninput="document.getElementById('bedit-use-oji').checked=true">
+        </div>
+        <div style="flex:1;min-width:130px">
+          <label class="bedit-field"><input type="checkbox" id="bedit-use-amount"> 金額（円）</label>
+          <input type="number" id="bedit-amount" min="0" placeholder="0" style="width:100%" oninput="document.getElementById('bedit-use-amount').checked=true">
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-primary" onclick="confirmBulkEdit()">選択した日に適用</button>
+      <button class="btn btn-ghost" onclick="closeBulkEdit()">キャンセル</button>
     </div>
   </div>
 </div>
@@ -1828,6 +1910,106 @@ function confirmBulkAdd() {
   toast(`${dates.length}日分の診療記録を追加しました`,'success');
 }
 
+// ===== 複数日まとめて編集 =====
+let _beditKarteId = null;
+function openBulkEdit(karteId) {
+  const k = KARTES.find(x=>x.id===karteId); if(!k) return;
+  if(!k.records.length) return toast('編集できる診療記録がありません','error');
+  _beditKarteId = karteId;
+  document.getElementById('bedit-karte-label').textContent = `【${k.farm} / ${k.cow}】の診療記録 ${k.records.length}件`;
+  const dates = k.records.map(r=>r.date).filter(Boolean).sort();
+  document.getElementById('bedit-from').value = dates[0]||'';
+  document.getElementById('bedit-to').value = dates[dates.length-1]||'';
+  ['bedit-content','bedit-symptom','bedit-temp','bedit-time','bedit-oji','bedit-amount'].forEach(id=>document.getElementById(id).value='');
+  ['bedit-use-content','bedit-use-symptom','bedit-use-temp','bedit-use-time','bedit-use-oji','bedit-use-amount'].forEach(id=>document.getElementById(id).checked=false);
+  renderBeditList();
+  document.getElementById('bulkEditModal').style.display = 'flex';
+}
+function closeBulkEdit(){ document.getElementById('bulkEditModal').style.display='none'; _beditKarteId=null; }
+document.getElementById('bulkEditModal').addEventListener('click', e => { if(e.target===document.getElementById('bulkEditModal')) closeBulkEdit(); });
+function _beditSorted(k) {
+  return k.records.map((r,i)=>({r,i})).sort((a,b)=>{
+    if(!a.r.date&&!b.r.date) return 0; if(!a.r.date) return 1; if(!b.r.date) return -1;
+    return a.r.date.localeCompare(b.r.date);
+  });
+}
+function renderBeditList() {
+  const k = KARTES.find(x=>x.id===_beditKarteId); if(!k) return;
+  const el = document.getElementById('bedit-list');
+  const rows = _beditSorted(k);
+  if(!rows.length) { el.innerHTML='<div class="bedit-empty">診療記録がありません</div>'; updateBeditCount(); return; }
+  // 既存のチェック状態を保持
+  const prev = new Set([...el.querySelectorAll('.bedit-chk:checked')].map(c=>c.dataset.i));
+  el.innerHTML = rows.map(({r,i})=>`<label class="bedit-row">
+    <input type="checkbox" class="bedit-chk" data-i="${i}" ${prev.has(String(i))?'checked':''} onchange="updateBeditCount()">
+    <span class="bd-date">${r.date?esc(r.date.slice(5)):'—'}</span>
+    <span class="bd-content">${esc(r.content||'（内容なし）')}${r.symptom?` <span style="color:var(--text3)">/ ${esc(r.symptom)}</span>`:''}</span>
+    <span class="bd-amt">${r.amount>0?'¥'+r.amount.toLocaleString():''}</span>
+  </label>`).join('');
+  updateBeditCount();
+}
+function beditSelectRange() {
+  const k = KARTES.find(x=>x.id===_beditKarteId); if(!k) return;
+  const from = document.getElementById('bedit-from').value;
+  const to = document.getElementById('bedit-to').value;
+  if(!from||!to) return toast('開始日と終了日を選んでください','error');
+  if(to<from) return toast('終了日は開始日以降にしてください','error');
+  document.querySelectorAll('#bedit-list .bedit-chk').forEach(c=>{
+    const r = k.records[parseInt(c.dataset.i)];
+    c.checked = !!(r && r.date && r.date>=from && r.date<=to);
+  });
+  updateBeditCount();
+}
+function beditSelectAll(on) {
+  document.querySelectorAll('#bedit-list .bedit-chk').forEach(c=>c.checked=on);
+  updateBeditCount();
+}
+function updateBeditCount() {
+  const n = document.querySelectorAll('#bedit-list .bedit-chk:checked').length;
+  const el = document.getElementById('bedit-count');
+  if(el) el.textContent = `${n}件を選択中`;
+}
+function openTemplateForBedit() {
+  const cur = document.getElementById('bedit-content').value.trim();
+  _tplTarget = { apply: c => { document.getElementById('bedit-content').value = c; document.getElementById('bedit-use-content').checked = true; } };
+  _openTemplateModal(cur, 'karte', true);
+}
+function openSymptomTemplateForBedit() {
+  const cur = document.getElementById('bedit-symptom').value.trim();
+  _tplTarget = { apply: c => { document.getElementById('bedit-symptom').value = c; document.getElementById('bedit-use-symptom').checked = true; } };
+  _openTemplateModal(cur, 'symptom', true);
+}
+function confirmBulkEdit() {
+  const k = KARTES.find(x=>x.id===_beditKarteId); if(!k) return;
+  const idxs = [...document.querySelectorAll('#bedit-list .bedit-chk:checked')].map(c=>parseInt(c.dataset.i)).filter(i=>k.records[i]);
+  if(!idxs.length) return toast('編集する診療日を選択してください','error');
+  const use = id => document.getElementById('bedit-use-'+id).checked;
+  const val = id => document.getElementById('bedit-'+id).value;
+  const fields = ['content','symptom','temp','time','oji','amount'].filter(use);
+  if(!fields.length) return toast('変更する項目にチェックを入れてください','error');
+  const labels = {content:'診療内容',symptom:'症状',temp:'体温',time:'時間',oji:'往診元',amount:'金額'};
+  if(!confirm(`${idxs.length}件の診療記録の【${fields.map(f=>labels[f]).join('・')}】を上書きします。よろしいですか？`)) return;
+  idxs.forEach(i => {
+    const r = k.records[i];
+    if(use('content')) r.content = val('content').trim();
+    if(use('symptom')) r.symptom = val('symptom').trim();
+    if(use('temp'))    r.temp    = val('temp').trim();
+    if(use('time'))    r.time    = val('time');
+    if(use('oji')) {
+      const om = val('oji').trim();
+      r.oji_memo = om;
+      if(om) { if(!r.oji) { r.oji = true; r.ojiFeeAdded = false; } }
+      else { r.oji = false; r.ojiFeeAdded = false; }
+    }
+    if(use('amount')) r.amount = parseInt(val('amount'))||0;
+  });
+  recalcPaperTotal(k);
+  saveToStorage();
+  closeBulkEdit();
+  renderKarteList();
+  toast(`${idxs.length}件の診療記録を更新しました`,'success');
+}
+
 // ===== 症状テンプレ =====
 function openSymptomTemplateForModal() {
   const cur = document.getElementById('modal-symptom').value.trim();
@@ -2240,9 +2422,10 @@ function buildKarteCard(k, isDetail) {
         <input type="number" id="quick-add-${k.id}" min="0" step="100" placeholder="0" onclick="event.stopPropagation()" onkeydown="quickAddAmountKeydown('${k.id}',event)">
         <div></div>
       </div>
-      <div style="display:flex;gap:6px;margin-top:8px">
-        <button class="rec-add-btn" style="margin-top:0;flex:1" onclick="event.stopPropagation();addKarteRecord('${k.id}')">＋ 診療日を追加</button>
-        <button class="rec-add-btn" style="margin-top:0;flex:1" onclick="event.stopPropagation();openBulkAdd('${k.id}')">📅 複数日まとめて追加</button>
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+        <button class="rec-add-btn" style="margin-top:0;flex:1;min-width:130px" onclick="event.stopPropagation();addKarteRecord('${k.id}')">＋ 診療日を追加</button>
+        <button class="rec-add-btn" style="margin-top:0;flex:1;min-width:130px" onclick="event.stopPropagation();openBulkAdd('${k.id}')">📅 複数日まとめて追加</button>
+        <button class="rec-add-btn" style="margin-top:0;flex:1;min-width:130px" onclick="event.stopPropagation();openBulkEdit('${k.id}')">✏️ 複数日まとめて編集</button>
       </div>
     </div>
     <div class="karte-totals">
