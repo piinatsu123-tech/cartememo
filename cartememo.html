@@ -267,7 +267,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v6.1</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v6.2</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -637,6 +637,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderMasterEditor();
   renderMemoQueue();
   updateBadge();
+  reconcileFarms();
   updateFarmDatalist();
   initBookmarklet();
   const dl = document.getElementById('masterNamesList');
@@ -1490,6 +1491,7 @@ async function cloudAutoLoad() {
     saveToStorage(); // ローカルにも反映（クラウド再送信はしない）
     _suppressAutoSave = false;
     // 画面を再描画
+    reconcileFarms();
     renderMemoQueue(); renderResultsList(); renderDict(); updateBadge();
     updateFarmDatalist(); updateKarteFarmFilter(); renderKarteList();
     refreshMasterUI();
@@ -1588,8 +1590,10 @@ async function cloudLoad() {
     if(Array.isArray(data.master)){const names=new Set(MASTER.map(m=>m.name));data.master.forEach(m=>{if(!names.has(m.name))MASTER.push(m);});refreshMasterUI();}
     if(data.farmDist&&typeof data.farmDist==='object'){Object.keys(data.farmDist).forEach(f=>{if(FARM_DIST[f]==null)FARM_DIST[f]=data.farmDist[f];});}
     if(Array.isArray(data.templates)){const ids=new Set(TEMPLATES.map(t=>t.id));data.templates.forEach(t=>{if(!ids.has(t.id))TEMPLATES.push(t);});}
+    reconcileFarms();
     saveToStorage(); saveJsonbinSettings();
     renderMemoQueue();renderResultsList();renderDict();updateBadge();
+    updateFarmDatalist();updateKarteFarmFilter();renderKarteList();
     document.getElementById('cloudInfo').textContent=`最終読み込み: ${new Date().toLocaleString('ja-JP')}（メモ${newMemos.length}件・カルテ${newKartes}件追加）`;
     toast(`メモ${newMemos.length}件・カルテ${newKartes}件を追加しました`,'success');
   } catch(e) { toast('読み込みエラー: '+e.message,'error'); }
@@ -1620,7 +1624,9 @@ function importData(input) {
       if(Array.isArray(data.master)){const mnames=new Set(MASTER.map(m=>m.name));data.master.forEach(m=>{if(!mnames.has(m.name))MASTER.push(m);});refreshMasterUI();}
       if(data.farmDist&&typeof data.farmDist==='object'){Object.keys(data.farmDist).forEach(f=>{if(FARM_DIST[f]==null)FARM_DIST[f]=data.farmDist[f];});}
       if(Array.isArray(data.templates)){const ids=new Set(TEMPLATES.map(t=>t.id));data.templates.forEach(t=>{if(!ids.has(t.id))TEMPLATES.push(t);});}
+      reconcileFarms();
       saveToStorage();renderMemoQueue();renderResultsList();renderDict();updateBadge();
+      updateFarmDatalist();updateKarteFarmFilter();renderKarteList();
       toast(`メモ${newMemos.length}件・カルテ${newKartes}件を追加しました`,'success');
     } catch(err){toast('読み込みエラー: '+err.message,'error');}
     input.value='';
@@ -1868,10 +1874,25 @@ function setFarmDist(farm, val) {
   else { const n = parseFloat(s); if(isNaN(n)||n<0){ toast('正しい距離を入力してください','error'); return; } FARM_DIST[farm] = n; }
   saveToStorage();
 }
+// カルテに存在する農場名で FARMS を補完する（同期マージや農場名変更での取りこぼし対策）
+function reconcileFarms() {
+  let added = 0;
+  KARTES.forEach(k => { if(k.farm && !FARMS.includes(k.farm)) { FARMS.push(k.farm); added++; } });
+  if(added) {
+    FARMS.sort((a,b)=>a.localeCompare(b,'ja'));
+    _suppressAutoSave = true; saveToStorage(); _suppressAutoSave = false;
+    updateFarmDatalist();
+  }
+  return added;
+}
 function updateKarteFarmFilter() {
   const sel = document.getElementById('karte-filter-farm');
   const cur = sel.value;
-  sel.innerHTML = '<option value="">全農場</option>' + FARMS.map(f => `<option value="${f}"${f===cur?' selected':''}>${f}</option>`).join('');
+  // FARMS とカルテ内の農場名の和集合から生成（FARMS に無い農場も必ず出す）
+  const set = new Set(FARMS);
+  KARTES.forEach(k => { if(k.farm) set.add(k.farm); });
+  const list = [...set].sort((a,b)=>a.localeCompare(b,'ja'));
+  sel.innerHTML = '<option value="">全農場</option>' + list.map(f => `<option value="${esc(f)}"${f===cur?' selected':''}>${esc(f)}</option>`).join('');
 }
 
 function toggleResultExpand(id) {
