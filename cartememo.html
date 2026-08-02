@@ -220,7 +220,7 @@ input[type=checkbox]{width:auto;margin:0}
 .tpl-item .tpl-del:hover{color:#c00}
 .tpl-empty{font-size:13px;color:var(--text3);text-align:center;padding:16px}
 .tpl-type-tabs{display:flex;gap:6px;margin-bottom:10px}
-.tpl-type-tabs button{flex:1;min-height:40px;font-size:14px;font-weight:700;color:var(--text3);background:var(--surface);border:1px solid var(--border2);border-radius:6px;cursor:pointer;font-family:'Noto Sans JP',sans-serif}
+.tpl-type-tabs button{flex:1;min-height:40px;font-size:13px;font-weight:700;color:var(--text3);background:var(--surface);border:1px solid var(--border2);border-radius:6px;cursor:pointer;font-family:'Noto Sans JP',sans-serif;padding:0 4px;white-space:nowrap}
 .tpl-type-tabs button.active{color:#fff;background:#111;border-color:#111}
 .temp-quick{flex-shrink:0;font-size:13px;font-weight:700;color:var(--text2);background:#fff;border:1px solid var(--border2);border-radius:4px;padding:6px 8px;cursor:pointer;font-family:'JetBrains Mono',monospace}
 .temp-quick:hover{background:var(--surface);color:#111}
@@ -267,7 +267,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v6.2</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v6.3</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -476,9 +476,9 @@ input[type=checkbox]{width:auto;margin:0}
   </div>
 
   <div class="panel">
-    <div class="panel-hdr"><h2>💊 よく使う治療パターン</h2></div>
+    <div class="panel-hdr"><h2>💊 よく使う治療パターン・症状</h2></div>
     <div class="panel-body">
-      <p class="input-hint" style="margin-bottom:10px">頻出する診療内容をパターン登録しておくと、一括計算の「💊 定型」・カルテ保存時・診療内容欄の「💊」ボタンから検索してワンタッチで挿入できます。</p>
+      <p class="input-hint" style="margin-bottom:10px">頻出する診療内容や症状を登録しておくと、各入力欄の「💊」ボタンから検索してワンタッチで挿入できます。<br>🧮 計算用（一括計算）／📋 カルテ用（診療内容）／🩺 症状 の3種類を別々に管理できます。</p>
       <button class="btn btn-primary btn-sm" onclick="openTemplateManager()">パターンを管理・追加</button>
     </div>
   </div>
@@ -534,7 +534,12 @@ input[type=checkbox]{width:auto;margin:0}
           <button type="button" class="temp-quick" onclick="document.getElementById('modal-temp').value='40'">40</button>
         </div>
       </div>
-      <div style="flex:1"><label>症状</label><input type="text" id="modal-symptom" placeholder="軟便など"></div>
+      <div style="flex:1"><label>症状</label>
+        <div style="display:flex;gap:4px">
+          <input type="text" id="modal-symptom" placeholder="軟便など" style="flex:1;min-width:0">
+          <button type="button" class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="openSymptomTemplateForModal()">💊</button>
+        </div>
+      </div>
     </div>
     <label>往診元</label>
     <input type="text" id="modal-oji" placeholder="空欄可">
@@ -559,6 +564,7 @@ input[type=checkbox]{width:auto;margin:0}
     <div class="tpl-type-tabs" id="tpl-type-tabs">
       <button type="button" id="tpl-tab-calc" onclick="switchTplType('calc')">🧮 計算用</button>
       <button type="button" id="tpl-tab-karte" onclick="switchTplType('karte')">📋 カルテ用</button>
+      <button type="button" id="tpl-tab-symptom" onclick="switchTplType('symptom')">🩺 症状</button>
     </div>
     <input type="text" id="tpl-search" placeholder="🔍 名前・内容で検索" oninput="renderTemplatePicker()" autocomplete="off">
     <div id="tpl-list" class="tpl-list"></div>
@@ -1659,6 +1665,19 @@ function _updateTplTabs() {
   tabs.style.display = _tplTypeLocked ? 'none' : 'flex';
   document.getElementById('tpl-tab-calc').classList.toggle('active', _tplType==='calc');
   document.getElementById('tpl-tab-karte').classList.toggle('active', _tplType==='karte');
+  document.getElementById('tpl-tab-symptom').classList.toggle('active', _tplType==='symptom');
+  // 種別に応じてタイトルと入力欄の文言を切り替え
+  const isSym = _tplType==='symptom';
+  const title = document.querySelector('#templateModal .modal-title');
+  if(title) title.textContent = isSym ? '🩺 よく使う症状' : '💊 よく使う治療パターン';
+  const nameInp = document.getElementById('tpl-new-name');
+  const contInp = document.getElementById('tpl-new-content');
+  if(nameInp) nameInp.placeholder = isSym ? 'パターン名（例: 下痢）' : 'パターン名（例: 下痢セット）';
+  if(contInp) contInp.placeholder = isSym ? '症状 例: 軟便・食欲不振' : '診療内容 例: iv/メトクロ*10/スタマー*150';
+  const sum = document.querySelector('#tpl-new-details summary');
+  if(sum) sum.textContent = isSym ? '＋ 新しい症状を保存' : '＋ 新しいパターンを保存';
+  const srch = document.getElementById('tpl-search');
+  if(srch) srch.placeholder = isSym ? '🔍 症状を検索' : '🔍 名前・内容で検索';
 }
 function switchTplType(type) {
   if(_tplTypeLocked) return;
@@ -1687,6 +1706,18 @@ function openTemplateForMemo(memoId) {
 function newMemoFromTemplate() {
   _tplTarget = { apply: c => createMemoFromTemplate(c) };
   _openTemplateModal('', 'calc', true);
+}
+// ===== 症状テンプレ =====
+function openSymptomTemplateForModal() {
+  const cur = document.getElementById('modal-symptom').value.trim();
+  _tplTarget = { apply: c => { document.getElementById('modal-symptom').value = c; } };
+  _openTemplateModal(cur, 'symptom', true);
+}
+function openSymptomTemplateForRecord(karteId, recIdx) {
+  const k = KARTES.find(x=>x.id===karteId); if(!k) return;
+  const r = k.records[recIdx]; if(!r) return;
+  _tplTarget = { apply: c => { r.symptom = c; saveToStorage(); renderKarteList(); } };
+  _openTemplateModal((r.symptom||'').trim(), 'symptom', true);
 }
 // パターン内容(B1形式)を品目リストに展開して新規カードとして追加
 function createMemoFromTemplate(content) {
@@ -2062,7 +2093,7 @@ function buildKarteCard(k, isDetail) {
           <span class="rds-label">日付</span><button type="button" class="date-step" onclick="event.stopPropagation();stepRecordDate('${k.id}',${i},-1)">−1日</button><button type="button" class="date-step" onclick="event.stopPropagation();stepRecordDate('${k.id}',${i},1)">＋1日</button>
           <span class="rds-label">時間</span><input type="time" value="${esc(r.time||'')}" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'time',this.value)">
           <span class="rds-label">体温</span><input type="text" inputmode="decimal" value="${esc(r.temp||'')}" placeholder="—" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'temp',this.value)" style="width:52px"><button type="button" class="temp-quick" style="padding:3px 6px;font-size:11px" onclick="event.stopPropagation();setRecordTemp('${k.id}',${i},'39')">39</button><button type="button" class="temp-quick" style="padding:3px 6px;font-size:11px" onclick="event.stopPropagation();setRecordTemp('${k.id}',${i},'40')">40</button>
-          <span class="rds-label">症状</span><input type="text" value="${esc(r.symptom||'')}" placeholder="—" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'symptom',this.value)" style="flex:1;min-width:60px">
+          <span class="rds-label">症状</span><input type="text" value="${esc(r.symptom||'')}" placeholder="—" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'symptom',this.value)" style="flex:1;min-width:60px"><button type="button" class="temp-quick" style="padding:3px 6px;font-size:11px" onclick="event.stopPropagation();openSymptomTemplateForRecord('${k.id}',${i})" title="よく使う症状から選択／保存">💊</button>
         </div>
         <div class="rec-preset-sub">${presetChecks}</div>
       </div>
@@ -2332,7 +2363,7 @@ function buildAmountOnlyRowHtml(karteId, i) {
         <span class="rds-label">日付</span><button type="button" class="date-step" onclick="event.stopPropagation();stepRecordDate('${karteId}',${i},-1)">−1日</button><button type="button" class="date-step" onclick="event.stopPropagation();stepRecordDate('${karteId}',${i},1)">＋1日</button>
         <span class="rds-label">時間</span><input type="time" value="${rec.time||''}" onclick="event.stopPropagation()" onblur="updateRecord('${karteId}',${i},'time',this.value)">
         <span class="rds-label">体温</span><input type="text" inputmode="decimal" value="${(rec.temp||'').toString().replace(/"/g,'&quot;')}" placeholder="—" onclick="event.stopPropagation()" onblur="updateRecord('${karteId}',${i},'temp',this.value)" style="width:52px"><button type="button" class="temp-quick" style="padding:3px 6px;font-size:11px" onclick="event.stopPropagation();setRecordTemp('${karteId}',${i},'39')">39</button><button type="button" class="temp-quick" style="padding:3px 6px;font-size:11px" onclick="event.stopPropagation();setRecordTemp('${karteId}',${i},'40')">40</button>
-        <span class="rds-label">症状</span><input type="text" value="${(rec.symptom||'').replace(/"/g,'&quot;')}" placeholder="—" onclick="event.stopPropagation()" onblur="updateRecord('${karteId}',${i},'symptom',this.value)" style="flex:1;min-width:60px">
+        <span class="rds-label">症状</span><input type="text" value="${(rec.symptom||'').replace(/"/g,'&quot;')}" placeholder="—" onclick="event.stopPropagation()" onblur="updateRecord('${karteId}',${i},'symptom',this.value)" style="flex:1;min-width:60px"><button type="button" class="temp-quick" style="padding:3px 6px;font-size:11px" onclick="event.stopPropagation();openSymptomTemplateForRecord('${karteId}',${i})" title="よく使う症状から選択／保存">💊</button>
       </div>
       <div class="rec-preset-sub">${presetChecks}</div>
     </div>
