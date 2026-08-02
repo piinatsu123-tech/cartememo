@@ -250,21 +250,13 @@ input[type=checkbox]{width:auto;margin:0}
 .bedit-range{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .bedit-range input[type=date]{flex:1;min-width:120px}
 .bedit-selbar{display:flex;align-items:center;gap:6px;margin-top:8px}
-.bedit-list{margin-top:6px;max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;background:#fff}
-.bedit-row{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--border);cursor:pointer;font-size:14px}
+.bedit-list{margin-top:6px;max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;background:#fff}
+.bedit-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;font-size:14px}
+.bedit-row:has(input:checked){background:var(--surface)}
 .bedit-row:last-child{border-bottom:none}
 .bedit-row input[type=checkbox]{width:20px;height:20px;flex-shrink:0;accent-color:#111;margin:0}
-.bedit-row .bd-date{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text2);flex-shrink:0;width:76px}
-.bedit-row .bd-content{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
-.bedit-row .bd-amt{flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text3)}
+.bedit-row .bd-date{font-family:'JetBrains Mono',monospace;font-size:15px;color:#111;font-weight:600}
 .bedit-empty{font-size:13px;color:var(--text3);text-align:center;padding:14px}
-.bedit-steps{display:flex;gap:4px;margin-bottom:12px}
-.bedit-step{flex:1;display:flex;align-items:center;justify-content:center;gap:5px;font-size:12px;font-weight:700;color:var(--text3);background:var(--surface);border:1px solid var(--border2);border-radius:6px;padding:7px 4px;white-space:nowrap}
-.bedit-step .bs-num{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--border2);color:#fff;font-size:11px;flex-shrink:0}
-.bedit-step.active{color:#fff;background:#111;border-color:#111}
-.bedit-step.active .bs-num{background:rgba(255,255,255,.3)}
-.bedit-step.done{color:#111;background:#fff;border-color:#111}
-.bedit-step.done .bs-num{background:#111}
 .bedit-help{font-size:14px;font-weight:700;color:#111;margin-bottom:10px}
 .bedit-note{font-size:12px;color:var(--text3);margin-top:10px;text-align:center}
 .bedit-nav{display:flex;gap:8px;margin-top:16px;align-items:center}
@@ -296,7 +288,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v6.6</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v6.7</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -659,13 +651,6 @@ input[type=checkbox]{width:auto;margin:0}
   <div class="modal-box">
     <div class="modal-title">✏️ 複数日まとめて編集</div>
     <div id="bedit-karte-label" style="font-size:13px;color:var(--text2);margin-bottom:10px;font-weight:600"></div>
-
-    <!-- ステップ表示 -->
-    <div class="bedit-steps">
-      <div class="bedit-step" id="bstep-1"><span class="bs-num">1</span>日を選ぶ</div>
-      <div class="bedit-step" id="bstep-2"><span class="bs-num">2</span>項目を選ぶ</div>
-      <div class="bedit-step" id="bstep-3"><span class="bs-num">3</span>入力する</div>
-    </div>
 
     <!-- STEP 1: 日を選ぶ -->
     <div id="bedit-page-1" class="bedit-page">
@@ -1992,9 +1977,6 @@ function beditGoStep(n) {
   }
   [1,2,3].forEach(i=>{
     document.getElementById('bedit-page-'+i).style.display = (i===n) ? '' : 'none';
-    const st = document.getElementById('bstep-'+i);
-    st.classList.toggle('active', i===n);
-    st.classList.toggle('done', i<n);
   });
 }
 function beditSyncFieldBtns(){ /* :has(input:checked) で見た目は自動更新 */ }
@@ -2015,9 +1997,7 @@ function renderBeditList() {
   const prev = new Set([...el.querySelectorAll('.bedit-chk:checked')].map(c=>c.dataset.i));
   el.innerHTML = rows.map(({r,i})=>`<label class="bedit-row">
     <input type="checkbox" class="bedit-chk" data-i="${i}" ${prev.has(String(i))?'checked':''} onchange="updateBeditCount()">
-    <span class="bd-date">${r.date?esc(r.date.slice(5)):'—'}</span>
-    <span class="bd-content">${esc(r.content||'（内容なし）')}${r.symptom?` <span style="color:var(--text3)">/ ${esc(r.symptom)}</span>`:''}</span>
-    <span class="bd-amt">${r.amount>0?'¥'+r.amount.toLocaleString():''}</span>
+    <span class="bd-date">${r.date?esc(fmtDate(r.date)):'日付なし'}</span>
   </label>`).join('');
   updateBeditCount();
 }
