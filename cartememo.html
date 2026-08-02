@@ -267,7 +267,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v5.9</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v6.0</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -407,6 +407,24 @@ input[type=checkbox]{width:auto;margin:0}
         <button class="btn btn-ghost btn-sm" onclick="cloudLoad()">↓ クラウドから読み込む</button>
       </div>
       <div id="cloudInfo" style="font-size:11px;color:var(--text3);margin-top:8px"></div>
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <div id="cloudSizeInfo"></div>
+        <label style="margin-top:10px">同期するメモの上限</label>
+        <select id="syncMemoLimit" onchange="setSyncMemoLimit(this.value)" style="width:100%">
+          <option value="0">全件を同期</option>
+          <option value="100">直近100件のみ</option>
+          <option value="50">直近50件のみ</option>
+          <option value="20">直近20件のみ</option>
+        </select>
+        <label style="margin-top:10px">同期するカルテの範囲</label>
+        <select id="syncKarteMonths" onchange="setSyncKarteMonths(this.value)" style="width:100%">
+          <option value="0">全件を同期</option>
+          <option value="12">確定済は直近12ヶ月のみ</option>
+          <option value="6">確定済は直近6ヶ月のみ</option>
+          <option value="3">確定済は直近3ヶ月のみ</option>
+        </select>
+        <p class="input-hint" style="margin-top:6px">容量が上限に近づいたら同期範囲を絞れます。<b>診療中・電子未入力のカルテは常に全件同期</b>され、除外されるのは確定済の古いカルテだけです。<br>⚠️ 除外したデータは<b>今の端末のローカルには残ります</b>が、他の端末には共有されません。長期保存は「JSONをダウンロード」でバックアップしてください。</p>
+      </div>
     </div>
   </div>
 
@@ -695,7 +713,7 @@ function switchTab(name) {
   if(name === 'calc') renderResultsList();
   if(name === 'karte') { updateKarteFarmFilter(); renderKarteList(); }
   if(name === 'stats') renderStats();
-  if(name === 'settings') renderFarmDistList();
+  if(name === 'settings') { renderFarmDistList(); loadSyncMemoLimit(); renderCloudSize(); }
 }
 
 // ==================== STORAGE ====================
@@ -1263,6 +1281,120 @@ async function reparse(id){const memo=memos.find(m=>m.id===id);if(!memo)return;m
 
 // ==================== AUTO CLOUD SYNC ====================
 let _autoSaveTimer = null;
+// ===== クラウド送信データの構築（容量削減のため空・既定値のフィールドを除去） =====
+let SYNC_MEMO_LIMIT = 0;      // 0 = 全件同期。N>0 なら直近N件のメモのみ同期
+let SYNC_KARTE_MONTHS = 0;    // 0 = 全件同期。N>0 なら「確定済かつNヶ月より古い」カルテを同期対象外
+function _slim(obj, defaults) {
+  // 値が空文字/null/undefined、または既定値と同じキーを削除した新オブジェクトを返す
+  const out = {};
+  Object.keys(obj).forEach(kk => {
+    const v = obj[kk];
+    if(v===undefined || v===null || v==='') return;
+    if(defaults && Object.prototype.hasOwnProperty.call(defaults, kk) && v===defaults[kk]) return;
+    out[kk] = v;
+  });
+  return out;
+}
+function _slimRecord(r) {
+  const o = _slim(r, {amount:0, oji:false, karteExported:false});
+  delete o.karteExportedAt; // 出力日時は他端末で不要
+  if(Array.isArray(o.presets) && !o.presets.length) delete o.presets;
+  return o;
+}
+function _slimKarte(k) {
+  const o = _slim(k, {closed:false, finished:false, archived:false, diff:null, electronic_amount:null});
+  o.records = (k.records||[]).map(_slimRecord);
+  return o;
+}
+function _slimMemo(m) {
+  const o = _slim(m, {hidden:false, karte_saved:false, multiplier:1, temp:'', symptom:''});
+  if(Array.isArray(m.items)) o.items = m.items.map(it=>_slim(it, {unit:'', unknown:false, qty:1}));
+  return o;
+}
+function _syncTargetKartes() {
+  if(SYNC_KARTE_MONTHS <= 0) return KARTES;
+  const d = new Date(); d.setMonth(d.getMonth() - SYNC_KARTE_MONTHS);
+  const cutoff = d.toISOString().slice(0,7);
+  // 確定済かつ古いカルテのみ除外（診療中・電子未入力は必ず同期）
+  return KARTES.filter(k => !(k.closed && k.month && k.month < cutoff));
+}
+function buildCloudPayload() {
+  let ms = memos;
+  if(SYNC_MEMO_LIMIT > 0 && memos.length > SYNC_MEMO_LIMIT) ms = memos.slice(-SYNC_MEMO_LIMIT);
+  return {
+    version:2, savedAt:new Date().toISOString(),
+    memos: ms.map(_slimMemo),
+    dictWords:DICT_WORDS, convPairs,
+    kartes: _syncTargetKartes().map(_slimKarte),
+    farms:FARMS, master:MASTER, farmDist:FARM_DIST, templates:TEMPLATES
+  };
+}
+// 読み込み時に省略されたフィールドを既定値で復元（描画側が undefined を扱わないため）
+function _normRecord(r) {
+  r.date=r.date||''; r.time=r.time||''; r.temp=r.temp||''; r.symptom=r.symptom||'';
+  r.content=r.content||''; r.amount=r.amount||0; r.oji_memo=r.oji_memo||r.ojiMemo||'';
+  if(r.oji===undefined) r.oji=false;
+  if(r.karteExported===undefined) r.karteExported=false;
+  return r;
+}
+function _normKarte(k) {
+  k.farm=k.farm||''; k.cow=k.cow||''; k.month=k.month||'';
+  if(k.closed===undefined) k.closed=false;
+  if(k.finished===undefined) k.finished=false;
+  if(k.electronic_amount===undefined) k.electronic_amount=null;
+  if(k.diff===undefined) k.diff=null;
+  k.records=(k.records||[]).map(_normRecord);
+  k.paper_total = k.records.reduce((s,r)=>s+(r.amount||0),0);
+  return k;
+}
+function _normMemo(m) {
+  m.text=m.text||''; m.time=m.time||''; m.patientNo=m.patientNo||''; m.ownerName=m.ownerName||'';
+  m.temp=m.temp||''; m.symptom=m.symptom||''; m.status=m.status||'pending';
+  m.items=(m.items||[]).map(it=>{ it.name=it.name||''; it.qty=it.qty==null?1:it.qty; it.unit=it.unit||''; it.price=it.price||0; if(it.unknown===undefined) it.unknown=!MASTER.find(x=>x.name===it.name); return it; });
+  return m;
+}
+function setSyncMemoLimit(v) {
+  SYNC_MEMO_LIMIT = parseInt(v)||0;
+  try { localStorage.setItem('cm_synclimit', String(SYNC_MEMO_LIMIT)); } catch(e){}
+  renderCloudSize();
+  scheduleCloudAutoSave();
+}
+function setSyncKarteMonths(v) {
+  SYNC_KARTE_MONTHS = parseInt(v)||0;
+  try { localStorage.setItem('cm_synckmonths', String(SYNC_KARTE_MONTHS)); } catch(e){}
+  renderCloudSize();
+  scheduleCloudAutoSave();
+}
+function loadSyncMemoLimit() {
+  try {
+    SYNC_MEMO_LIMIT = parseInt(localStorage.getItem('cm_synclimit')||'0')||0;
+    SYNC_KARTE_MONTHS = parseInt(localStorage.getItem('cm_synckmonths')||'0')||0;
+  } catch(e){}
+  const sel = document.getElementById('syncMemoLimit');
+  if(sel) sel.value = String(SYNC_MEMO_LIMIT);
+  const sel2 = document.getElementById('syncKarteMonths');
+  if(sel2) sel2.value = String(SYNC_KARTE_MONTHS);
+}
+function cloudPayloadSize() {
+  try { return new Blob([JSON.stringify(buildCloudPayload())]).size; } catch(e) { return JSON.stringify(buildCloudPayload()).length; }
+}
+function fmtBytes(n) { return n<1024 ? n+' B' : n<1024*1024 ? (n/1024).toFixed(1)+' KB' : (n/1024/1024).toFixed(2)+' MB'; }
+function renderCloudSize() {
+  const el = document.getElementById('cloudSizeInfo'); if(!el) return;
+  const size = cloudPayloadSize();
+  const raw = new Blob([JSON.stringify({memos,kartes:KARTES,master:MASTER,templates:TEMPLATES,farms:FARMS,farmDist:FARM_DIST,dictWords:DICT_WORDS,convPairs})]).size;
+  const LIMIT = 100*1024; // jsonbin.io 無料プランの目安（1binあたり約100KB）
+  const pct = Math.min(100, Math.round(size/LIMIT*100));
+  const syncedKartes = _syncTargetKartes().length;
+  const syncedMemos = (SYNC_MEMO_LIMIT>0 && memos.length>SYNC_MEMO_LIMIT) ? SYNC_MEMO_LIMIT : memos.length;
+  const excluded = (KARTES.length - syncedKartes) + (memos.length - syncedMemos);
+  const color = pct>=90 ? '#c00' : pct>=70 ? '#e07800' : 'var(--text2)';
+  el.innerHTML = `<div style="font-size:12px;color:${color};font-weight:600">送信サイズ: ${fmtBytes(size)} / 目安上限 100 KB（${pct}%）</div>
+    <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:4px"><div style="height:100%;width:${pct}%;background:${pct>=90?'#c00':pct>=70?'#e07800':'#111'}"></div></div>
+    <div style="font-size:11px;color:var(--text3);margin-top:4px">圧縮前 ${fmtBytes(raw)} → 圧縮後 ${fmtBytes(size)}</div>
+    <div style="font-size:11px;color:var(--text3);margin-top:2px">同期対象: メモ ${syncedMemos}/${memos.length}件・カルテ ${syncedKartes}/${KARTES.length}件${excluded?` <span style="color:#e07800">（${excluded}件を除外中）</span>`:''}</div>`;
+}
+
 function scheduleCloudAutoSave() {
   const key = localStorage.getItem('cm_jbk') || '';
   const binId = localStorage.getItem('cm_jbid') || '';
@@ -1273,7 +1405,7 @@ function scheduleCloudAutoSave() {
 
 async function cloudAutoSave(key, binId) {
   setSyncStatus('saving');
-  const data = {version:2, savedAt:new Date().toISOString(), memos, dictWords:DICT_WORDS, convPairs, kartes:KARTES, farms:FARMS, master:MASTER, farmDist:FARM_DIST,templates:TEMPLATES};
+  const data = buildCloudPayload();
   try {
     const resp = await fetch(`https://api.jsonbin.io/v3/b/${binId}`, {
       method:'PUT',
@@ -1282,12 +1414,17 @@ async function cloudAutoSave(key, binId) {
     });
     if(!resp.ok) { const r=await resp.json(); throw new Error(r.message||'HTTP '+resp.status); }
     setSyncStatus('saved');
-    document.getElementById('cloudInfo').textContent = `最終自動保存: ${new Date().toLocaleString('ja-JP')}（メモ${memos.length}件・カルテ${KARTES.length}件）`;
+    const sz = new Blob([JSON.stringify(data)]).size;
+    document.getElementById('cloudInfo').textContent = `最終自動保存: ${new Date().toLocaleString('ja-JP')}（メモ${memos.length}件・カルテ${KARTES.length}件・${fmtBytes(sz)}）`;
+    renderCloudSize();
+    if(sz > 90*1024 && !_sizeWarned) { _sizeWarned = true; toast('クラウド容量が上限に近づいています（設定タブで確認）','error'); }
   } catch(e) {
     setSyncStatus('error');
     console.warn('Auto cloud save failed:', e.message);
+    if(/size|large|limit|payload/i.test(e.message||'')) toast('クラウド保存失敗: 容量超過の可能性（設定タブで同期メモ数を減らせます）','error');
   }
 }
+let _sizeWarned = false;
 
 async function cloudAutoLoad() {
   const key = localStorage.getItem('cm_jbk') || '';
@@ -1300,6 +1437,9 @@ async function cloudAutoLoad() {
     if(!resp.ok) throw new Error(result.message||'HTTP '+resp.status);
     const data = result.record;
     if(!Array.isArray(data.memos)) throw new Error('invalid data');
+    // 省略されたフィールドを既定値で復元
+    (data.memos||[]).forEach(_normMemo);
+    (data.kartes||[]).forEach(_normKarte);
 
     // メモ: IDごとにマージ。解析が進んでいる方(done>processing>pending・項目あり)を優先し、
     //       保存済みフラグはどちらかで立っていれば保持。ローカルのみのものは追加保持
@@ -1407,7 +1547,7 @@ function copyAllSettings() {
 async function cloudSave() {
   const key=document.getElementById('jsonbinKey').value.trim();
   if(!key) return toast('jsonbin.io APIキーを入力してください','error');
-  const data={version:2,savedAt:new Date().toISOString(),memos,dictWords:DICT_WORDS,convPairs,kartes:KARTES,farms:FARMS,master:MASTER,farmDist:FARM_DIST,templates:TEMPLATES};
+  const data=buildCloudPayload();
   const binId=document.getElementById('jsonbinId').value.trim();
   try {
     let resp;
@@ -1431,6 +1571,7 @@ async function cloudLoad() {
     if(!resp.ok) throw new Error(result.message||'HTTP '+resp.status);
     const data=result.record;
     if(!Array.isArray(data.memos)) throw new Error('メモデータが見つかりません');
+    (data.memos||[]).forEach(_normMemo); (data.kartes||[]).forEach(_normKarte);
     const existingIds=new Set(memos.map(m=>m.id));
     const newMemos=data.memos.filter(m=>!existingIds.has(m.id));
     memos=[...memos,...newMemos];
@@ -1464,6 +1605,7 @@ function importData(input) {
     try {
       const data=JSON.parse(e.target.result);
       if(!Array.isArray(data.memos)) throw new Error('メモデータが見つかりません');
+      (data.memos||[]).forEach(_normMemo); (data.kartes||[]).forEach(_normKarte);
       const eIds=new Set(memos.map(m=>m.id));const newMemos=data.memos.filter(m=>!eIds.has(m.id));memos=[...memos,...newMemos];
       if(Array.isArray(data.dictWords))data.dictWords.forEach(w=>{if(!DICT_WORDS.includes(w))DICT_WORDS.push(w);});
       if(Array.isArray(data.convPairs)){const eIds2=new Set(convPairs.map(p=>p.id));data.convPairs.forEach(p=>{if(!eIds2.has(p.id))convPairs.push(p);});}
