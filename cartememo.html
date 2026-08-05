@@ -259,7 +259,16 @@ input[type=checkbox]{width:auto;margin:0}
 .bedit-empty{font-size:13px;color:var(--text3);text-align:center;padding:14px}
 .bedit-help{font-size:14px;font-weight:700;color:#111;margin-bottom:10px}
 .dkb-tplbar{display:flex;gap:6px;align-items:center}
-.dkb-preview{font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.6;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px;word-break:break-all;color:#111;min-height:44px}
+.dkb-text{width:100%;min-height:170px;max-height:300px;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.7;border:1px solid var(--border);border-radius:6px;padding:10px;resize:vertical;white-space:pre;overflow-wrap:normal;overflow-x:auto}
+.dkb-tools{margin-top:10px;border:1px solid var(--border);border-radius:6px;background:var(--surface)}
+.dkb-tools>summary{cursor:pointer;font-size:14px;font-weight:700;color:var(--text2);padding:10px 12px;user-select:none;list-style:none}
+.dkb-tools>summary::-webkit-details-marker{display:none}
+.dkb-tools>summary::before{content:'▸ ';font-size:11px;color:var(--text3)}
+.dkb-tools[open]>summary::before{content:'▾ '}
+.dkb-tools-body{padding:0 12px 12px;display:flex;flex-direction:column;gap:8px}
+.dkb-tool-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.dkb-tool-label{font-size:12px;font-weight:700;color:var(--text2);width:56px;flex-shrink:0}
+.dkb-tool-row input{padding:7px 8px;font-size:14px;border:1px solid var(--border2);border-radius:5px}
 .dkb-save{display:flex;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
 .dk-edit{flex-shrink:0;background:none;border:none;cursor:pointer;font-size:14px;padding:2px 4px;color:var(--text3)}
 .dk-edit:hover{color:#111}
@@ -293,7 +302,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v6.8</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v6.9</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -751,63 +760,62 @@ input[type=checkbox]{width:auto;margin:0}
 <!-- ===== d-karte 1行ビルダー ===== -->
 <div id="dkBuilderModal" class="modal-overlay" style="display:none">
   <div class="modal-box">
-    <div class="modal-title">✏️ d-karte 1行を作ってコピー</div>
+    <div class="modal-title">📋 d-karte 出力セット</div>
 
     <div class="dkb-tplbar">
       <select id="dkb-tpl" onchange="dkbLoadTemplate(this.value)" style="flex:1;min-width:0">
-        <option value="">保存した出力パターンから読み込む…</option>
+        <option value="">保存した出力セットから読み込む…</option>
       </select>
-      <button type="button" class="btn btn-ghost btn-xs" onclick="dkbDeleteTemplate()" title="選択中のパターンを削除">🗑</button>
+      <button type="button" class="btn btn-ghost btn-xs" onclick="dkbDeleteTemplate()" title="選択中のセットを削除">🗑</button>
     </div>
 
-    <div style="display:flex;gap:8px;margin-top:10px">
-      <div style="flex:1"><label>日付</label>
-        <div style="display:flex;gap:3px;align-items:center">
-          <input type="date" id="dkb-date" oninput="dkbPreview()" style="flex:1;min-width:0">
-          <button type="button" class="date-step" onclick="dkbStepDate(-1)">−1日</button>
-          <button type="button" class="date-step" onclick="dkbStepDate(1)">＋1日</button>
+    <label style="margin-top:10px">出力内容（全 <span id="dkb-linecount">0</span> 行・直接編集できます）</label>
+    <textarea id="dkb-text" class="dkb-text" oninput="dkbUpdateCount()" spellcheck="false"></textarea>
+
+    <details class="dkb-tools">
+      <summary>🔧 まとめて置き換え</summary>
+      <div class="dkb-tools-body">
+        <div class="dkb-tool-row">
+          <span class="dkb-tool-label">日付</span>
+          <button type="button" class="btn btn-ghost btn-xs" onclick="dkbShiftDates(-1)">全て −1日</button>
+          <button type="button" class="btn btn-ghost btn-xs" onclick="dkbShiftDates(1)">全て ＋1日</button>
+        </div>
+        <div class="dkb-tool-row">
+          <span class="dkb-tool-label">開始日</span>
+          <input type="date" id="dkb-startdate" style="flex:1;min-width:110px">
+          <button type="button" class="btn btn-ghost btn-xs" onclick="dkbSetStartDate()">1行目をこの日にしてずらす</button>
+        </div>
+        <div class="dkb-tool-row">
+          <span class="dkb-tool-label">往診先</span>
+          <input type="text" id="dkb-bulk-dest" placeholder="全行の往診先" style="flex:1;min-width:100px">
+          <button type="button" class="btn btn-ghost btn-xs" onclick="dkbSetField(2,document.getElementById('dkb-bulk-dest').value)">適用</button>
+        </div>
+        <div class="dkb-tool-row">
+          <span class="dkb-tool-label">距離</span>
+          <input type="text" inputmode="decimal" id="dkb-bulk-dist" placeholder="km" style="flex:1;min-width:70px">
+          <button type="button" class="btn btn-ghost btn-xs" onclick="dkbSetField(3,document.getElementById('dkb-bulk-dist').value)">適用</button>
+        </div>
+        <div class="dkb-tool-row">
+          <span class="dkb-tool-label">症状</span>
+          <input type="text" id="dkb-bulk-symptom" placeholder="全行の症状" style="flex:1;min-width:100px">
+          <button type="button" class="btn btn-ghost btn-xs" onclick="dkbSetField(5,document.getElementById('dkb-bulk-symptom').value)">適用</button>
+        </div>
+        <div class="dkb-tool-row">
+          <span class="dkb-tool-label">診療内容</span>
+          <input type="text" id="dkb-bulk-content" placeholder="全行の診療内容" style="flex:1;min-width:100px">
+          <button type="button" class="btn btn-ghost btn-xs" onclick="openTemplateForDkb()">定型</button>
+          <button type="button" class="btn btn-ghost btn-xs" onclick="dkbSetField(6,document.getElementById('dkb-bulk-content').value)">適用</button>
         </div>
       </div>
-      <div style="width:100px"><label>時間</label><input type="time" id="dkb-time" oninput="dkbPreview()"></div>
-    </div>
-
-    <div style="display:flex;gap:8px;margin-top:8px">
-      <div style="flex:1"><label>往診先</label><input type="text" id="dkb-dest" placeholder="空欄可" oninput="dkbPreview()"></div>
-      <div style="width:90px"><label>距離(km)</label><input type="text" inputmode="decimal" id="dkb-dist" placeholder="—" oninput="dkbPreview()"></div>
-    </div>
-
-    <div style="display:flex;gap:8px;margin-top:8px">
-      <div style="width:150px"><label>体温(℃)</label>
-        <div style="display:flex;gap:4px;align-items:center">
-          <input type="text" inputmode="decimal" id="dkb-temp" placeholder="—" oninput="dkbPreview()" style="flex:1;min-width:0">
-          <button type="button" class="temp-quick" onclick="document.getElementById('dkb-temp').value='39';dkbPreview()">39</button>
-          <button type="button" class="temp-quick" onclick="document.getElementById('dkb-temp').value='40';dkbPreview()">40</button>
-        </div>
-      </div>
-      <div style="flex:1"><label>症状</label>
-        <div style="display:flex;gap:4px">
-          <input type="text" id="dkb-symptom" placeholder="—" oninput="dkbPreview()" style="flex:1;min-width:0">
-          <button type="button" class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="openSymptomTemplateForDkb()">定型</button>
-        </div>
-      </div>
-    </div>
-
-    <label style="margin-top:8px">診療内容</label>
-    <div style="display:flex;gap:6px">
-      <input type="text" id="dkb-content" placeholder="例: iv/メトクロ*10/" oninput="dkbPreview()" style="flex:1;min-width:0">
-      <button type="button" class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="openTemplateForDkb()">定型</button>
-    </div>
-
-    <label style="margin-top:10px">出力プレビュー</label>
-    <div id="dkb-preview" class="dkb-preview"></div>
+    </details>
 
     <div class="dkb-save">
-      <input type="text" id="dkb-tplname" placeholder="この内容にパターン名を付けて保存" autocomplete="off" style="flex:1;min-width:0">
+      <input type="text" id="dkb-tplname" placeholder="この出力セットに名前を付けて保存" autocomplete="off" style="flex:1;min-width:0">
       <button type="button" class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="dkbSaveTemplate()">保存</button>
     </div>
 
     <div style="display:flex;gap:8px;margin-top:16px">
-      <button class="btn btn-primary" onclick="dkbCopy()">📋 この1行をコピー</button>
+      <button class="btn btn-primary" onclick="dkbCopy()">📋 全部コピー</button>
       <button class="btn btn-ghost" onclick="closeDkBuilder()">閉じる</button>
     </div>
   </div>
@@ -2015,99 +2023,140 @@ function confirmBulkAdd() {
   toast(`${dates.length}日分の診療記録を追加しました`,'success');
 }
 
-// ===== d-karte 1行ビルダー =====
-const DKB_IDS = ['date','time','dest','dist','temp','symptom','content'];
+// ===== d-karte 出力セット（複数行まるごと編集・保存） =====
+const DKB_P = '｜';
+function _dkbText(){ return document.getElementById('dkb-text'); }
+function _dkbLines(){ return _dkbText().value.split('\n').filter(l=>l.trim()!==''); }
+function _dkbSetLines(lines){ _dkbText().value = lines.join('\n'); dkbUpdateCount(); }
+// 1行を7フィールドに分解（過不足は補正して常に7個にする）
+function _dkbSplit(line){
+  const f = line.split(DKB_P);
+  while(f.length < 7) f.push('');
+  return f.slice(0,7);
+}
+function dkbUpdateCount(){
+  const el = document.getElementById('dkb-linecount');
+  if(el) el.textContent = _dkbLines().length;
+}
 function openDkBuilder(karteId, recIdx) {
   const k = KARTES.find(x=>x.id===karteId); if(!k) return;
-  const g = id => document.getElementById('dkb-'+id);
+  let lines = [];
   if(recIdx!==undefined && k.records[recIdx]) {
-    // 既存レコードをひな形として読み込む
-    const r = k.records[recIdx];
-    g('date').value = r.date||'';
-    g('time').value = r.time||'';
-    g('dest').value = r.oji_memo||r.ojiMemo||'';
-    g('dist').value = (r.oji && FARM_DIST[k.farm]!=null && FARM_DIST[k.farm]!=='') ? FARM_DIST[k.farm] : '';
-    g('temp').value = r.temp||'';
-    g('symptom').value = r.symptom||'';
-    g('content').value = r.content||'';
+    lines = [toKarteLine(k, k.records[recIdx])];
   } else {
-    DKB_IDS.forEach(id=>g(id).value='');
-    g('date').value = new Date().toISOString().slice(0,10);
-    if(FARM_DIST[k.farm]!=null && FARM_DIST[k.farm]!=='') g('dist').value = FARM_DIST[k.farm];
+    // 出力一覧でチェックされている行を初期値に。無ければ内容のある全行
+    const container = document.getElementById(`dk-rows-${karteId}`);
+    let idxs = container ? [...container.querySelectorAll('.dk-chk:checked')].map(c=>parseInt(c.dataset.i)) : [];
+    if(!idxs.length) idxs = k.records.map((r,i)=>({r,i})).filter(({r})=>(r.content||'').trim()).map(({i})=>i);
+    const sorted = idxs.filter(i=>k.records[i]).sort((a,b)=>{
+      const da=k.records[a].date||'', db=k.records[b].date||'';
+      if(!da&&!db) return 0; if(!da) return 1; if(!db) return -1;
+      return da.localeCompare(db);
+    });
+    lines = sorted.map(i=>toKarteLine(k, k.records[i]));
   }
-  g('tplname').value = '';
+  _dkbSetLines(lines);
+  document.getElementById('dkb-tplname').value = '';
+  document.getElementById('dkb-startdate').value = '';
+  ['dkb-bulk-dest','dkb-bulk-dist','dkb-bulk-symptom','dkb-bulk-content'].forEach(id=>document.getElementById(id).value='');
   dkbRefreshTemplateList();
-  dkbPreview();
   document.getElementById('dkBuilderModal').style.display = 'flex';
 }
 function closeDkBuilder(){ document.getElementById('dkBuilderModal').style.display='none'; }
 document.getElementById('dkBuilderModal').addEventListener('click', e => { if(e.target===document.getElementById('dkBuilderModal')) closeDkBuilder(); });
-function dkbLine() {
-  const P='｜';
-  const san = s => String(s==null?'':s).replace(/\|/g,'｜').trim();
-  const v = id => san(document.getElementById('dkb-'+id).value);
-  return [
-    v('date').replace(/-/g,''),
-    v('time').replace(':',''),
-    v('dest'), v('dist'), v('temp'), v('symptom'), v('content')
-  ].join(P);
+
+// 全行の指定フィールドを一括で置き換え（idx: 0日付 1時間 2往診先 3距離 4体温 5症状 6診療内容）
+function dkbSetField(idx, value) {
+  // フィールド内のパイプは区切りを壊すため除去する
+  const v = String(value==null?'':value).replace(/[|｜]/g, '').trim();
+  const lines = _dkbLines();
+  if(!lines.length) return toast('出力内容がありません','error');
+  _dkbSetLines(lines.map(l=>{ const f=_dkbSplit(l); f[idx]=v; return f.join(DKB_P); }));
+  toast(`${lines.length}行に適用しました`,'success');
 }
-function dkbPreview(){ const el=document.getElementById('dkb-preview'); if(el) el.textContent = dkbLine(); }
-function dkbStepDate(delta) {
-  const inp = document.getElementById('dkb-date');
-  const base = inp.value ? new Date(inp.value+'T00:00:00') : new Date();
-  base.setDate(base.getDate()+delta);
-  inp.value = _ymd(base);
-  dkbPreview();
+// 全行の日付を delta 日ずらす
+function dkbShiftDates(delta) {
+  const lines = _dkbLines();
+  if(!lines.length) return toast('出力内容がありません','error');
+  let n = 0;
+  _dkbSetLines(lines.map(l=>{
+    const f = _dkbSplit(l);
+    const m = f[0].match(/^(\d{4})(\d{2})(\d{2})$/);
+    if(!m) return l;
+    const d = new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00`);
+    d.setDate(d.getDate()+delta);
+    f[0] = _ymd(d).replace(/-/g,''); n++;
+    return f.join(DKB_P);
+  }));
+  toast(`${n}行の日付を${delta>0?'＋':'−'}${Math.abs(delta)}日しました`,'success');
+}
+// 1行目を指定日にして、行間の日数差を保ったまま全体をずらす
+function dkbSetStartDate() {
+  const sd = document.getElementById('dkb-startdate').value;
+  if(!sd) return toast('開始日を選んでください','error');
+  const lines = _dkbLines();
+  if(!lines.length) return toast('出力内容がありません','error');
+  const first = _dkbSplit(lines[0])[0].match(/^(\d{4})(\d{2})(\d{2})$/);
+  if(!first) return toast('1行目の日付を読み取れませんでした','error');
+  const from = new Date(`${first[1]}-${first[2]}-${first[3]}T00:00:00`);
+  const to = new Date(sd+'T00:00:00');
+  const delta = Math.round((to - from) / 86400000);
+  if(delta === 0) return toast('日付は変わりません');
+  dkbShiftDates(delta);
 }
 async function dkbCopy() {
-  const text = dkbLine();
-  if(!text.replace(/｜/g,'').trim()) return toast('内容を入力してください','error');
+  const lines = _dkbLines();
+  if(!lines.length) return toast('出力内容がありません','error');
+  const text = lines.join('\n');
   const ok = await copyToClipboard(text);
-  if(ok) toast('1行コピーしました','success'); else showCopyFallback(text);
+  if(ok) toast(`${lines.length}行コピーしました`,'success'); else showCopyFallback(text);
 }
 function openTemplateForDkb() {
-  const cur = document.getElementById('dkb-content').value.trim();
-  _tplTarget = { apply: c => { document.getElementById('dkb-content').value = c; dkbPreview(); } };
+  const cur = document.getElementById('dkb-bulk-content').value.trim();
+  _tplTarget = { apply: c => { document.getElementById('dkb-bulk-content').value = c; } };
   _openTemplateModal(cur, 'karte', true);
 }
-function openSymptomTemplateForDkb() {
-  const cur = document.getElementById('dkb-symptom').value.trim();
-  _tplTarget = { apply: c => { document.getElementById('dkb-symptom').value = c; dkbPreview(); } };
-  _openTemplateModal(cur, 'symptom', true);
-}
-// d-karte出力パターン（TEMPLATES の type:'dkarte'。content に7項目をJSONで保持）
+// 出力セット（TEMPLATES の type:'dkarte'。content に複数行テキストをそのまま保持）
 function dkbRefreshTemplateList() {
   const sel = document.getElementById('dkb-tpl');
   const list = TEMPLATES.filter(t=>t.type==='dkarte');
-  sel.innerHTML = '<option value="">保存した出力パターンから読み込む…</option>' +
-    list.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('');
+  sel.innerHTML = '<option value="">保存した出力セットから読み込む…</option>' +
+    list.map(t=>{
+      const n = (t.content||'').split('\n').filter(l=>l.trim()).length;
+      return `<option value="${t.id}">${esc(t.name)}（${n}行）</option>`;
+    }).join('');
 }
 function dkbLoadTemplate(id) {
   if(!id) return;
   const t = TEMPLATES.find(x=>x.id===id); if(!t) return;
-  let d = {};
-  try { d = JSON.parse(t.content); } catch(e) { return toast('パターンを読み込めませんでした','error'); }
-  DKB_IDS.forEach(k2 => { if(d[k2]!==undefined) document.getElementById('dkb-'+k2).value = d[k2]; });
-  dkbPreview();
+  let text = t.content||'';
+  // 旧形式（1行分をJSONで保持）にも対応
+  if(text.trim().startsWith('{')) {
+    try {
+      const d = JSON.parse(text);
+      text = [ (d.date||'').replace(/-/g,''), (d.time||'').replace(':',''), d.dest||'', d.dist||'', d.temp||'', d.symptom||'', d.content||'' ].join(DKB_P);
+    } catch(e){}
+  }
+  _dkbText().value = text;
+  dkbUpdateCount();
   toast(`「${t.name}」を読み込みました`,'success');
 }
 function dkbSaveTemplate() {
   const name = document.getElementById('dkb-tplname').value.trim();
-  if(!name) return toast('パターン名を入力してください','error');
-  const d = {};
-  DKB_IDS.forEach(id => d[id] = document.getElementById('dkb-'+id).value);
-  TEMPLATES.unshift({ id: Date.now().toString(), name, content: JSON.stringify(d), type:'dkarte' });
+  if(!name) return toast('名前を入力してください','error');
+  const lines = _dkbLines();
+  if(!lines.length) return toast('出力内容がありません','error');
+  TEMPLATES.unshift({ id: Date.now().toString(), name, content: lines.join('\n'), type:'dkarte' });
   saveToStorage();
   document.getElementById('dkb-tplname').value = '';
   dkbRefreshTemplateList();
-  toast(`「${name}」を保存しました`,'success');
+  toast(`「${name}」を${lines.length}行で保存しました`,'success');
 }
 function dkbDeleteTemplate() {
   const sel = document.getElementById('dkb-tpl');
   const t = TEMPLATES.find(x=>x.id===sel.value);
-  if(!t) return toast('削除するパターンを選んでください','error');
-  if(!confirm(`パターン「${t.name}」を削除しますか？`)) return;
+  if(!t) return toast('削除するセットを選んでください','error');
+  if(!confirm(`出力セット「${t.name}」を削除しますか？`)) return;
   TEMPLATES = TEMPLATES.filter(x=>x.id!==t.id);
   saveToStorage();
   dkbRefreshTemplateList();
@@ -2323,7 +2372,8 @@ function deleteTemplate(id) {
 // フォーマット: 日付｜時間｜往診先｜距離｜体温｜症状｜診療内容 （全角パイプ U+FF5C、常に6本）
 function toKarteLine(k, r) {
   const P = '｜';
-  const san = s => String(s==null?'':s).replace(/\|/g, '｜').trim();
+  // フィールド内のパイプは区切り(6本)を壊すため除去する
+  const san = s => String(s==null?'':s).replace(/[|｜]/g, '').trim();
   const date = (r.date||'').replace(/-/g, '');            // YYYYMMDD
   const time = san((r.time||'').replace(':',''));         // HHMM
   const dest = san(r.oji_memo||r.ojiMemo||'');            // 往診元欄の値（空欄なら空欄）
@@ -2681,7 +2731,7 @@ function buildDkExport(k, sortedRecs) {
         <button class="dk-copy" onclick="event.stopPropagation();copyKarteQueue('${k.id}')">📋 コピー</button>
       </div>
       <div class="dk-rows" id="dk-rows-${k.id}">${rows}</div>
-      <button class="rec-add-btn" style="margin-top:10px" onclick="event.stopPropagation();openDkBuilder('${k.id}')">✏️ 1行だけ作ってコピー（定型から）</button>
+      <button class="rec-add-btn" style="margin-top:10px" onclick="event.stopPropagation();openDkBuilder('${k.id}')">📝 出力セットを編集・保存してコピー</button>
     </div>
   </details>`;
 }
