@@ -302,7 +302,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v6.9</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v7.0</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -584,7 +584,7 @@ input[type=checkbox]{width:auto;margin:0}
       <button type="button" class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="openTemplateForModal()">💊 定型</button>
     </div>
     <label>金額（円）</label>
-    <input type="number" id="modal-amount" min="0">
+    <input type="number" id="modal-amount" min="0" step="10">
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn btn-primary" onclick="confirmKarteSave()">保存</button>
       <button class="btn btn-ghost" onclick="closeKarteModal()">キャンセル</button>
@@ -651,7 +651,7 @@ input[type=checkbox]{width:auto;margin:0}
       <div style="flex:1"><label>往診元</label><input type="text" id="bulk-oji" placeholder="空欄可"></div>
     </div>
     <label style="margin-top:8px">1日あたりの金額（円）</label>
-    <input type="number" id="bulk-amount" min="0" placeholder="0" oninput="updateBulkPreview()">
+    <input type="number" id="bulk-amount" min="0" step="10" placeholder="0" oninput="updateBulkPreview()">
     <div id="bulk-preview" style="margin-top:12px;font-size:12px;color:var(--text2);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px"></div>
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn btn-primary" onclick="confirmBulkAdd()">まとめて追加</button>
@@ -746,7 +746,7 @@ input[type=checkbox]{width:auto;margin:0}
 
       <div id="bedit-in-amount" class="bedit-input-block" style="display:none">
         <label>💴 金額（円・1日あたり）</label>
-        <input type="number" id="bedit-amount" min="0" placeholder="0" style="width:100%">
+        <input type="number" id="bedit-amount" min="0" step="10" placeholder="0" style="width:100%">
       </div>
 
       <div class="bedit-nav">
@@ -1983,7 +1983,7 @@ function updateBulkPreview() {
   const dates = _bulkDates();
   if(!from || !to) { el.innerHTML = '<span style="color:var(--text3)">開始日と終了日を選んでください</span>'; return; }
   if(to < from) { el.innerHTML = '<span style="color:#c00">終了日は開始日以降にしてください</span>'; return; }
-  const amt = parseInt(document.getElementById('bulk-amount').value)||0;
+  const amt = floorAmt(document.getElementById('bulk-amount').value);
   el.innerHTML = `<b>${dates.length}日分</b>の診療記録を追加します<br>
     <span style="font-family:'JetBrains Mono',monospace;font-size:11px">${dates.slice(0,5).join(' / ')}${dates.length>5?` … ${dates[dates.length-1]}`:''}</span>
     ${amt>0?`<br>金額合計: <b>¥${(amt*dates.length).toLocaleString()}</b>（¥${amt.toLocaleString()} × ${dates.length}日）`:''}`;
@@ -2007,7 +2007,7 @@ function confirmBulkAdd() {
   const symptom = document.getElementById('bulk-symptom').value.trim();
   const time = document.getElementById('bulk-time').value;
   const ojiMemo = document.getElementById('bulk-oji').value.trim();
-  const amount = parseInt(document.getElementById('bulk-amount').value)||0;
+  const amount = floorAmt(document.getElementById('bulk-amount').value);
   if(!content && !symptom && !amount) return toast('診療内容・症状・金額のいずれかを入力してください','error');
   if(dates.length > 31 && !confirm(`${dates.length}日分を追加します。よろしいですか？`)) return;
   dates.forEach(date => {
@@ -2271,7 +2271,7 @@ function confirmBulkEdit() {
       if(om) { if(!r.oji) { r.oji = true; r.ojiFeeAdded = false; } }
       else { r.oji = false; r.ojiFeeAdded = false; }
     }
-    if(use('amount')) r.amount = parseInt(val('amount'))||0;
+    if(use('amount')) r.amount = floorAmt(val('amount'));
   });
   recalcPaperTotal(k);
   saveToStorage();
@@ -2538,7 +2538,8 @@ function onKarteSelectChange() {
 
 function openKarteModal(memoId) {
   const memo = memos.find(m => m.id === memoId); if(!memo) return;
-  const total = Math.round((memo.items||[]).reduce((s,it)=>s+it.price*it.qty,0) * (memo.multiplier||1));
+  // カルテ保存時は一の位を切り捨て（例: 178 → 170）
+  const total = floorAmt((memo.items||[]).reduce((s,it)=>s+it.price*it.qty,0) * (memo.multiplier||1));
   const formula = (memo.items||[]).filter(it=>it.price>0).map(it=>`${it.name}*${it.qty}`).join('/');
   karteSaveMemoId = memoId;
   document.getElementById('modal-farm').value = memo.ownerName || '';
@@ -2565,7 +2566,7 @@ function confirmKarteSave() {
   const symptom = document.getElementById('modal-symptom').value.trim();
   const ojiMemoVal = document.getElementById('modal-oji').value.trim();
   const content = document.getElementById('modal-content').value.trim();
-  const amount = parseInt(document.getElementById('modal-amount').value) || 0;
+  const amount = floorAmt(document.getElementById('modal-amount').value);
   if(!farm) return toast('農場名を入力してください','error');
   if(!cow) return toast('牛番号を入力してください','error');
   if(!date) return toast('日付を入力してください','error');
@@ -2750,9 +2751,9 @@ function toggleOji(karteId, recIdx, checkbox) {
   _normOjiFee(r);
   if(checkbox.checked) {           // 往診（料金あり）にする
     r.oji = true;
-    if(!r.ojiFeeAdded) { r.amount = (r.amount||0) + OJI_FEE; r.ojiFeeAdded = true; }
+    if(!r.ojiFeeAdded) { r.amount = floorAmt((r.amount||0) + OJI_FEE); r.ojiFeeAdded = true; }
   } else {                          // 往診オフ
-    if(r.ojiFeeAdded) { r.amount = Math.max(0, (r.amount||0) - OJI_FEE); r.ojiFeeAdded = false; }
+    if(r.ojiFeeAdded) { r.amount = floorAmt(Math.max(0, (r.amount||0) - OJI_FEE)); r.ojiFeeAdded = false; }
     r.oji = false;
   }
   recalcPaperTotal(k);
@@ -2835,10 +2836,10 @@ function toggleRecordPreset(karteId, recIdx, presetKey, checkbox) {
   if(!pr) return;
   if(checkbox.checked) {
     r.content = r.content ? pr.label + '/' + r.content.replace(/^\//, '') : pr.label;
-    if(!pr.noPrice) r.amount = (r.amount||0) + pr.amount;
+    if(!pr.noPrice) r.amount = floorAmt((r.amount||0) + pr.amount);
   } else {
     r.content = removePresetLabel(r.content, pr.label);
-    if(!pr.noPrice) r.amount = Math.max(0, (r.amount||0) - pr.amount);
+    if(!pr.noPrice) r.amount = floorAmt(Math.max(0, (r.amount||0) - pr.amount));
   }
   r.content = reorderContent(r.content);
   recalcPaperTotal(k);
@@ -2846,6 +2847,12 @@ function toggleRecordPreset(karteId, recIdx, presetKey, checkbox) {
   renderKarteList();
 }
 
+// カルテの金額は一の位を切り捨てて10円単位にする（例: 178 → 170）
+function floorAmt(v) {
+  const n = Math.floor(Number(v));
+  if(isNaN(n) || n <= 0) return 0;
+  return Math.floor(n/10)*10;
+}
 function recalcPaperTotal(k) {
   k.paper_total = k.records.reduce((s,r)=>s+(r.amount||0), 0);
   if(k.electronic_amount !== null) k.diff = k.electronic_amount - k.paper_total;
@@ -2879,8 +2886,7 @@ function amountOnlyKeydown(karteId, recIdx, event) {
     event.preventDefault();
     const k = KARTES.find(x=>x.id===karteId);
     if(k && k.records[recIdx] !== undefined) {
-      const v = parseInt(event.target.value);
-      k.records[recIdx].amount = (isNaN(v)||v<0) ? 0 : v;
+      k.records[recIdx].amount = floorAmt(event.target.value);
       recalcPaperTotal(k);
       saveToStorage();
       const totalEl = document.getElementById(`paper-total-${karteId}`);
@@ -2895,7 +2901,7 @@ function amountOnlyKeydown(karteId, recIdx, event) {
 function quickAddAmountKeydown(karteId, event) {
   if(event.key === 'Enter') {
     event.preventDefault();
-    const v = parseInt(event.target.value);
+    const v = floorAmt(event.target.value);
     if(!v || v <= 0) return;
     const k = KARTES.find(x=>x.id===karteId);
     if(!k) return;
@@ -2983,8 +2989,7 @@ function updateRecord(karteId, recIdx, field, value) {
     return; // 再描画不要
   }
   if(field==='amount') {
-    const v = parseInt(value);
-    r.amount = (isNaN(v)||v<0) ? 0 : v;
+    r.amount = floorAmt(value);
     recalcPaperTotal(k);
     saveToStorage();
     renderKarteList();
