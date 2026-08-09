@@ -302,7 +302,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v7.0</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v7.1</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -3058,13 +3058,20 @@ function duplicateRecord(karteId, recIdx) {
   const src = k.records[recIdx];
   const copy = {...src};
   delete copy.karteExported; delete copy.karteExportedAt; // 複製は未出力扱い
+  // 日付は必ず翌日にする（元が空欄なら今日の翌日）
+  const base = src.date ? new Date(src.date+'T00:00:00') : new Date();
+  base.setDate(base.getDate()+1);
+  copy.date = _ymd(base);
+  // 金額はゼロから入力し直す（往診・プリセットの加算状態もリセット）
+  copy.amount = 0;
+  copy.ojiFeeAdded = false;
   // 配列末尾に追加（並べ替えはしない＝既存行のインデックスを保持）。表示順は描画時にソートされる
   k.records.push(copy);
   _recalcMonth(k);
   recalcPaperTotal(k);
   saveToStorage();
   renderKarteList();
-  toast('診療記録を複製しました。内容を編集してください','success');
+  toast(`${fmtDate(copy.date)} に複製しました（金額は未入力）`,'success');
 }
 
 function handleKarteCardClick(e, karteId) {
