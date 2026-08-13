@@ -258,8 +258,6 @@ input[type=checkbox]{width:auto;margin:0}
 .bedit-row .bd-date{font-family:'JetBrains Mono',monospace;font-size:15px;color:#111;font-weight:600}
 .bedit-empty{font-size:13px;color:var(--text3);text-align:center;padding:14px}
 .bedit-help{font-size:14px;font-weight:700;color:#111;margin-bottom:10px}
-/* 日本語入力欄: IMEを「ひらがな」で開く指定（IE/旧Firefoxのみ有効。Chromium系は無視される） */
-.ja-input{ime-mode:active}
 .dkb-tplbar{display:flex;gap:6px;align-items:center}
 .dkb-text{width:100%;min-height:170px;max-height:300px;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.7;border:1px solid var(--border);border-radius:6px;padding:10px;resize:vertical;white-space:pre;overflow-wrap:normal;overflow-x:auto}
 .dkb-tools{margin-top:10px;border:1px solid var(--border);border-radius:6px;background:var(--surface)}
@@ -304,7 +302,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v7.2</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v7.1</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -336,11 +334,11 @@ input[type=checkbox]{width:auto;margin:0}
     <div style="font-size:13px;font-weight:700;color:#111;margin-bottom:12px">🎤 新しいメモを追加</div>
     <div class="form-row">
       <div><label>患者番号（牛番号）</label><input type="text" id="newPatientNo" placeholder="例: 0001"></div>
-      <div><label>飼い主（農場）名</label><input type="text" id="newOwnerName" class="ja-input" lang="ja" list="farmDatalist" placeholder="例: A牧場" autocomplete="off"></div>
+      <div><label>飼い主（農場）名</label><input type="text" id="newOwnerName" list="farmDatalist" placeholder="例: A牧場" autocomplete="off"></div>
     </div>
     <datalist id="farmDatalist"></datalist>
     <label>音声メモ</label>
-    <textarea id="newMemoText" class="ja-input" lang="ja" placeholder="iPhoneで音声入力→URLでインポート、またはここに直接貼り付け"></textarea>
+    <textarea id="newMemoText" placeholder="iPhoneで音声入力→URLでインポート、またはここに直接貼り付け"></textarea>
     <div style="display:flex;gap:8px;margin-top:10px">
       <button class="btn btn-ghost btn-sm" onclick="pasteFromClipboard()" style="white-space:nowrap;flex-shrink:0">📋 貼り付け</button>
       <button class="btn btn-primary btn-full" onclick="addMemo()">＋ メモを保存</button>
@@ -494,7 +492,7 @@ input[type=checkbox]{width:auto;margin:0}
         </div>
       </details>
       <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
-        <input type="text" id="newMasterName" class="ja-input" lang="ja" placeholder="品目名" style="flex:1;min-width:100px">
+        <input type="text" id="newMasterName" placeholder="品目名" style="flex:1;min-width:100px">
         <input type="number" id="newMasterPrice" placeholder="単価(円)" style="width:90px" min="0" step="0.01">
         <button class="btn btn-primary btn-sm" id="masterSaveBtn" onclick="saveMasterItem()">追加</button>
         <button class="btn btn-ghost btn-sm" onclick="cancelMasterEdit()" id="masterCancelBtn" style="display:none">キャンセル</button>
@@ -526,7 +524,7 @@ input[type=checkbox]{width:auto;margin:0}
       <p class="input-hint" style="margin-bottom:10px">✅ 正しい表記を登録するだけでOK。AIが音声誤変換を自動補正します。</p>
       <div class="dict-tags" id="dictTags"></div>
       <div style="display:flex;gap:6px">
-        <input type="text" id="dictWord" class="ja-input" lang="ja" placeholder="正しい表記（例: マルボ）" style="font-size:13px">
+        <input type="text" id="dictWord" placeholder="正しい表記（例: マルボ）" style="font-size:13px">
         <button class="btn btn-primary btn-sm" onclick="addDict()">追加</button>
       </div>
     </div>
@@ -550,7 +548,7 @@ input[type=checkbox]{width:auto;margin:0}
   <div class="modal-box">
     <div class="modal-title">📋 カルテに保存</div>
     <label>農場名</label>
-    <input type="text" id="modal-farm" class="ja-input" lang="ja" list="farmDatalist" placeholder="A牧場" autocomplete="off" oninput="updateKarteSelect()">
+    <input type="text" id="modal-farm" list="farmDatalist" placeholder="A牧場" autocomplete="off" oninput="updateKarteSelect()">
     <div id="modal-karte-wrap" style="display:none">
       <label>診療中のカルテ</label>
       <select id="modal-karte-select" onchange="onKarteSelectChange()" style="width:100%">
@@ -558,7 +556,7 @@ input[type=checkbox]{width:auto;margin:0}
       </select>
     </div>
     <label>牛番号</label>
-    <input type="text" id="modal-cow" class="ja-input" lang="ja" placeholder="0001">
+    <input type="text" id="modal-cow" placeholder="0001">
     <div style="display:flex;gap:8px">
       <div style="flex:1"><label>日付</label><input type="date" id="modal-date"></div>
       <div style="width:110px"><label>時間</label><input type="time" id="modal-time"></div>
@@ -573,13 +571,13 @@ input[type=checkbox]{width:auto;margin:0}
       </div>
       <div style="flex:1"><label>症状</label>
         <div style="display:flex;gap:4px">
-          <input type="text" id="modal-symptom" class="ja-input" lang="ja" placeholder="軟便など" style="flex:1;min-width:0">
+          <input type="text" id="modal-symptom" placeholder="軟便など" style="flex:1;min-width:0">
           <button type="button" class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="openSymptomTemplateForModal()">💊</button>
         </div>
       </div>
     </div>
     <label>往診元</label>
-    <input type="text" id="modal-oji" class="ja-input" lang="ja" placeholder="空欄可">
+    <input type="text" id="modal-oji" placeholder="空欄可">
     <label>診療内容（B1形式）</label>
     <div style="display:flex;gap:6px">
       <input type="text" id="modal-content" style="flex:1;min-width:0">
@@ -608,8 +606,8 @@ input[type=checkbox]{width:auto;margin:0}
     <details id="tpl-new-details" style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
       <summary style="cursor:pointer;font-size:14px;font-weight:700;color:var(--text2);user-select:none">＋ 新しいパターンを保存</summary>
       <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
-        <input type="text" id="tpl-new-name" class="ja-input" lang="ja" placeholder="パターン名（例: 下痢セット）" autocomplete="off">
-        <input type="text" id="tpl-new-content" class="ja-input" lang="ja" placeholder="診療内容 例: iv/メトクロ*10/スタマー*150" autocomplete="off">
+        <input type="text" id="tpl-new-name" placeholder="パターン名（例: 下痢セット）" autocomplete="off">
+        <input type="text" id="tpl-new-content" placeholder="診療内容 例: iv/メトクロ*10/スタマー*150" autocomplete="off">
         <button class="btn btn-primary btn-sm" onclick="saveTemplate()">保存</button>
       </div>
     </details>
@@ -630,7 +628,7 @@ input[type=checkbox]{width:auto;margin:0}
     </div>
     <label style="margin-top:8px">診療内容</label>
     <div style="display:flex;gap:6px">
-      <input type="text" id="bulk-content" class="ja-input" lang="ja" placeholder="例: iv/アンピ" style="flex:1;min-width:0">
+      <input type="text" id="bulk-content" placeholder="例: iv/アンピ" style="flex:1;min-width:0">
       <button type="button" class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="openTemplateForBulk()">💊</button>
     </div>
     <div style="display:flex;gap:8px;margin-top:8px">
@@ -643,14 +641,14 @@ input[type=checkbox]{width:auto;margin:0}
       </div>
       <div style="flex:1"><label>症状</label>
         <div style="display:flex;gap:4px">
-          <input type="text" id="bulk-symptom" class="ja-input" lang="ja" placeholder="—" style="flex:1;min-width:0">
+          <input type="text" id="bulk-symptom" placeholder="—" style="flex:1;min-width:0">
           <button type="button" class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="openSymptomTemplateForBulk()">💊</button>
         </div>
       </div>
     </div>
     <div style="display:flex;gap:8px;margin-top:8px">
       <div style="width:110px"><label>時間</label><input type="time" id="bulk-time"></div>
-      <div style="flex:1"><label>往診元</label><input type="text" id="bulk-oji" class="ja-input" lang="ja" placeholder="空欄可"></div>
+      <div style="flex:1"><label>往診元</label><input type="text" id="bulk-oji" placeholder="空欄可"></div>
     </div>
     <label style="margin-top:8px">1日あたりの金額（円）</label>
     <input type="number" id="bulk-amount" min="0" step="10" placeholder="0" oninput="updateBulkPreview()">
@@ -714,7 +712,7 @@ input[type=checkbox]{width:auto;margin:0}
       <div id="bedit-in-content" class="bedit-input-block" style="display:none">
         <label>💊 診療内容</label>
         <div style="display:flex;gap:6px">
-          <input type="text" id="bedit-content" class="ja-input" lang="ja" placeholder="例: iv/アンピ" style="flex:1;min-width:0">
+          <input type="text" id="bedit-content" placeholder="例: iv/アンピ" style="flex:1;min-width:0">
           <button type="button" class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="openTemplateForBedit()">定型</button>
         </div>
       </div>
@@ -722,7 +720,7 @@ input[type=checkbox]{width:auto;margin:0}
       <div id="bedit-in-symptom" class="bedit-input-block" style="display:none">
         <label>🩺 症状</label>
         <div style="display:flex;gap:6px">
-          <input type="text" id="bedit-symptom" class="ja-input" lang="ja" placeholder="例: 軟便" style="flex:1;min-width:0">
+          <input type="text" id="bedit-symptom" placeholder="例: 軟便" style="flex:1;min-width:0">
           <button type="button" class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="openSymptomTemplateForBedit()">定型</button>
         </div>
       </div>
@@ -743,7 +741,7 @@ input[type=checkbox]{width:auto;margin:0}
 
       <div id="bedit-in-oji" class="bedit-input-block" style="display:none">
         <label>🚗 往診元</label>
-        <input type="text" id="bedit-oji" class="ja-input" lang="ja" placeholder="空欄にすると往診チェックを外します" style="width:100%">
+        <input type="text" id="bedit-oji" placeholder="空欄にすると往診チェックを外します" style="width:100%">
       </div>
 
       <div id="bedit-in-amount" class="bedit-input-block" style="display:none">
@@ -789,7 +787,7 @@ input[type=checkbox]{width:auto;margin:0}
         </div>
         <div class="dkb-tool-row">
           <span class="dkb-tool-label">往診先</span>
-          <input type="text" id="dkb-bulk-dest" class="ja-input" lang="ja" placeholder="全行の往診先" style="flex:1;min-width:100px">
+          <input type="text" id="dkb-bulk-dest" placeholder="全行の往診先" style="flex:1;min-width:100px">
           <button type="button" class="btn btn-ghost btn-xs" onclick="dkbSetField(2,document.getElementById('dkb-bulk-dest').value)">適用</button>
         </div>
         <div class="dkb-tool-row">
@@ -799,12 +797,12 @@ input[type=checkbox]{width:auto;margin:0}
         </div>
         <div class="dkb-tool-row">
           <span class="dkb-tool-label">症状</span>
-          <input type="text" id="dkb-bulk-symptom" class="ja-input" lang="ja" placeholder="全行の症状" style="flex:1;min-width:100px">
+          <input type="text" id="dkb-bulk-symptom" placeholder="全行の症状" style="flex:1;min-width:100px">
           <button type="button" class="btn btn-ghost btn-xs" onclick="dkbSetField(5,document.getElementById('dkb-bulk-symptom').value)">適用</button>
         </div>
         <div class="dkb-tool-row">
           <span class="dkb-tool-label">診療内容</span>
-          <input type="text" id="dkb-bulk-content" class="ja-input" lang="ja" placeholder="全行の診療内容" style="flex:1;min-width:100px">
+          <input type="text" id="dkb-bulk-content" placeholder="全行の診療内容" style="flex:1;min-width:100px">
           <button type="button" class="btn btn-ghost btn-xs" onclick="openTemplateForDkb()">定型</button>
           <button type="button" class="btn btn-ghost btn-xs" onclick="dkbSetField(6,document.getElementById('dkb-bulk-content').value)">適用</button>
         </div>
@@ -812,7 +810,7 @@ input[type=checkbox]{width:auto;margin:0}
     </details>
 
     <div class="dkb-save">
-      <input type="text" id="dkb-tplname" class="ja-input" lang="ja" placeholder="この出力セットに名前を付けて保存" autocomplete="off" style="flex:1;min-width:0">
+      <input type="text" id="dkb-tplname" placeholder="この出力セットに名前を付けて保存" autocomplete="off" style="flex:1;min-width:0">
       <button type="button" class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="dkbSaveTemplate()">保存</button>
     </div>
 
@@ -1312,7 +1310,7 @@ function renderResultsList() {
     const rows = (m.items||[]).map((it,i)=>{
       const sub=Math.round(it.price*it.qty);
       return `<tr>
-        <td><input type="text" class="name-input ja-input" lang="ja" value="${it.name.replace(/"/g,'&quot;')}" onchange="updateItemName('${m.id}',${i},this.value,this)" oninput="nameInputInput(this)" onkeydown="nameInputKeydown(this,event)" onblur="nameInputBlur()" style="width:100%;min-width:80px;border:1px solid ${it.unknown?'#c00':'transparent'};border-radius:4px;padding:2px 6px;font-size:12px;background:${it.unknown?'rgba(204,0,0,0.05)':'transparent'};color:#111;cursor:text"></td>
+        <td><input type="text" class="name-input" value="${it.name.replace(/"/g,'&quot;')}" onchange="updateItemName('${m.id}',${i},this.value,this)" oninput="nameInputInput(this)" onkeydown="nameInputKeydown(this,event)" onblur="nameInputBlur()" style="width:100%;min-width:80px;border:1px solid ${it.unknown?'#c00':'transparent'};border-radius:4px;padding:2px 6px;font-size:12px;background:${it.unknown?'rgba(204,0,0,0.05)':'transparent'};color:#111;cursor:text"></td>
         <td class="num-cell"><input class="qty-input" type="text" inputmode="decimal" value="${it.qty}" onblur="updateItemQty('${m.id}',${i},this.value,this)" onkeydown="qtyKeydown(this,event)"></td>
         <td class="price-cell">${it.price>0?'¥'+it.price.toLocaleString():'<span style="color:#c00">未登録</span>'}</td>
         <td class="sub-cell">${sub>0?'¥'+sub.toLocaleString():'—'}</td>
@@ -1510,7 +1508,7 @@ function addItemToMemo(memoId){
   if(!tbody){renderResultsList();return;}
   const tr=document.createElement('tr');
   tr.innerHTML=`
-    <td><input type="text" class="name-input ja-input" lang="ja" value="" onchange="updateItemName('${memoId}',${i},this.value,this)" oninput="nameInputInput(this)" onkeydown="nameInputKeydown(this,event)" onblur="nameInputBlur()" style="width:100%;min-width:80px;border:1px solid #c00;border-radius:4px;padding:2px 6px;font-size:12px;background:rgba(204,0,0,0.05);color:#111;cursor:text"></td>
+    <td><input type="text" class="name-input" value="" onchange="updateItemName('${memoId}',${i},this.value,this)" oninput="nameInputInput(this)" onkeydown="nameInputKeydown(this,event)" onblur="nameInputBlur()" style="width:100%;min-width:80px;border:1px solid #c00;border-radius:4px;padding:2px 6px;font-size:12px;background:rgba(204,0,0,0.05);color:#111;cursor:text"></td>
     <td class="num-cell"><input class="qty-input" type="text" inputmode="decimal" value="1" onblur="updateItemQty('${memoId}',${i},this.value,this)" onkeydown="qtyKeydown(this,event)"></td>
     <td class="price-cell"><span style="color:#c00">未登録</span></td>
     <td class="sub-cell">—</td>
@@ -2658,19 +2656,19 @@ function buildKarteCard(k, isDetail) {
       <input type="date" value="${esc(r.date)}" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'date',this.value)">
       <div>
         <div style="display:flex;gap:6px;align-items:center">
-          <input type="text" value="${esc(r.content)}" class="ja-input" lang="ja" placeholder="診療内容" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'content',this.value)" style="flex:1;min-width:0">
+          <input type="text" value="${esc(r.content)}" placeholder="診療内容" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'content',this.value)" style="flex:1;min-width:0">
           <button class="btn btn-ghost btn-xs" style="flex-shrink:0;padding:2px 6px" onclick="event.stopPropagation();openTemplateForRecord('${k.id}',${i})" title="よく使う治療パターンから挿入／保存">💊</button>
           <button class="btn btn-ghost btn-xs" style="flex-shrink:0;padding:2px 6px" onclick="event.stopPropagation();copyRecordContent('${k.id}',${i})" title="この診療内容をコピー">📋</button>
           <button class="btn btn-ghost btn-xs" style="flex-shrink:0;padding:2px 6px" onclick="event.stopPropagation();duplicateRecord('${k.id}',${i})" title="この行を複製して新しい行を追加">⧉ 複製</button>
           <label class="rec-oji-label" onclick="event.stopPropagation()"><input type="checkbox" ${(r.oji&&r.ojiFeeAdded!==false)?'checked':''} onchange="toggleOji('${k.id}',${i},this)"> 往診</label>
           <button type="button" class="rec-oji-nofee ${(r.oji&&r.ojiFeeAdded===false)?'active':''}" onclick="event.stopPropagation();toggleOjiNoFee('${k.id}',${i})" title="金額を足さずに往診チェック">往診¥なし</button>
-          <input type="text" class="rec-oji-memo ja-input" lang="ja" value="${esc(r.oji_memo||'')}" placeholder="往診元" onclick="event.stopPropagation()" onblur="updateOjiMemo('${k.id}',${i},this.value)">
+          <input type="text" class="rec-oji-memo" value="${esc(r.oji_memo||'')}" placeholder="往診元" onclick="event.stopPropagation()" onblur="updateOjiMemo('${k.id}',${i},this.value)">
         </div>
         <div class="rec-detail-sub">
           <span class="rds-label">日付</span><button type="button" class="date-step" onclick="event.stopPropagation();stepRecordDate('${k.id}',${i},-1)">−1日</button><button type="button" class="date-step" onclick="event.stopPropagation();stepRecordDate('${k.id}',${i},1)">＋1日</button>
           <span class="rds-label">時間</span><input type="time" value="${esc(r.time||'')}" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'time',this.value)">
           <span class="rds-label">体温</span><input type="text" inputmode="decimal" value="${esc(r.temp||'')}" placeholder="—" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'temp',this.value)" style="width:52px"><button type="button" class="temp-quick" style="padding:3px 6px;font-size:11px" onclick="event.stopPropagation();setRecordTemp('${k.id}',${i},'39')">39</button><button type="button" class="temp-quick" style="padding:3px 6px;font-size:11px" onclick="event.stopPropagation();setRecordTemp('${k.id}',${i},'40')">40</button>
-          <span class="rds-label">症状</span><input type="text" value="${esc(r.symptom||'')}" class="ja-input" lang="ja" placeholder="—" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'symptom',this.value)" style="flex:1;min-width:60px"><button type="button" class="temp-quick" style="padding:3px 6px;font-size:11px" onclick="event.stopPropagation();openSymptomTemplateForRecord('${k.id}',${i})" title="よく使う症状から選択／保存">💊</button>
+          <span class="rds-label">症状</span><input type="text" value="${esc(r.symptom||'')}" placeholder="—" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'symptom',this.value)" style="flex:1;min-width:60px"><button type="button" class="temp-quick" style="padding:3px 6px;font-size:11px" onclick="event.stopPropagation();openSymptomTemplateForRecord('${k.id}',${i})" title="よく使う症状から選択／保存">💊</button>
         </div>
         <div class="rec-preset-sub">${presetChecks}</div>
       </div>
@@ -2941,17 +2939,17 @@ function buildAmountOnlyRowHtml(karteId, i) {
     <input type="date" value="${rec.date||''}" onclick="event.stopPropagation()" onblur="updateRecord('${karteId}',${i},'date',this.value)">
     <div>
       <div style="display:flex;gap:6px;align-items:center">
-        <input type="text" value="${(rec.content||'').replace(/"/g,'&quot;')}" class="ja-input" lang="ja" placeholder="診療内容" onclick="event.stopPropagation()" onblur="updateRecord('${karteId}',${i},'content',this.value)" style="flex:1;min-width:0">
+        <input type="text" value="${(rec.content||'').replace(/"/g,'&quot;')}" placeholder="診療内容" onclick="event.stopPropagation()" onblur="updateRecord('${karteId}',${i},'content',this.value)" style="flex:1;min-width:0">
         <button class="btn btn-ghost btn-xs" style="flex-shrink:0;padding:2px 6px" onclick="event.stopPropagation();copyRecordContent('${karteId}',${i})" title="この診療内容をコピー">📋</button>
         <label class="rec-oji-label" onclick="event.stopPropagation()"><input type="checkbox" ${(rec.oji&&rec.ojiFeeAdded!==false)?'checked':''} onchange="toggleOji('${karteId}',${i},this)"> 往診</label>
         <button type="button" class="rec-oji-nofee ${(rec.oji&&rec.ojiFeeAdded===false)?'active':''}" onclick="event.stopPropagation();toggleOjiNoFee('${karteId}',${i})" title="金額を足さずに往診チェック">往診¥なし</button>
-        <input type="text" class="rec-oji-memo ja-input" lang="ja" value="${(rec.oji_memo||rec.ojiMemo||'').replace(/"/g,'&quot;')}" placeholder="往診元" onclick="event.stopPropagation()" onblur="updateOjiMemo('${karteId}',${i},this.value)">
+        <input type="text" class="rec-oji-memo" value="${(rec.oji_memo||rec.ojiMemo||'').replace(/"/g,'&quot;')}" placeholder="往診元" onclick="event.stopPropagation()" onblur="updateOjiMemo('${karteId}',${i},this.value)">
       </div>
       <div class="rec-detail-sub">
         <span class="rds-label">日付</span><button type="button" class="date-step" onclick="event.stopPropagation();stepRecordDate('${karteId}',${i},-1)">−1日</button><button type="button" class="date-step" onclick="event.stopPropagation();stepRecordDate('${karteId}',${i},1)">＋1日</button>
         <span class="rds-label">時間</span><input type="time" value="${rec.time||''}" onclick="event.stopPropagation()" onblur="updateRecord('${karteId}',${i},'time',this.value)">
         <span class="rds-label">体温</span><input type="text" inputmode="decimal" value="${(rec.temp||'').toString().replace(/"/g,'&quot;')}" placeholder="—" onclick="event.stopPropagation()" onblur="updateRecord('${karteId}',${i},'temp',this.value)" style="width:52px"><button type="button" class="temp-quick" style="padding:3px 6px;font-size:11px" onclick="event.stopPropagation();setRecordTemp('${karteId}',${i},'39')">39</button><button type="button" class="temp-quick" style="padding:3px 6px;font-size:11px" onclick="event.stopPropagation();setRecordTemp('${karteId}',${i},'40')">40</button>
-        <span class="rds-label">症状</span><input type="text" value="${(rec.symptom||'').replace(/"/g,'&quot;')}" class="ja-input" lang="ja" placeholder="—" onclick="event.stopPropagation()" onblur="updateRecord('${karteId}',${i},'symptom',this.value)" style="flex:1;min-width:60px"><button type="button" class="temp-quick" style="padding:3px 6px;font-size:11px" onclick="event.stopPropagation();openSymptomTemplateForRecord('${karteId}',${i})" title="よく使う症状から選択／保存">💊</button>
+        <span class="rds-label">症状</span><input type="text" value="${(rec.symptom||'').replace(/"/g,'&quot;')}" placeholder="—" onclick="event.stopPropagation()" onblur="updateRecord('${karteId}',${i},'symptom',this.value)" style="flex:1;min-width:60px"><button type="button" class="temp-quick" style="padding:3px 6px;font-size:11px" onclick="event.stopPropagation();openSymptomTemplateForRecord('${karteId}',${i})" title="よく使う症状から選択／保存">💊</button>
       </div>
       <div class="rec-preset-sub">${presetChecks}</div>
     </div>
