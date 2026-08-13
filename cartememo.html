@@ -258,6 +258,15 @@ input[type=checkbox]{width:auto;margin:0}
 .bedit-row .bd-date{font-family:'JetBrains Mono',monospace;font-size:15px;color:#111;font-weight:600}
 .bedit-empty{font-size:13px;color:var(--text3);text-align:center;padding:14px}
 .bedit-help{font-size:14px;font-weight:700;color:#111;margin-bottom:10px}
+/* 混同しやすい注意品目の強調 */
+.watch-hit{background:#fff3cd!important;border-color:#e07800!important;color:#8a4b00!important;font-weight:700!important}
+.watch-mark{color:#e07800;font-weight:800;margin-left:3px}
+.m-row.watch-row .m-name{color:#8a4b00;font-weight:800}
+.name-ac-item.watch-ac{background:#fff8e8}
+.name-ac-item.watch-ac span:first-child,.name-ac-item.watch-ac{color:#8a4b00;font-weight:700}
+.watch-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.watch-tag{display:inline-flex;align-items:center;gap:6px;background:#fff3cd;border:1px solid #e07800;color:#8a4b00;border-radius:14px;padding:5px 10px;font-size:13px;font-weight:700}
+.watch-tag button{background:none;border:none;color:#8a4b00;cursor:pointer;font-size:15px;line-height:1;padding:0}
 .master-alert{display:flex;gap:12px;align-items:flex-start;background:#fff4f4;border:2px solid #c00;border-radius:8px;padding:14px 16px;margin-bottom:16px}
 .master-alert .ma-icon{font-size:22px;line-height:1.2;flex-shrink:0}
 .master-alert .ma-title{font-size:15px;font-weight:800;color:#c00;margin-bottom:4px}
@@ -308,7 +317,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v7.5</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v7.6</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -518,6 +527,18 @@ input[type=checkbox]{width:auto;margin:0}
       </div>
       <input type="text" id="masterEditSearch" placeholder="品目を検索..." oninput="renderMasterEditor()" style="margin-bottom:8px">
       <div id="masterEditor" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:2px"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-hdr"><h2>⚠️ 混同しやすい注意品目</h2></div>
+    <div class="panel-body">
+      <p class="input-hint" style="margin-bottom:10px">「ウルソ」と「ウルソ粉」のように間違えやすい品目を登録すると、一括計算の品目名・入力候補・マスター一覧で<b style="color:#8a4b00">オレンジ色に強調表示</b>されます。</p>
+      <div id="watchList"></div>
+      <div style="display:flex;gap:6px;margin-top:10px">
+        <input type="text" id="watchInput" list="masterNamesList" placeholder="品目名（例: ウルソ粉）" autocomplete="off" style="flex:1;min-width:0" onkeydown="if(event.key==='Enter'){event.preventDefault();addWatchItem();}">
+        <button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="addWatchItem()">追加</button>
+      </div>
     </div>
   </div>
 
@@ -879,6 +900,7 @@ let PRESETS = [
 let OJI_FEE = 0;
 let FARMS = [];
 let FARM_DIST = {}; // 農家名 -> 距離(km) の辞書
+let WATCH_ITEMS = []; // 混同しやすい注意品目（品目名の配列）
 let TEMPLATES = []; // よく使う治療パターン {id,name,content,type:'calc'|'karte'}
 let _tplTarget = null; // テンプレ挿入先
 let _tplType = 'calc'; // 表示中のパターン種別
@@ -984,7 +1006,7 @@ function switchTab(name) {
   if(name === 'calc') renderResultsList();
   if(name === 'karte') { updateKarteFarmFilter(); renderKarteList(); }
   if(name === 'stats') renderStats();
-  if(name === 'settings') { renderFarmDistList(); loadSyncMemoLimit(); renderCloudSize(); }
+  if(name === 'settings') { renderFarmDistList(); renderWatchList(); loadSyncMemoLimit(); renderCloudSize(); }
 }
 
 // ==================== STORAGE ====================
@@ -1021,6 +1043,7 @@ function saveToStorage() {
     localStorage.setItem('cm_farms', JSON.stringify(FARMS));
     localStorage.setItem('cm_farmdist', JSON.stringify(FARM_DIST));
     localStorage.setItem('cm_templates', JSON.stringify(TEMPLATES));
+    localStorage.setItem('cm_watch', JSON.stringify(WATCH_ITEMS));
   } catch(e){}
   saveMasterMeta();
   if(!_suppressAutoSave) scheduleCloudAutoSave();
@@ -1036,6 +1059,7 @@ function loadFromStorage() {
     const f = localStorage.getItem('cm_farms'); if(f) FARMS = JSON.parse(f);
     const fd = localStorage.getItem('cm_farmdist'); if(fd) FARM_DIST = JSON.parse(fd);
     const tp = localStorage.getItem('cm_templates'); if(tp) TEMPLATES = JSON.parse(tp);
+    const wi = localStorage.getItem('cm_watch'); if(wi) WATCH_ITEMS = JSON.parse(wi);
     const ak = localStorage.getItem('cm_active_karte'); if(ak) activeKarteId = ak;
     detectMasterReset(!!ms);
   } catch(e){}
@@ -1244,6 +1268,39 @@ function exportMasterCsv() {
   a.download = `vetmemo_master_${new Date().toISOString().slice(0,10)}.csv`; a.click();
   toast('マスターデータをエクスポートしました', 'success');
 }
+// ===== 混同しやすい注意品目 =====
+function isWatchItem(name) {
+  const n = String(name||'').trim();
+  return !!n && WATCH_ITEMS.includes(n);
+}
+function renderWatchList() {
+  const el = document.getElementById('watchList'); if(!el) return;
+  if(!WATCH_ITEMS.length) { el.innerHTML = '<p class="input-hint">まだ登録がありません。下から品目名を追加してください。</p>'; return; }
+  el.innerHTML = '<div class="watch-tags">' + WATCH_ITEMS.map(n =>
+    `<span class="watch-tag">⚠ ${esc(n)}<button onclick="removeWatchItem('${esc(n).replace(/'/g,"\\'")}')" title="解除">×</button></span>`
+  ).join('') + '</div>';
+}
+function addWatchItem() {
+  const inp = document.getElementById('watchInput');
+  const n = inp.value.trim();
+  if(!n) return toast('品目名を入力してください','error');
+  if(WATCH_ITEMS.includes(n)) return toast('すでに登録されています');
+  if(!MASTER.find(m=>m.name===n)) {
+    if(!confirm(`「${n}」はマスターに存在しません。それでも登録しますか？`)) return;
+  }
+  WATCH_ITEMS.push(n);
+  WATCH_ITEMS.sort((a,b)=>a.localeCompare(b,'ja'));
+  saveToStorage();
+  inp.value = '';
+  renderWatchList(); refreshMasterUI(); renderResultsList();
+  toast(`「${n}」を注意品目に登録しました`,'success');
+}
+function removeWatchItem(name) {
+  WATCH_ITEMS = WATCH_ITEMS.filter(x=>x!==name);
+  saveToStorage();
+  renderWatchList(); refreshMasterUI(); renderResultsList();
+  toast(`「${name}」の注意を解除しました`);
+}
 function refreshMasterUI() {
   const dl = document.getElementById('masterNamesList');
   if(dl) { dl.innerHTML=''; MASTER.forEach(m=>{const o=document.createElement('option');o.value=m.name;dl.appendChild(o);}); }
@@ -1257,7 +1314,7 @@ function renderMasterList() {
   const q = document.getElementById('masterSearch').value.trim().toLowerCase();
   const filtered = q ? MASTER.filter(m=>m.name.toLowerCase().includes(q)) : MASTER;
   document.getElementById('masterList').innerHTML = filtered.slice(0,60).map(m =>
-    `<div class="m-row" onclick="addMasterToActive('${m.name}')"><span class="m-name">${m.name}</span><span class="m-price">¥${m.price.toLocaleString()}</span></div>`).join('');
+    `<div class="m-row${isWatchItem(m.name)?' watch-row':''}" onclick="addMasterToActive('${m.name}')"><span class="m-name">${isWatchItem(m.name)?'⚠ ':''}${m.name}</span><span class="m-price">¥${m.price.toLocaleString()}</span></div>`).join('');
 }
 function addMasterToActive(name) {
   if(!activeResultId) return toast('先に計算タブで対象メモを選んでください');
@@ -1429,7 +1486,7 @@ function renderResultsList() {
     const rows = (m.items||[]).map((it,i)=>{
       const sub=Math.round(it.price*it.qty);
       return `<tr>
-        <td><input type="text" class="name-input" value="${it.name.replace(/"/g,'&quot;')}" onchange="updateItemName('${m.id}',${i},this.value,this)" oninput="nameInputInput(this)" onkeydown="nameInputKeydown(this,event)" onblur="nameInputBlur()" style="width:100%;min-width:80px;border:1px solid ${it.unknown?'#c00':'transparent'};border-radius:4px;padding:2px 6px;font-size:12px;background:${it.unknown?'rgba(204,0,0,0.05)':'transparent'};color:#111;cursor:text"></td>
+        <td><input type="text" class="name-input${isWatchItem(it.name)?' watch-hit':''}" value="${it.name.replace(/"/g,'&quot;')}" onchange="updateItemName('${m.id}',${i},this.value,this)" oninput="nameInputInput(this)" onkeydown="nameInputKeydown(this,event)" onblur="nameInputBlur()" style="width:100%;min-width:80px;border:1px solid ${it.unknown?'#c00':'transparent'};border-radius:4px;padding:2px 6px;font-size:12px;background:${it.unknown?'rgba(204,0,0,0.05)':'transparent'};color:#111;cursor:text"${isWatchItem(it.name)?' title="混同しやすい品目です。数量・単価を確認してください"':''}></td>
         <td class="num-cell"><input class="qty-input" type="text" inputmode="decimal" value="${it.qty}" onblur="updateItemQty('${m.id}',${i},this.value,this)" onkeydown="qtyKeydown(this,event)"></td>
         <td class="price-cell">${it.price>0?'¥'+it.price.toLocaleString():'<span style="color:#c00">未登録</span>'}</td>
         <td class="sub-cell">${sub>0?'¥'+sub.toLocaleString():'—'}</td>
@@ -1544,6 +1601,9 @@ function updateItemName(memoId,idx,val,el){
   if(el){
     el.style.border=master?'1px solid transparent':'1px solid #c00';
     el.style.background=master?'transparent':'rgba(204,0,0,0.05)';
+    // 注意品目の強調を切り替え
+    el.classList.toggle('watch-hit', isWatchItem(name));
+    el.title = isWatchItem(name) ? '混同しやすい品目です。数量・単価を確認してください' : '';
     const tr=el.closest('tr');
     if(tr){
       const priceCell=tr.querySelector('.price-cell');
@@ -1576,7 +1636,7 @@ function nameInputInput(el) {
   ac.style.left=rect.left+'px';
   ac.style.top=(rect.bottom+2)+'px';
   ac.style.minWidth=Math.max(rect.width,160)+'px';
-  ac.innerHTML=matches.map((x,i)=>`<div class="name-ac-item" data-name="${x.name.replace(/"/g,'&quot;')}" data-i="${i}" onmousedown="event.preventDefault();pickAc(this)">${x.name}<span style="color:var(--text3);font-size:11px">¥${x.price.toLocaleString()}</span></div>`).join('');
+  ac.innerHTML=matches.map((x,i)=>`<div class="name-ac-item${isWatchItem(x.name)?' watch-ac':''}" data-name="${x.name.replace(/"/g,'&quot;')}" data-i="${i}" onmousedown="event.preventDefault();pickAc(this)">${isWatchItem(x.name)?'⚠ ':''}${x.name}<span style="color:var(--text3);font-size:11px">¥${x.price.toLocaleString()}</span></div>`).join('');
   ac.style.display='block';
 }
 function closeAc(){document.getElementById('nameAc').style.display='none';_acTarget=null;_acIdx=-1;}
@@ -1696,7 +1756,7 @@ function buildCloudPayload() {
     memos: ms.map(_slimMemo),
     dictWords:DICT_WORDS, convPairs,
     kartes: _syncTargetKartes().map(_slimKarte),
-    farms:FARMS, master:MASTER, farmDist:FARM_DIST, templates:TEMPLATES
+    farms:FARMS, master:MASTER, farmDist:FARM_DIST, templates:TEMPLATES, watch:WATCH_ITEMS
   };
 }
 // 読み込み時に省略されたフィールドを既定値で復元（描画側が undefined を扱わないため）
@@ -1851,6 +1911,7 @@ async function cloudAutoLoad() {
       const localOnlyTpl = TEMPLATES.filter(t=>!cloudTplIds.has(t.id));
       TEMPLATES = [...data.templates, ...localOnlyTpl];
     }
+    if(Array.isArray(data.watch)) WATCH_ITEMS = [...new Set([...data.watch, ...WATCH_ITEMS])];
     _suppressAutoSave = true;
     saveToStorage(); // ローカルにも反映（クラウド再送信はしない）
     _suppressAutoSave = false;
@@ -1954,6 +2015,7 @@ async function cloudLoad() {
     if(Array.isArray(data.master)){const names=new Set(MASTER.map(m=>m.name));data.master.forEach(m=>{if(!names.has(m.name))MASTER.push(m);});refreshMasterUI();}
     if(data.farmDist&&typeof data.farmDist==='object'){Object.keys(data.farmDist).forEach(f=>{if(FARM_DIST[f]==null)FARM_DIST[f]=data.farmDist[f];});}
     if(Array.isArray(data.templates)){const ids=new Set(TEMPLATES.map(t=>t.id));data.templates.forEach(t=>{if(!ids.has(t.id))TEMPLATES.push(t);});}
+    if(Array.isArray(data.watch)) WATCH_ITEMS = [...new Set([...WATCH_ITEMS, ...data.watch])];
     reconcileFarms();
     saveToStorage(); saveJsonbinSettings();
     renderMemoQueue();renderResultsList();renderDict();updateBadge();
@@ -1965,7 +2027,7 @@ async function cloudLoad() {
 
 // ==================== JSON BACKUP ====================
 function exportData() {
-  const data={version:2,exportedAt:new Date().toISOString(),memos,dictWords:DICT_WORDS,convPairs,kartes:KARTES,farms:FARMS,master:MASTER,farmDist:FARM_DIST,templates:TEMPLATES};
+  const data={version:2,exportedAt:new Date().toISOString(),memos,dictWords:DICT_WORDS,convPairs,kartes:KARTES,farms:FARMS,master:MASTER,farmDist:FARM_DIST,templates:TEMPLATES,watch:WATCH_ITEMS};
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
   a.download=`cartememo_${new Date().toISOString().slice(0,10)}.json`;a.click();
@@ -1988,6 +2050,7 @@ function importData(input) {
       if(Array.isArray(data.master)){const mnames=new Set(MASTER.map(m=>m.name));data.master.forEach(m=>{if(!mnames.has(m.name))MASTER.push(m);});refreshMasterUI();}
       if(data.farmDist&&typeof data.farmDist==='object'){Object.keys(data.farmDist).forEach(f=>{if(FARM_DIST[f]==null)FARM_DIST[f]=data.farmDist[f];});}
       if(Array.isArray(data.templates)){const ids=new Set(TEMPLATES.map(t=>t.id));data.templates.forEach(t=>{if(!ids.has(t.id))TEMPLATES.push(t);});}
+      if(Array.isArray(data.watch)) WATCH_ITEMS = [...new Set([...WATCH_ITEMS, ...data.watch])];
       reconcileFarms();
       saveToStorage();renderMemoQueue();renderResultsList();renderDict();updateBadge();
       updateFarmDatalist();updateKarteFarmFilter();renderKarteList();
