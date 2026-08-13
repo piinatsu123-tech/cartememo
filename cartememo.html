@@ -317,7 +317,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v7.6</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v7.7</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -2791,6 +2791,9 @@ function buildKarteCard(k, isDetail) {
     const n = k.records.length;
     const dates = k.records.map(r=>r.date).filter(Boolean).sort();
     const dateRange = dates.length===0?'':dates.length===1?fmtDate(dates[0]):fmtDate(dates[0])+'〜'+fmtDate(dates[dates.length-1]);
+    const elecPart = k.electronic_amount!==null
+      ? ` &nbsp;|&nbsp; 電子 ¥${k.electronic_amount.toLocaleString()}`
+      : ` &nbsp;|&nbsp; <span style="color:var(--text3)">電子 未入力</span>`;
     const diffPart = k.diff!==null?` &nbsp;<span class="${diffClass}" style="font-weight:600">差額 ${(k.diff>=0?'+':'')+fmtAmt(k.diff)}</span>`:'';
     const stage = k.closed ? 2 : k.finished ? 1 : 0;
     const badgeClass = k.archived ? 'badge-archived' : stage===2 ? 'badge-closed' : stage===1 ? 'badge-unclosed' : 'badge-active';
@@ -2812,7 +2815,7 @@ function buildKarteCard(k, isDetail) {
         </div>
       </div>
       <div class="karte-summary">
-        ${n}件 &nbsp;${dateRange} &nbsp;|&nbsp; 紙カルテ ¥${k.paper_total.toLocaleString()}${diffPart}
+        ${n}件 &nbsp;${dateRange} &nbsp;|&nbsp; 紙 ¥${k.paper_total.toLocaleString()}${elecPart}${diffPart}
       </div>
     </div>`;
   }
