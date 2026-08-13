@@ -258,6 +258,12 @@ input[type=checkbox]{width:auto;margin:0}
 .bedit-row .bd-date{font-family:'JetBrains Mono',monospace;font-size:15px;color:#111;font-weight:600}
 .bedit-empty{font-size:13px;color:var(--text3);text-align:center;padding:14px}
 .bedit-help{font-size:14px;font-weight:700;color:#111;margin-bottom:10px}
+.master-alert{display:flex;gap:12px;align-items:flex-start;background:#fff4f4;border:2px solid #c00;border-radius:8px;padding:14px 16px;margin-bottom:16px}
+.master-alert .ma-icon{font-size:22px;line-height:1.2;flex-shrink:0}
+.master-alert .ma-title{font-size:15px;font-weight:800;color:#c00;margin-bottom:4px}
+.master-alert .ma-detail{font-size:13px;color:var(--text2);line-height:1.6}
+.master-alert .ma-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.master-alert .ma-actions .btn{min-height:40px}
 .dkb-tplbar{display:flex;gap:6px;align-items:center}
 .dkb-text{width:100%;min-height:170px;max-height:300px;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.7;border:1px solid var(--border);border-radius:6px;padding:10px;resize:vertical;white-space:pre;overflow-wrap:normal;overflow-x:auto}
 .dkb-tools{margin-top:10px;border:1px solid var(--border);border-radius:6px;background:var(--surface)}
@@ -302,7 +308,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v7.3</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v7.4</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -327,6 +333,19 @@ input[type=checkbox]{width:auto;margin:0}
 </aside>
 
 <main>
+
+<!-- マスターデータ喪失の警告 -->
+<div id="masterAlert" class="master-alert" style="display:none">
+  <div class="ma-icon">⚠️</div>
+  <div class="ma-body">
+    <div class="ma-title" id="masterAlertTitle"></div>
+    <div class="ma-detail" id="masterAlertDetail"></div>
+    <div class="ma-actions">
+      <button class="btn btn-primary btn-sm" onclick="switchTab('settings')">設定を開いて復元する</button>
+      <button class="btn btn-ghost btn-sm" onclick="dismissMasterAlert()">確認した（閉じる）</button>
+    </div>
+  </div>
+</div>
 
 <!-- ===== 往診メモ ===== -->
 <div class="tab-page active" id="page-memo">
@@ -890,6 +909,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadPresets();
   loadOjiFee();
   await cloudAutoLoad(); // 起動時にクラウドから自動読み込み（URLインポートより先に完了させる）
+  // クラウドから復元された結果を踏まえて再判定してから警告を出す
+  detectMasterReset(!!localStorage.getItem('cm_master'));
+  renderMasterAlert();
   handleUrlParams();
 });
 window.addEventListener('pageshow', e => { if(e.persisted) handleUrlParams(); });
@@ -968,6 +990,20 @@ function switchTab(name) {
 // ==================== STORAGE ====================
 // キーはすべて cm_ プレフィックス（vetmemo と独立）
 let _suppressAutoSave = false;
+// ===== マスターデータ喪失の検知 =====
+// マスターの規模を記録しておき、次回起動時に大幅に減っていたら警告する
+let _masterAlert = null; // {msg, detail} 警告内容
+function _masterSig(list) {
+  const arr = list||[];
+  return { count: arr.length, sum: Math.round(arr.reduce((s,m)=>s+(Number(m.price)||0),0)*100) };
+}
+function _isBuiltinMaster(list) {
+  const sig = _masterSig(list), b = _masterSig(MASTER_BUILTIN);
+  return sig.count===b.count && sig.sum===b.sum;
+}
+function saveMasterMeta() {
+  try { localStorage.setItem('cm_master_meta', JSON.stringify({..._masterSig(MASTER), savedAt:new Date().toISOString()})); } catch(e){}
+}
 function saveToStorage() {
   try {
     localStorage.setItem('cm_memos', JSON.stringify(memos));
@@ -979,6 +1015,7 @@ function saveToStorage() {
     localStorage.setItem('cm_farmdist', JSON.stringify(FARM_DIST));
     localStorage.setItem('cm_templates', JSON.stringify(TEMPLATES));
   } catch(e){}
+  saveMasterMeta();
   if(!_suppressAutoSave) scheduleCloudAutoSave();
 }
 function loadFromStorage() {
@@ -993,7 +1030,49 @@ function loadFromStorage() {
     const fd = localStorage.getItem('cm_farmdist'); if(fd) FARM_DIST = JSON.parse(fd);
     const tp = localStorage.getItem('cm_templates'); if(tp) TEMPLATES = JSON.parse(tp);
     const ak = localStorage.getItem('cm_active_karte'); if(ak) activeKarteId = ak;
+    detectMasterReset(!!ms);
   } catch(e){}
+}
+function renderMasterAlert() {
+  const el = document.getElementById('masterAlert');
+  if(!el) return;
+  if(!_masterAlert) { el.style.display='none'; return; }
+  document.getElementById('masterAlertTitle').textContent = _masterAlert.msg;
+  document.getElementById('masterAlertDetail').textContent = _masterAlert.detail + ' クラウド同期またはJSONバックアップから復元できます。';
+  el.style.display = 'flex';
+}
+function dismissMasterAlert() {
+  _masterAlert = null;
+  saveMasterMeta();               // 現在の状態を正として記録し、次回から警告しない
+  _masterMetaBoot = _masterSig(MASTER); // 同一セッション中も再警告しない
+  renderMasterAlert();
+  toast('現在のマスターデータを正として記録しました');
+}
+// マスターが失われた／初期状態に戻った可能性を判定する
+// 判定基準は「起動時点」のメタ情報。クラウド同期で上書きされた値では判定しない
+let _masterMetaBoot = undefined;
+function detectMasterReset(hadStoredMaster) {
+  _masterAlert = null;
+  if(_masterMetaBoot === undefined) {
+    _masterMetaBoot = null;
+    try { const s = localStorage.getItem('cm_master_meta'); if(s) _masterMetaBoot = JSON.parse(s); } catch(e){}
+  }
+  const meta = _masterMetaBoot;
+  const hasData = (KARTES && KARTES.length) || (memos && memos.length);
+  const cur = _masterSig(MASTER);
+  if(!hadStoredMaster) {
+    // 保存済みマスターが無い＝組み込みの初期データで起動している
+    if(meta) {
+      _masterAlert = { msg:'マスターデータが失われています', detail:`前回は${meta.count}件登録されていましたが、現在は初期データ${cur.count}件です。金額が実際と異なる可能性があります。` };
+    } else if(hasData) {
+      _masterAlert = { msg:'マスターデータが初期化されている可能性があります', detail:`カルテ・メモは保存されていますが、マスターは初期データ${cur.count}件です。金額が実際と異なる可能性があります。` };
+    }
+  } else if(meta && cur.count < meta.count) {
+    // 保存はされているが件数が減っている
+    _masterAlert = { msg:'マスターデータの件数が減っています', detail:`前回${meta.count}件 → 現在${cur.count}件。意図しない変更でないか確認してください。` };
+  } else if(meta && cur.count===meta.count && cur.sum!==meta.sum && _isBuiltinMaster(MASTER)) {
+    _masterAlert = { msg:'マスターデータが初期データに戻っています', detail:'単価が組み込みの初期値と一致しています。金額が実際と異なる可能性があります。' };
+  }
 }
 // vetmemo から cartememo への一回限りのデータ移行
 function migrateFromVetMemo() {
@@ -1133,6 +1212,9 @@ function refreshMasterUI() {
   if(dl) { dl.innerHTML=''; MASTER.forEach(m=>{const o=document.createElement('option');o.value=m.name;dl.appendChild(o);}); }
   if(document.getElementById('masterList')) renderMasterList();
   if(document.getElementById('masterEditor')) renderMasterEditor();
+  // 復元・編集で件数が戻ったら警告を再判定
+  detectMasterReset(!!localStorage.getItem('cm_master'));
+  renderMasterAlert();
 }
 function renderMasterList() {
   const q = document.getElementById('masterSearch').value.trim().toLowerCase();
