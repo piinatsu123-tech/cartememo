@@ -308,7 +308,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v7.4</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v7.5</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -992,7 +992,7 @@ function switchTab(name) {
 let _suppressAutoSave = false;
 // ===== マスターデータ喪失の検知 =====
 // マスターの規模を記録しておき、次回起動時に大幅に減っていたら警告する
-let _masterAlert = null; // {msg, detail} 警告内容
+let _masterAlert = []; // [{msg, detail}] 警告内容（マスター／カルテ）
 function _masterSig(list) {
   const arr = list||[];
   return { count: arr.length, sum: Math.round(arr.reduce((s,m)=>s+(Number(m.price)||0),0)*100) };
@@ -1002,7 +1002,14 @@ function _isBuiltinMaster(list) {
   return sig.count===b.count && sig.sum===b.sum;
 }
 function saveMasterMeta() {
-  try { localStorage.setItem('cm_master_meta', JSON.stringify({..._masterSig(MASTER), savedAt:new Date().toISOString()})); } catch(e){}
+  try {
+    localStorage.setItem('cm_master_meta', JSON.stringify({..._masterSig(MASTER), savedAt:new Date().toISOString()}));
+    localStorage.setItem('cm_karte_meta', JSON.stringify({..._karteSig(), savedAt:new Date().toISOString()}));
+  } catch(e){}
+}
+// カルテの規模（件数・診療記録の総数）
+function _karteSig() {
+  return { count: KARTES.length, recs: KARTES.reduce((s,k)=>s+((k.records&&k.records.length)||0),0) };
 }
 function saveToStorage() {
   try {
@@ -1036,42 +1043,72 @@ function loadFromStorage() {
 function renderMasterAlert() {
   const el = document.getElementById('masterAlert');
   if(!el) return;
-  if(!_masterAlert) { el.style.display='none'; return; }
-  document.getElementById('masterAlertTitle').textContent = _masterAlert.msg;
-  document.getElementById('masterAlertDetail').textContent = _masterAlert.detail + ' クラウド同期またはJSONバックアップから復元できます。';
+  const list = _masterAlert || [];
+  if(!list.length) { el.style.display='none'; return; }
+  document.getElementById('masterAlertTitle').textContent =
+    list.length===1 ? list[0].msg : `データが失われている可能性があります（${list.length}件）`;
+  document.getElementById('masterAlertDetail').innerHTML =
+    list.map(a=>`・<b>${esc(a.msg)}</b><br>　${esc(a.detail)}`).join('<br>') +
+    '<br>クラウド同期またはJSONバックアップから復元できます。';
   el.style.display = 'flex';
 }
-function dismissMasterAlert() {
-  _masterAlert = null;
-  saveMasterMeta();               // 現在の状態を正として記録し、次回から警告しない
-  _masterMetaBoot = _masterSig(MASTER); // 同一セッション中も再警告しない
+// 意図的な削除の直後に呼び、現在の件数を基準として受け入れる（誤警告を防ぐ）
+function acceptCurrentCounts() {
+  _masterMetaBoot = _masterSig(MASTER);
+  _karteMetaBoot  = _karteSig();
+  _masterAlert = [];
   renderMasterAlert();
-  toast('現在のマスターデータを正として記録しました');
 }
-// マスターが失われた／初期状態に戻った可能性を判定する
+function dismissMasterAlert() {
+  _masterAlert = [];
+  saveMasterMeta();                      // 現在の状態を正として記録し、次回から警告しない
+  _masterMetaBoot = _masterSig(MASTER);   // 同一セッション中も再警告しない
+  _karteMetaBoot  = _karteSig();
+  renderMasterAlert();
+  toast('現在のデータを正として記録しました');
+}
+// マスター／カルテが失われた可能性を判定する
 // 判定基準は「起動時点」のメタ情報。クラウド同期で上書きされた値では判定しない
 let _masterMetaBoot = undefined;
-function detectMasterReset(hadStoredMaster) {
-  _masterAlert = null;
+let _karteMetaBoot = undefined;
+function _loadBootMeta() {
   if(_masterMetaBoot === undefined) {
     _masterMetaBoot = null;
     try { const s = localStorage.getItem('cm_master_meta'); if(s) _masterMetaBoot = JSON.parse(s); } catch(e){}
   }
+  if(_karteMetaBoot === undefined) {
+    _karteMetaBoot = null;
+    try { const s = localStorage.getItem('cm_karte_meta'); if(s) _karteMetaBoot = JSON.parse(s); } catch(e){}
+  }
+}
+function detectMasterReset(hadStoredMaster) {
+  _masterAlert = [];
+  _loadBootMeta();
   const meta = _masterMetaBoot;
   const hasData = (KARTES && KARTES.length) || (memos && memos.length);
   const cur = _masterSig(MASTER);
+  // --- マスターデータ ---
   if(!hadStoredMaster) {
     // 保存済みマスターが無い＝組み込みの初期データで起動している
     if(meta) {
-      _masterAlert = { msg:'マスターデータが失われています', detail:`前回は${meta.count}件登録されていましたが、現在は初期データ${cur.count}件です。金額が実際と異なる可能性があります。` };
+      _masterAlert.push({ msg:'マスターデータが失われています', detail:`前回は${meta.count}件登録されていましたが、現在は初期データ${cur.count}件です。金額が実際と異なる可能性があります。` });
     } else if(hasData) {
-      _masterAlert = { msg:'マスターデータが初期化されている可能性があります', detail:`カルテ・メモは保存されていますが、マスターは初期データ${cur.count}件です。金額が実際と異なる可能性があります。` };
+      _masterAlert.push({ msg:'マスターデータが初期化されている可能性があります', detail:`カルテ・メモは保存されていますが、マスターは初期データ${cur.count}件です。金額が実際と異なる可能性があります。` });
     }
   } else if(meta && cur.count < meta.count) {
-    // 保存はされているが件数が減っている
-    _masterAlert = { msg:'マスターデータの件数が減っています', detail:`前回${meta.count}件 → 現在${cur.count}件。意図しない変更でないか確認してください。` };
+    _masterAlert.push({ msg:'マスターデータの件数が減っています', detail:`前回${meta.count}件 → 現在${cur.count}件。意図しない変更でないか確認してください。` });
   } else if(meta && cur.count===meta.count && cur.sum!==meta.sum && _isBuiltinMaster(MASTER)) {
-    _masterAlert = { msg:'マスターデータが初期データに戻っています', detail:'単価が組み込みの初期値と一致しています。金額が実際と異なる可能性があります。' };
+    _masterAlert.push({ msg:'マスターデータが初期データに戻っています', detail:'単価が組み込みの初期値と一致しています。金額が実際と異なる可能性があります。' });
+  }
+  // --- カルテ ---
+  const km = _karteMetaBoot;
+  const kc = _karteSig();
+  if(km) {
+    if(kc.count < km.count) {
+      _masterAlert.push({ msg:'カルテの件数が減っています', detail:`前回${km.count}件 → 現在${kc.count}件。削除した覚えがなければ復元してください。` });
+    } else if(kc.count===km.count && km.recs!=null && kc.recs < km.recs) {
+      _masterAlert.push({ msg:'カルテの診療記録が減っています', detail:`前回${km.recs}件の診療記録 → 現在${kc.recs}件。削除した覚えがなければ復元してください。` });
+    }
   }
 }
 // vetmemo から cartememo への一回限りのデータ移行
@@ -1173,7 +1210,7 @@ function saveMasterItem() {
 }
 function deleteMasterItem(i) {
   if(!confirm(`「${MASTER[i].name}」を削除しますか？`)) return;
-  MASTER.splice(i,1); saveToStorage(); renderMasterEditor(); renderMasterList();
+  MASTER.splice(i,1); saveToStorage(); acceptCurrentCounts(); renderMasterEditor(); renderMasterList();
   loadPresets(); loadOjiFee(); toast('削除しました');
 }
 function bulkImportMaster() {
@@ -3131,6 +3168,7 @@ function deleteRecord(karteId, recIdx) {
   k.records.splice(recIdx, 1);
   recalcPaperTotal(k);
   saveToStorage();
+  acceptCurrentCounts();
   renderKarteList();
 }
 
@@ -3162,6 +3200,9 @@ function handleKarteCardClick(e, karteId) {
 }
 
 function renderKarteList() {
+  // 復元・追加で件数が戻ったら警告を再判定
+  detectMasterReset(!!localStorage.getItem('cm_master'));
+  renderMasterAlert();
   const el = document.getElementById('karteList');
   const backBar = document.getElementById('karte-back-bar');
   const filterBar = document.getElementById('karte-filter-bar');
@@ -3250,7 +3291,7 @@ function toggleArchive(id) {
 function deleteKarte(id){
   if(!confirm('このカルテを削除しますか？'))return;
   if(activeKarteId===id) deselectKarte();
-  KARTES=KARTES.filter(k=>k.id!==id);saveToStorage();renderKarteList();
+  KARTES=KARTES.filter(k=>k.id!==id);saveToStorage();acceptCurrentCounts();renderKarteList();
 }
 function duplicateKarte(id){
   const src = KARTES.find(k=>k.id===id); if(!src) return;
