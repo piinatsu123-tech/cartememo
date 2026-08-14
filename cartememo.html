@@ -317,7 +317,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v7.8</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v7.9</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -957,7 +957,7 @@ function handleUrlParams() {
           const k = KARTES.find(x => x.id === activeKarteId);
           if(k && !k.closed) {
             fillElectAmt(activeKarteId, amt);
-            toast('¥' + amt.toLocaleString('ja-JP') + ' を入力しました。確定ボタンを押してください', 'success');
+            toast('¥' + amt.toLocaleString('ja-JP') + ' を保存しました', 'success');
             return;
           }
           // 選択中だったが確定済みの場合は選択解除してフォールバック
@@ -3337,24 +3337,29 @@ function deselectKarte() {
   renderKarteList();
 }
 
+// 電子カルテ金額をデータに直接保存する（画面に入力欄が無くても確実に保存される）
+// val に null を渡すとクリア。保存したら true を返す
+function setElectronicAmount(id, val) {
+  const k = KARTES.find(x=>x.id===id);
+  if(!k) { toast('カルテが見つかりませんでした','error'); return false; }
+  if(val===null) {
+    if(k.electronic_amount===null) return false;
+    k.electronic_amount=null; k.diff=null; k.closed=false;
+    saveToStorage(); renderKarteList();
+    toast('電子カルテ金額をクリアしました');
+    return true;
+  }
+  if(isNaN(val)||val<0) return false;
+  if(k.electronic_amount===val) return false;
+  k.electronic_amount=val; k.diff=val-k.paper_total; k.closed=true;
+  saveToStorage(); renderKarteList();
+  toast(`差額: ${k.diff>=0?'+':''}${fmtAmt(k.diff)}`, k.diff<0?'error':'success');
+  return true;
+}
 function autoSaveElectronic(id) {
   const input=document.getElementById('elec-'+id);if(!input)return;
-  const k=KARTES.find(x=>x.id===id);if(!k)return;
   const raw=input.value.trim();
-  if(raw==='') {
-    if(k.electronic_amount!==null) {
-      k.electronic_amount=null;k.diff=null;k.closed=false;
-      saveToStorage();renderKarteList();
-      toast('電子カルテ金額をクリアしました');
-    }
-    return;
-  }
-  const val=parseInt(raw);
-  if(isNaN(val)||val<0) return;
-  if(k.electronic_amount===val) return;
-  k.electronic_amount=val;k.diff=val-k.paper_total;k.closed=true;
-  saveToStorage();renderKarteList();
-  toast(`差額: ${k.diff>=0?'+':''}${fmtAmt(k.diff)}`, k.diff<0?'error':'success');
+  setElectronicAmount(id, raw==='' ? null : parseInt(raw));
 }
 function toggleFinished(id) {
   const k = KARTES.find(x=>x.id===id);
@@ -3442,14 +3447,16 @@ function exportCSV() {
 
 // ==================== ELECTRONIC AMOUNT SELECTION ====================
 function fillElectAmt(karteId, amt) {
-  const input = document.getElementById('elec-' + karteId);
-  if(!input) return;
-  input.value = amt;
-  // 即時保存（ブラーイベントなしで直接保存）
-  autoSaveElectronic(karteId);
-  // 再描画後の新しい入力欄をハイライト
+  // 入力欄の有無に関わらずデータに直接保存する（一覧表示中でも確実に保存される）
+  const saved = setElectronicAmount(karteId, amt);
+  const k = KARTES.find(x=>x.id===karteId);
+  if(!k) return;
+  if(!saved && k.electronic_amount!==amt) { toast('金額を保存できませんでした','error'); return; }
+  // 保存先のカルテを開いて結果を確認できるようにする
+  if(activeKarteId !== karteId) selectKarte(karteId);
   const newInput = document.getElementById('elec-' + karteId);
   if(newInput) {
+    newInput.value = k.electronic_amount;
     newInput.style.outline = '2px solid #c00';
     newInput.scrollIntoView({behavior:'smooth', block:'center'});
     setTimeout(() => { const el=document.getElementById('elec-'+karteId); if(el) el.style.outline=''; }, 3000);
@@ -3482,7 +3489,7 @@ function applyElectAmt(karteId) {
   const amt = pendingElectAmt;
   closeElectModal();
   fillElectAmt(karteId, amt);
-  toast('¥' + amt.toLocaleString('ja-JP') + ' を入力しました。確定ボタンを押してください', 'success');
+  toast('¥' + amt.toLocaleString('ja-JP') + ' を保存しました', 'success');
 }
 
 document.getElementById('electModal').addEventListener('click', e => {
