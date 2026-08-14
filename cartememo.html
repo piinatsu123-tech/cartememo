@@ -317,7 +317,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v7.7</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v7.8</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -1029,6 +1029,16 @@ function saveMasterMeta() {
     localStorage.setItem('cm_karte_meta', JSON.stringify({..._karteSig(), savedAt:new Date().toISOString()}));
   } catch(e){}
 }
+// ===== メモの並び順 =====
+// memos は「古い順」で保持する（表示側は reverse して新しい順に出す）。
+// id は作成時の Date.now() なので、同期でマージした後も時系列に整列できる。
+function _memoTime(m) {
+  const t = Number(m && m.id);
+  return isNaN(t) ? 0 : t;
+}
+function sortMemosChrono() {
+  memos.sort((a,b)=>_memoTime(a)-_memoTime(b));
+}
 // カルテの規模（件数・診療記録の総数）
 function _karteSig() {
   return { count: KARTES.length, recs: KARTES.reduce((s,k)=>s+((k.records&&k.records.length)||0),0) };
@@ -1061,6 +1071,7 @@ function loadFromStorage() {
     const tp = localStorage.getItem('cm_templates'); if(tp) TEMPLATES = JSON.parse(tp);
     const wi = localStorage.getItem('cm_watch'); if(wi) WATCH_ITEMS = JSON.parse(wi);
     const ak = localStorage.getItem('cm_active_karte'); if(ak) activeKarteId = ak;
+    sortMemosChrono(); // 過去に崩れた並びも起動時に整列する
     detectMasterReset(!!ms);
   } catch(e){}
 }
@@ -1361,7 +1372,8 @@ function renderMemoQueue() {
   const el = document.getElementById('memoQueue');
   if(!memos.length) { el.innerHTML='<div class="empty-state"><div class="es-icon">🐄</div>メモがありません<br>往診先で音声入力して追加してください</div>'; document.getElementById('queueCount').textContent='0件'; return; }
   document.getElementById('queueCount').textContent=`${memos.length}件`;
-  el.innerHTML=[...memos].reverse().map(m=>`
+  // 新しいメモが一番上（時系列の降順）
+  el.innerHTML=[...memos].sort((a,b)=>_memoTime(b)-_memoTime(a)).map(m=>`
     <div class="memo-card ${m.status}" id="mc-${m.id}">
       <div class="mc-header">
         <span class="mc-num">#${memos.indexOf(m)+1}</span>
@@ -1476,7 +1488,8 @@ function renderResultsList() {
   const hiddenCount = memos.filter(m=>(m.status==='done'||m.status==='processing')&&m.hidden).length;
   const btn = document.getElementById('showHiddenBtn');
   if(btn) { btn.style.display = hiddenCount ? '' : 'none'; btn.textContent = showHidden ? `非表示を隠す（${hiddenCount}件）` : `非表示を表示（${hiddenCount}件）`; }
-  const done = [...memos].reverse().filter(m=>(m.status==='done'||m.status==='processing')&&(showHidden||!m.hidden));
+  // 新しいメモが一番上（時系列の降順）
+  const done = [...memos].sort((a,b)=>_memoTime(b)-_memoTime(a)).filter(m=>(m.status==='done'||m.status==='processing')&&(showHidden||!m.hidden));
   if(!done.length) { el.innerHTML='<div class="empty-state"><div class="es-icon">📋</div>「往診メモ」タブでメモを追加してから<br>「まとめてAI解析」を押してください</div>'; return; }
   el.innerHTML = done.map(m => {
     const baseTotal = (m.items||[]).reduce((s,it)=>s+it.price*it.qty,0);
@@ -1884,6 +1897,7 @@ async function cloudAutoLoad() {
     });
     memos.forEach(lm=>{ if(!cloudMemoIds.has(lm.id)) mergedMemos.push(lm); });
     memos = mergedMemos;
+    sortMemosChrono(); // 同期マージで崩れた並びを時系列に戻す
 
     // カルテ: クラウドを基本とし、レコード数が多い方を採用。ローカルのみは保持
     const cloudKartes = data.kartes||[];
@@ -2007,6 +2021,7 @@ async function cloudLoad() {
     const existingIds=new Set(memos.map(m=>m.id));
     const newMemos=data.memos.filter(m=>!existingIds.has(m.id));
     memos=[...memos,...newMemos];
+    sortMemosChrono();
     if(Array.isArray(data.dictWords)) data.dictWords.forEach(w=>{if(!DICT_WORDS.includes(w))DICT_WORDS.push(w);});
     if(Array.isArray(data.convPairs)){const eIds=new Set(convPairs.map(p=>p.id));data.convPairs.forEach(p=>{if(!eIds.has(p.id))convPairs.push(p);});}
     let newKartes=0;
@@ -2042,6 +2057,7 @@ function importData(input) {
       if(!Array.isArray(data.memos)) throw new Error('メモデータが見つかりません');
       (data.memos||[]).forEach(_normMemo); (data.kartes||[]).forEach(_normKarte);
       const eIds=new Set(memos.map(m=>m.id));const newMemos=data.memos.filter(m=>!eIds.has(m.id));memos=[...memos,...newMemos];
+      sortMemosChrono();
       if(Array.isArray(data.dictWords))data.dictWords.forEach(w=>{if(!DICT_WORDS.includes(w))DICT_WORDS.push(w);});
       if(Array.isArray(data.convPairs)){const eIds2=new Set(convPairs.map(p=>p.id));data.convPairs.forEach(p=>{if(!eIds2.has(p.id))convPairs.push(p);});}
       let newKartes=0;
