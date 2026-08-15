@@ -341,7 +341,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v8.3</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v8.4</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -1926,25 +1926,48 @@ function scheduleCloudAutoSave() {
   _autoSaveTimer = setTimeout(() => cloudAutoSave(key, binId), 5000);
 }
 
-async function cloudAutoSave(key, binId) {
+// 5秒待たずに即座にクラウドへ送信する（ブックマークレットなど、直後に
+// 画面を離れる可能性がある操作で使う）
+let _syncErrMsg = '';
+function cloudSyncNow() {
+  const key = localStorage.getItem('cm_jbk') || '';
+  const binId = localStorage.getItem('cm_jbid') || '';
+  if(!key || !binId) return Promise.resolve(false);
+  clearTimeout(_autoSaveTimer); // 予約済みの遅延送信は取り消す
+  return cloudAutoSave(key, binId);
+}
+async function cloudAutoSave(key, binId, attempt) {
+  attempt = attempt || 1;
   setSyncStatus('saving');
   const data = buildCloudPayload();
   try {
     const resp = await fetch(`https://api.jsonbin.io/v3/b/${binId}`, {
       method:'PUT',
       headers:{'Content-Type':'application/json','X-Master-Key':key},
-      body:JSON.stringify(data)
+      body:JSON.stringify(data),
+      keepalive: true // 画面遷移中でも送信を継続させる
     });
-    if(!resp.ok) { const r=await resp.json(); throw new Error(r.message||'HTTP '+resp.status); }
+    if(!resp.ok) { let m='HTTP '+resp.status; try{const r=await resp.json();m=r.message||m;}catch(e){} throw new Error(m); }
+    _syncErrMsg = '';
     setSyncStatus('saved');
     const sz = new Blob([JSON.stringify(data)]).size;
     document.getElementById('cloudInfo').textContent = `最終自動保存: ${new Date().toLocaleString('ja-JP')}（メモ${memos.length}件・カルテ${KARTES.length}件・${fmtBytes(sz)}）`;
     renderCloudSize();
     if(sz > 90*1024 && !_sizeWarned) { _sizeWarned = true; toast('クラウド容量が上限に近づいています（設定タブで確認）','error'); }
+    return true;
   } catch(e) {
+    const msg = e && e.message ? e.message : '通信エラー';
+    console.warn('Auto cloud save failed:', msg);
+    // 一時的な通信エラーは自動で再試行する（最大3回）
+    if(attempt < 3) {
+      await new Promise(r=>setTimeout(r, attempt*1500));
+      return cloudAutoSave(key, binId, attempt+1);
+    }
+    _syncErrMsg = msg;
     setSyncStatus('error');
-    console.warn('Auto cloud save failed:', e.message);
-    if(/size|large|limit|payload/i.test(e.message||'')) toast('クラウド保存失敗: 容量超過の可能性（設定タブで同期メモ数を減らせます）','error');
+    if(/size|large|limit|payload/i.test(msg)) toast('クラウド保存失敗: 容量超過の可能性（設定タブで同期メモ数を減らせます）','error');
+    else toast('クラウド保存に失敗しました: '+msg, 'error');
+    return false;
   }
 }
 let _sizeWarned = false;
@@ -2054,10 +2077,18 @@ function updateSyncPill() {
     return;
   }
   pill.style.display = 'flex';
+  pill.onclick = null; pill.title = ''; pill.style.cursor = '';
   const hhmm = LAST_SYNC_AT ? new Date(LAST_SYNC_AT).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}) : '';
   if(_syncState==='loading')     { pill.className='hdr-pill'; dot.style.background='#999'; st.textContent='読込中…'; }
   else if(_syncState==='saving') { pill.className='hdr-pill'; dot.style.background='#999'; st.textContent='保存中…'; }
-  else if(_syncState==='error')  { pill.className='hdr-pill pill-error'; dot.style.background='#c00'; st.textContent='同期失敗'; }
+  else if(_syncState==='error')  {
+    pill.className='hdr-pill pill-error'; dot.style.background='#c00';
+    st.textContent = PENDING_CHANGES>0 ? `同期失敗 未保存${PENDING_CHANGES}件` : '同期失敗';
+    pill.title = _syncErrMsg ? '原因: '+_syncErrMsg+'（タップで再試行）' : 'タップで再試行';
+    pill.style.cursor = 'pointer';
+    pill.onclick = () => { toast('再送信します…'); cloudSyncNow(); };
+    return;
+  }
   else if(PENDING_CHANGES > 0)   { pill.className='hdr-pill pill-pending'; dot.style.background='#e07800'; st.textContent=`未保存 ${PENDING_CHANGES}件`; }
   else                           { pill.className='hdr-pill pill-ok'; dot.style.background='#1a8a4a'; st.textContent = hhmm ? `同期済 ${hhmm}` : '同期済'; }
 }
@@ -3655,6 +3686,8 @@ function exportCSV() {
 function fillElectAmt(karteId, amt) {
   // 入力欄の有無に関わらずデータに直接保存する（一覧表示中でも確実に保存される）
   const saved = setElectronicAmount(karteId, amt);
+  // 直後に電子カルテ画面へ戻っても失われないよう、5秒待たず即座に同期する
+  cloudSyncNow();
   const k = KARTES.find(x=>x.id===karteId);
   if(!k) return;
   if(!saved && k.electronic_amount!==amt) { toast('金額を保存できませんでした','error'); return; }
