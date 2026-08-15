@@ -317,7 +317,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v7.9</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v8.0</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -1899,12 +1899,21 @@ async function cloudAutoLoad() {
     memos = mergedMemos;
     sortMemosChrono(); // 同期マージで崩れた並びを時系列に戻す
 
-    // カルテ: クラウドを基本とし、レコード数が多い方を採用。ローカルのみは保持
+    // カルテ: 同じIDは「後から更新された方」を採用する。ローカルのみは保持
+    // （レコード数だけで判定すると、電子カルテ金額など件数が変わらない編集が
+    //   クラウドの古いデータで上書きされてしまうため）
     const cloudKartes = data.kartes||[];
     const cloudKarteMap = new Map(cloudKartes.map(k=>[k.id,k]));
     const mergedKartes = cloudKartes.map(ck=>{
       const lk = KARTES.find(x=>x.id===ck.id);
-      return (lk && lk.records.length > ck.records.length) ? lk : ck;
+      if(!lk) return ck;
+      const lt = Number(lk.updatedAt)||0, ct = Number(ck.updatedAt)||0;
+      if(lt || ct) return lt >= ct ? lk : ck;           // 更新時刻がある場合は新しい方
+      if(lk.records.length !== ck.records.length)        // 旧データ: レコード数が多い方
+        return lk.records.length > ck.records.length ? lk : ck;
+      // 旧データで件数も同じ場合、電子カルテ金額が入っている方を残す
+      if(lk.electronic_amount!==null && ck.electronic_amount===null) return lk;
+      return ck;
     });
     KARTES.forEach(lk=>{ if(!cloudKarteMap.has(lk.id)) mergedKartes.push(lk); });
     KARTES = mergedKartes;
@@ -2471,6 +2480,7 @@ function confirmBulkEdit() {
     }
     if(use('amount')) r.amount = floorAmt(val('amount'));
   });
+  touchKarte(k);
   recalcPaperTotal(k);
   saveToStorage();
   closeBulkEdit();
@@ -2978,6 +2988,7 @@ function updateOjiMemo(karteId, recIdx, value) {
   const k = KARTES.find(x=>x.id===karteId);
   if(!k || recIdx<0 || recIdx>=k.records.length) return;
   k.records[recIdx].oji_memo = value;
+  touchKarte(k);
   saveToStorage();
 }
 function openNewKarteModal() {
@@ -3043,6 +3054,7 @@ function toggleRecordPreset(karteId, recIdx, presetKey, checkbox) {
     if(!pr.noPrice) r.amount = floorAmt(Math.max(0, (r.amount||0) - pr.amount));
   }
   r.content = reorderContent(r.content);
+  touchKarte(k);
   recalcPaperTotal(k);
   saveToStorage();
   renderKarteList();
@@ -3054,14 +3066,18 @@ function floorAmt(v) {
   if(isNaN(n) || n <= 0) return 0;
   return Math.floor(n/10)*10;
 }
+// カルテを更新したことを記録する。同期時に「新しい方」を採用するために使う
+function touchKarte(k) { if(k) k.updatedAt = Date.now(); return k; }
 function recalcPaperTotal(k) {
   k.paper_total = k.records.reduce((s,r)=>s+(r.amount||0), 0);
   if(k.electronic_amount !== null) k.diff = k.electronic_amount - k.paper_total;
+  touchKarte(k);
 }
 // k.records の配列順は保持したまま月を再計算（表示順は描画時にソートするため配列は並べ替えない）
 function _recalcMonth(k) {
   const dated = k.records.map(r=>r.date).filter(Boolean).sort();
   if(dated.length) k.month = dated[0].slice(0,7);
+  touchKarte(k);
 }
 
 function addKarteRecord(karteId) {
@@ -3186,6 +3202,7 @@ function updateRecord(karteId, recIdx, field, value) {
   const r = k.records[recIdx];
   if(field==='content'||field==='time'||field==='temp'||field==='symptom') {
     r[field] = value.trim ? value.trim() : value;
+    touchKarte(k);
     saveToStorage();
     return; // 再描画不要
   }
@@ -3221,6 +3238,7 @@ function setRecordTemp(karteId, recIdx, val) {
   const k = KARTES.find(x=>x.id===karteId);
   if(!k || recIdx<0 || recIdx>=k.records.length) return;
   k.records[recIdx].temp = val;
+  touchKarte(k);
   saveToStorage();
   renderKarteList();
 }
@@ -3237,6 +3255,7 @@ function updateKarteField(karteId, field, value) {
     if(!v) return toast('牛番号は空にできません','error');
     k.cow = v;
   } else return;
+  touchKarte(k);
   saveToStorage();
   const label=document.getElementById('karte-active-label');
   if(label) label.textContent=`【${k.farm} / ${k.cow}】`;
@@ -3282,6 +3301,7 @@ function handleKarteCardClick(e, karteId) {
 }
 
 function renderKarteList() {
+  flushPendingElec(); // 入力途中の電子カルテ金額を再描画で失わない
   // 復元・追加で件数が戻ったら警告を再判定
   detectMasterReset(!!localStorage.getItem('cm_master'));
   renderMasterAlert();
@@ -3344,14 +3364,14 @@ function setElectronicAmount(id, val) {
   if(!k) { toast('カルテが見つかりませんでした','error'); return false; }
   if(val===null) {
     if(k.electronic_amount===null) return false;
-    k.electronic_amount=null; k.diff=null; k.closed=false;
+    k.electronic_amount=null; k.diff=null; k.closed=false; touchKarte(k);
     saveToStorage(); renderKarteList();
     toast('電子カルテ金額をクリアしました');
     return true;
   }
   if(isNaN(val)||val<0) return false;
   if(k.electronic_amount===val) return false;
-  k.electronic_amount=val; k.diff=val-k.paper_total; k.closed=true;
+  k.electronic_amount=val; k.diff=val-k.paper_total; k.closed=true; touchKarte(k);
   saveToStorage(); renderKarteList();
   toast(`差額: ${k.diff>=0?'+':''}${fmtAmt(k.diff)}`, k.diff<0?'error':'success');
   return true;
@@ -3361,17 +3381,29 @@ function autoSaveElectronic(id) {
   const raw=input.value.trim();
   setElectronicAmount(id, raw==='' ? null : parseInt(raw));
 }
+// 入力中（未確定）の電子カルテ金額を保存する。
+// 再描画やページ離脱で入力内容が消えるのを防ぐ
+let _flushingElec = false;
+function flushPendingElec() {
+  if(_flushingElec) return;
+  const el = document.activeElement;
+  if(!el || !el.id || el.id.indexOf('elec-') !== 0) return;
+  _flushingElec = true;
+  try { autoSaveElectronic(el.id.slice(5)); } finally { _flushingElec = false; }
+}
+window.addEventListener('beforeunload', flushPendingElec);
+document.addEventListener('visibilitychange', () => { if(document.visibilityState==='hidden') flushPendingElec(); });
 function toggleFinished(id) {
   const k = KARTES.find(x=>x.id===id);
   if(!k) return;
-  k.finished = !k.finished;
+  k.finished = !k.finished; touchKarte(k);
   saveToStorage();
   renderKarteList();
 }
 function toggleArchive(id) {
   const k = KARTES.find(x=>x.id===id);
   if(!k) return;
-  k.archived = !k.archived;
+  k.archived = !k.archived; touchKarte(k);
   saveToStorage();
   renderKarteList();
 }
