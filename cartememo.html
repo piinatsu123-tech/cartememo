@@ -327,7 +327,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v8.1</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v8.2</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -2725,11 +2725,11 @@ function _karteMonths(k) {
   if(!ms.size && k.month) ms.add(k.month);
   return [...ms];
 }
+let _monthPanelOpen = false;
 function toggleMonthFilter() {
-  const p = document.getElementById('monthFilterPanel');
-  const open = p.style.display === 'none';
-  p.style.display = open ? '' : 'none';
-  if(open) renderMonthFilterChips();
+  _monthPanelOpen = !_monthPanelOpen;
+  document.getElementById('monthFilterPanel').style.display = _monthPanelOpen ? '' : 'none';
+  if(_monthPanelOpen) renderMonthFilterChips();
 }
 function renderMonthFilterChips() {
   const el = document.getElementById('monthFilterChips'); if(!el) return;
@@ -3376,6 +3376,7 @@ function renderKarteList() {
     if(!k) { deselectKarte(); return; }
     backBar.style.display = 'flex';
     filterBar.style.display = 'none';
+    document.getElementById('monthFilterPanel').style.display = 'none'; // 一覧ビュー専用
     document.getElementById('karte-active-label').textContent = `【${k.farm} / ${k.cow}】`;
     document.getElementById('karte-count').textContent = '';
     el.innerHTML = buildKarteCard(k, true);
@@ -3385,6 +3386,7 @@ function renderKarteList() {
   // ===== 一覧ビュー =====
   backBar.style.display = 'none';
   filterBar.style.display = '';
+  document.getElementById('monthFilterPanel').style.display = _monthPanelOpen ? '' : 'none';
   const farmF = document.getElementById('karte-filter-farm').value;
   const cowF = document.getElementById('karte-filter-cow').value.trim().toLowerCase();
   const unclosedOnly = document.getElementById('karte-filter-unclosed').checked;
