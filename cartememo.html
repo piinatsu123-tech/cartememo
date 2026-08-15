@@ -341,7 +341,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v8.4</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v8.5</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -433,7 +433,13 @@ input[type=checkbox]{width:auto;margin:0}
       <option value="">全農場</option>
     </select>
     <input type="text" id="karte-filter-cow" placeholder="牛番号" oninput="renderKarteList()" style="width:120px">
-    <label><input type="checkbox" id="karte-filter-unclosed" onchange="renderKarteList()"> 電子未入力のみ</label>
+    <select id="karte-filter-stage" onchange="renderKarteList()" style="width:150px">
+      <option value="">すべての状態</option>
+      <option value="active">診療中のみ</option>
+      <option value="unclosed">電子未入力のみ</option>
+      <option value="open">未確定（診療中＋電子未入力）</option>
+      <option value="closed">確定済のみ</option>
+    </select>
     <button class="btn btn-ghost btn-sm" id="monthFilterBtn" onclick="toggleMonthFilter()">📅 月で絞る</button>
     <span id="karte-count" style="font-size:12px;color:var(--text3);margin-left:auto"></span>
     <button class="btn btn-primary btn-sm" onclick="openNewKarteModal()">＋ 新規カルテ</button>
@@ -3512,14 +3518,18 @@ function renderKarteList() {
   document.getElementById('monthFilterPanel').style.display = _monthPanelOpen ? '' : 'none';
   const farmF = document.getElementById('karte-filter-farm').value;
   const cowF = document.getElementById('karte-filter-cow').value.trim().toLowerCase();
-  const unclosedOnly = document.getElementById('karte-filter-unclosed').checked;
+  const stageF = document.getElementById('karte-filter-stage').value;
   const isSearching = !!(farmF || cowF || MONTH_FILTER.size);
   let list = [...KARTES];
   if(farmF) list = list.filter(k=>k.farm===farmF);
   if(cowF) list = list.filter(k=>k.cow.toLowerCase().includes(cowF));
   if(MONTH_FILTER.size) list = list.filter(k=>_karteMonths(k).some(m=>MONTH_FILTER.has(m)));
   if(!isSearching) list = list.filter(k=>!k.archived);
-  if(unclosedOnly) list = list.filter(k=>k.finished && !k.closed);
+  // 状態で絞り込み（診療中 = 未終診、電子未入力 = 終診済みだが金額未入力）
+  if(stageF==='active')        list = list.filter(k=>!k.finished && !k.closed);
+  else if(stageF==='unclosed') list = list.filter(k=>k.finished && !k.closed);
+  else if(stageF==='open')     list = list.filter(k=>!k.closed);
+  else if(stageF==='closed')   list = list.filter(k=>k.closed);
   renderMonthFilterChips();
   const getStage = k => k.closed ? 2 : k.finished ? 1 : 0;
   list.sort((a,b) => {
