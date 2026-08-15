@@ -341,7 +341,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v8.6</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v8.7</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -1852,16 +1852,58 @@ function _syncTargetKartes() {
   // 確定済かつ古いカルテのみ除外（診療中・電子未入力は必ず同期）
   return KARTES.filter(k => !(k.closed && k.month && k.month < cutoff));
 }
-function buildCloudPayload() {
+const CLOUD_SIZE_LIMIT = 95*1024; // 安全マージンを見た送信上限
+let LAST_TRIM_NOTE = '';          // 自動で除外した内容の説明
+// 指定した条件でペイロードを作る（memoLimit / karteMonths を上書き可能）
+function _buildPayload(memoLimit, karteMonths) {
   let ms = memos;
-  if(SYNC_MEMO_LIMIT > 0 && memos.length > SYNC_MEMO_LIMIT) ms = memos.slice(-SYNC_MEMO_LIMIT);
+  if(memoLimit > 0 && memos.length > memoLimit) ms = memos.slice(-memoLimit);
+  let ks;
+  if(karteMonths === 0) ks = KARTES;
+  else if(karteMonths < 0) ks = KARTES.filter(k => !k.closed);
+  else {
+    const d = new Date(); d.setMonth(d.getMonth() - karteMonths);
+    const cutoff = d.toISOString().slice(0,7);
+    ks = KARTES.filter(k => !(k.closed && k.month && k.month < cutoff));
+  }
   return {
     version:2, savedAt:new Date().toISOString(),
     memos: ms.map(_slimMemo),
     dictWords:DICT_WORDS, convPairs,
-    kartes: _syncTargetKartes().map(_slimKarte),
+    kartes: ks.map(_slimKarte),
     farms:FARMS, master:MASTER, farmDist:FARM_DIST, templates:TEMPLATES, watch:WATCH_ITEMS
   };
+}
+function _payloadSize(p){ try { return new Blob([JSON.stringify(p)]).size; } catch(e){ return JSON.stringify(p).length; } }
+// 上限に収まるまで段階的に絞り込む。
+// メモ→古い確定済カルテの順に外し、診療中・電子未入力のカルテは必ず残す
+function buildCloudPayload() {
+  const base = [SYNC_MEMO_LIMIT, SYNC_KARTE_MONTHS];
+  // メモを削りすぎないよう、古い確定済カルテの除外を先に進める
+  const steps = [
+    base,
+    [100, SYNC_KARTE_MONTHS], [50, SYNC_KARTE_MONTHS],
+    [50, 12], [50, 6], [50, 3],
+    [20, 3], [20, 1], [20, -1],
+    [5, -1], [0.5, -1] // 最終段はメモを送らない
+  ];
+  let payload = null, note = '';
+  for(let i=0;i<steps.length;i++){
+    const [ml, km] = steps[i];
+    const p = _buildPayload(ml<1?1:ml, km);
+    if(ml<1) p.memos = []; // メモを完全に除外
+    if(_payloadSize(p) <= CLOUD_SIZE_LIMIT || i===steps.length-1) {
+      payload = p;
+      if(i>0) {
+        const dropM = memos.length - p.memos.length;
+        const dropK = KARTES.length - p.kartes.length;
+        note = `容量超過のため自動で除外: ${dropM?`メモ${dropM}件`:''}${dropM&&dropK?'・':''}${dropK?`確定済カルテ${dropK}件`:''}`;
+      }
+      break;
+    }
+  }
+  LAST_TRIM_NOTE = note;
+  return payload;
 }
 // 読み込み時に省略されたフィールドを既定値で復元（描画側が undefined を扱わないため）
 function _normRecord(r) {
@@ -1919,14 +1961,17 @@ function renderCloudSize() {
   const raw = new Blob([JSON.stringify({memos,kartes:KARTES,master:MASTER,templates:TEMPLATES,farms:FARMS,farmDist:FARM_DIST,dictWords:DICT_WORDS,convPairs})]).size;
   const LIMIT = 100*1024; // jsonbin.io 無料プランの目安（1binあたり約100KB）
   const pct = Math.min(100, Math.round(size/LIMIT*100));
-  const syncedKartes = _syncTargetKartes().length;
-  const syncedMemos = (SYNC_MEMO_LIMIT>0 && memos.length>SYNC_MEMO_LIMIT) ? SYNC_MEMO_LIMIT : memos.length;
+  // 自動調整後の実際の送信内容から件数を出す
+  const p = buildCloudPayload();
+  const syncedKartes = p.kartes.length;
+  const syncedMemos = p.memos.length;
   const excluded = (KARTES.length - syncedKartes) + (memos.length - syncedMemos);
   const color = pct>=90 ? '#c00' : pct>=70 ? '#e07800' : 'var(--text2)';
   el.innerHTML = `<div style="font-size:12px;color:${color};font-weight:600">送信サイズ: ${fmtBytes(size)} / 目安上限 100 KB（${pct}%）</div>
     <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:4px"><div style="height:100%;width:${pct}%;background:${pct>=90?'#c00':pct>=70?'#e07800':'#111'}"></div></div>
     <div style="font-size:11px;color:var(--text3);margin-top:4px">圧縮前 ${fmtBytes(raw)} → 圧縮後 ${fmtBytes(size)}</div>
-    <div style="font-size:11px;color:var(--text3);margin-top:2px">同期対象: メモ ${syncedMemos}/${memos.length}件・カルテ ${syncedKartes}/${KARTES.length}件${excluded?` <span style="color:#e07800">（${excluded}件を除外中）</span>`:''}</div>`;
+    <div style="font-size:11px;color:var(--text3);margin-top:2px">同期対象: メモ ${syncedMemos}/${memos.length}件・カルテ ${syncedKartes}/${KARTES.length}件${excluded?` <span style="color:#e07800">（${excluded}件を除外中）</span>`:''}</div>
+    ${LAST_TRIM_NOTE?`<div style="font-size:11px;color:#8a4b00;background:#fff8e8;border:1px solid #e07800;border-radius:5px;padding:6px 8px;margin-top:6px">⚠️ ${esc(LAST_TRIM_NOTE)}<br>古いデータは端末に残っています。長期保存は「JSONをダウンロード」を推奨します。</div>`:''}`;
 }
 
 function scheduleCloudAutoSave() {
