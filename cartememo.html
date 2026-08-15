@@ -341,7 +341,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v8.7</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v8.8</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -439,6 +439,11 @@ input[type=checkbox]{width:auto;margin:0}
       <option value="unclosed">電子未入力のみ</option>
       <option value="open">未確定（診療中＋電子未入力）</option>
       <option value="closed">確定済のみ</option>
+    </select>
+    <select id="karte-filter-cutoff" onchange="renderKarteList()" style="width:190px" title="請求の締め日で分けます">
+      <option value="">締め日で分けない</option>
+      <option value="within">締め日まで（最終診療が20日以前）</option>
+      <option value="over">締め日以降も診療中（21日以降あり）</option>
     </select>
     <button class="btn btn-ghost btn-sm" id="monthFilterBtn" onclick="toggleMonthFilter()">📅 月で絞る</button>
     <span id="karte-count" style="font-size:12px;color:var(--text3);margin-left:auto"></span>
@@ -2898,6 +2903,17 @@ function reconcileFarms() {
   }
   return added;
 }
+// ===== 締め日フィルタ =====
+const CUTOFF_DAY = 20; // 請求の締め日（毎月20日）
+// 最終診療日の「日」を返す。月を絞り込んでいる場合はその月の中での最終日で判定する。
+// 日付が無ければ 0
+function _lastRecDay(k) {
+  let dates = (k.records||[]).map(r=>r.date).filter(Boolean);
+  if(MONTH_FILTER.size) dates = dates.filter(d=>MONTH_FILTER.has(d.slice(0,7)));
+  if(!dates.length) return 0;
+  dates.sort();
+  return parseInt(dates[dates.length-1].slice(8,10)) || 0;
+}
 // ===== 月フィルタ =====
 const MONTH_FILTER = new Set(); // 'YYYY-MM' の集合。空なら絞り込みなし
 // そのカルテが該当する月（診療日の月。日付が無ければ k.month）
@@ -3595,6 +3611,10 @@ function renderKarteList() {
   else if(stageF==='unclosed') list = list.filter(k=>k.finished && !k.closed);
   else if(stageF==='open')     list = list.filter(k=>!k.closed);
   else if(stageF==='closed')   list = list.filter(k=>k.closed);
+  // 締め日（毎月20日）で区別する
+  const cutoffF = document.getElementById('karte-filter-cutoff').value;
+  if(cutoffF==='within')    list = list.filter(k=>_lastRecDay(k)>0 && _lastRecDay(k)<=CUTOFF_DAY);
+  else if(cutoffF==='over') list = list.filter(k=>_lastRecDay(k)>CUTOFF_DAY);
   renderMonthFilterChips();
   const getStage = k => k.closed ? 2 : k.finished ? 1 : 0;
   list.sort((a,b) => {
