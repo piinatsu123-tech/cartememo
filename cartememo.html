@@ -341,7 +341,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v8.5</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v8.6</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -508,6 +508,11 @@ input[type=checkbox]{width:auto;margin:0}
         <button class="btn btn-ghost btn-sm" onclick="cloudLoad()">↓ クラウドから読み込む</button>
       </div>
       <div id="cloudInfo" style="font-size:11px;color:var(--text3);margin-top:8px"></div>
+      <div id="cloudError" style="display:none;margin-top:8px;background:#fff4f4;border:1px solid #c00;border-radius:6px;padding:10px">
+        <div style="font-size:12px;font-weight:700;color:#c00;margin-bottom:4px">⚠️ 最後の同期エラー</div>
+        <div id="cloudErrorMsg" style="font-size:12px;color:var(--text2);word-break:break-all;font-family:'JetBrains Mono',monospace"></div>
+        <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="cloudSyncNow()">↻ 今すぐ再送信</button>
+      </div>
       <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
         <div id="cloudSizeInfo"></div>
         <label style="margin-top:10px">同期するメモの上限</label>
@@ -1062,7 +1067,7 @@ function switchTab(name) {
   if(name === 'calc') renderResultsList();
   if(name === 'karte') { updateKarteFarmFilter(); renderKarteList(); }
   if(name === 'stats') renderStats();
-  if(name === 'settings') { renderFarmDistList(); renderWatchList(); renderSaveLog(); loadSyncMemoLimit(); renderCloudSize(); }
+  if(name === 'settings') { renderFarmDistList(); renderWatchList(); renderSaveLog(); loadSyncMemoLimit(); renderCloudSize(); renderCloudError(); }
 }
 
 // ==================== STORAGE ====================
@@ -1935,6 +1940,13 @@ function scheduleCloudAutoSave() {
 // 5秒待たずに即座にクラウドへ送信する（ブックマークレットなど、直後に
 // 画面を離れる可能性がある操作で使う）
 let _syncErrMsg = '';
+function renderCloudError() {
+  const box = document.getElementById('cloudError'); if(!box) return;
+  if(_syncErrMsg) {
+    box.style.display = '';
+    document.getElementById('cloudErrorMsg').textContent = _syncErrMsg;
+  } else box.style.display = 'none';
+}
 function cloudSyncNow() {
   const key = localStorage.getItem('cm_jbk') || '';
   const binId = localStorage.getItem('cm_jbid') || '';
@@ -1946,15 +1958,17 @@ async function cloudAutoSave(key, binId, attempt) {
   attempt = attempt || 1;
   setSyncStatus('saving');
   const data = buildCloudPayload();
+  const body = JSON.stringify(data);
+  const bodySize = new Blob([body]).size;
   try {
     const resp = await fetch(`https://api.jsonbin.io/v3/b/${binId}`, {
       method:'PUT',
       headers:{'Content-Type':'application/json','X-Master-Key':key},
-      body:JSON.stringify(data),
-      keepalive: true // 画面遷移中でも送信を継続させる
+      body:JSON.stringify(data)
+      // 注: keepalive はボディ64KBまでの制限があり、超えると必ず失敗するため使わない
     });
     if(!resp.ok) { let m='HTTP '+resp.status; try{const r=await resp.json();m=r.message||m;}catch(e){} throw new Error(m); }
-    _syncErrMsg = '';
+    _syncErrMsg = ''; renderCloudError();
     setSyncStatus('saved');
     const sz = new Blob([JSON.stringify(data)]).size;
     document.getElementById('cloudInfo').textContent = `最終自動保存: ${new Date().toLocaleString('ja-JP')}（メモ${memos.length}件・カルテ${KARTES.length}件・${fmtBytes(sz)}）`;
@@ -1969,9 +1983,13 @@ async function cloudAutoSave(key, binId, attempt) {
       await new Promise(r=>setTimeout(r, attempt*1500));
       return cloudAutoSave(key, binId, attempt+1);
     }
-    _syncErrMsg = msg;
+    // 原因の切り分けができるよう、送信サイズと発生時刻も記録する
+    const isSize = /size|large|limit|payload|413/i.test(msg);
+    _syncErrMsg = `${msg}（送信サイズ ${fmtBytes(bodySize)} / ${new Date().toLocaleTimeString('ja-JP')}）`;
+    renderCloudError();
     setSyncStatus('error');
-    if(/size|large|limit|payload/i.test(msg)) toast('クラウド保存失敗: 容量超過の可能性（設定タブで同期メモ数を減らせます）','error');
+    if(isSize || bodySize > 100*1024)
+      toast(`クラウド保存失敗: 容量超過の可能性（${fmtBytes(bodySize)}）。設定タブで同期範囲を減らせます`,'error');
     else toast('クラウド保存に失敗しました: '+msg, 'error');
     return false;
   }
@@ -2055,6 +2073,8 @@ async function cloudAutoLoad() {
     setSyncStatus('synced');
     document.getElementById('cloudInfo').textContent = `起動時読み込み: ${new Date().toLocaleString('ja-JP')}（メモ${memos.length}件・カルテ${KARTES.length}件）`;
   } catch(e) {
+    _syncErrMsg = '読み込み失敗: ' + (e && e.message ? e.message : '通信エラー');
+    renderCloudError();
     setSyncStatus('error');
     console.warn('Auto cloud load failed:', e.message);
   }
