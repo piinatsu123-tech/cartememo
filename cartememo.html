@@ -33,6 +33,8 @@ header .spacer{flex:1}
 .sl-kind{font-size:10px;font-weight:700;border-radius:4px;padding:1px 6px;flex-shrink:0}
 .sl-karte{background:#eef4ff;color:#1a4b8a}.sl-memo{background:#f0f0f0;color:#555}
 .sl-elec{background:#f2fbf5;color:#1a8a4a}.sl-master{background:#fff8e8;color:#8a4b00}
+.sl-delete{background:#fff4f4;color:#c00}
+.sl-row.is-delete .sl-text{color:#c00}
 .sl-text{flex:1;min-width:0;color:#111}
 .hdr-pill .dot{width:8px;height:8px;border-radius:50%;background:var(--border2)}
 .hdr-pill .dot.on{background:#111}
@@ -341,7 +343,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v8.9</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v9.0</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -581,13 +583,14 @@ input[type=checkbox]{width:auto;margin:0}
   <div class="panel">
     <div class="panel-hdr"><h2>🧾 保存履歴</h2></div>
     <div class="panel-body">
-      <p class="input-hint" style="margin-bottom:10px">最近保存された内容の一覧です（新しい順・最大200件）。保存できているかの確認に使えます。</p>
+      <p class="input-hint" style="margin-bottom:10px">最近の保存と削除の一覧です（新しい順・最大200件）。保存できているか、何を消したかの確認に使えます。</p>
       <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
         <select id="saveLogFilter" onchange="renderSaveLog()" style="flex:1;min-width:120px">
           <option value="">すべて</option>
           <option value="karte">カルテ</option>
           <option value="elec">電子カルテ金額</option>
           <option value="memo">メモ</option>
+          <option value="delete">削除</option>
         </select>
         <button class="btn btn-ghost btn-sm" onclick="clearSaveLog()">履歴を消去</button>
       </div>
@@ -1316,6 +1319,7 @@ function saveMasterItem() {
 }
 function deleteMasterItem(i) {
   if(!confirm(`「${MASTER[i].name}」を削除しますか？`)) return;
+  logSave('delete', `薬価「${MASTER[i].name}」を削除（¥${MASTER[i].price.toLocaleString()}）`);
   recordDeletion('master', MASTER[i].name);
   MASTER.splice(i,1); saveToStorage(); acceptCurrentCounts(); renderMasterEditor(); renderMasterList();
   loadPresets(); loadOjiFee(); toast('削除しました');
@@ -1352,7 +1356,7 @@ function exportMasterCsv() {
   toast('マスターデータをエクスポートしました', 'success');
 }
 // ===== 保存履歴の表示 =====
-const SL_LABEL = { karte:'カルテ', elec:'電子金額', memo:'メモ', master:'マスター' };
+const SL_LABEL = { karte:'カルテ', elec:'電子金額', memo:'メモ', master:'マスター', delete:'削除' };
 function renderSaveLog() {
   const el = document.getElementById('saveLogList'); if(!el) return;
   const f = (document.getElementById('saveLogFilter')||{}).value || '';
@@ -1362,7 +1366,7 @@ function renderSaveLog() {
   el.innerHTML = list.map(x=>{
     const d = new Date(x.t);
     const ts = `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-    return `<div class="sl-row">
+    return `<div class="sl-row${x.kind==='delete'?' is-delete':''}">
       <span class="sl-time">${ts}</span>
       <span class="sl-kind sl-${x.kind}">${SL_LABEL[x.kind]||x.kind}</span>
       <span class="sl-text">${esc(x.text)}</span>
@@ -1405,6 +1409,7 @@ function addWatchItem() {
   toast(`「${n}」を注意品目に登録しました`,'success');
 }
 function removeWatchItem(name) {
+  logSave('delete', `注意品目「${name}」を解除`);
   recordDeletion('watch', name);
   WATCH_ITEMS = WATCH_ITEMS.filter(x=>x!==name);
   saveToStorage();
@@ -1490,8 +1495,8 @@ function renderMemoQueue() {
       </div>
     </div>`).join('');
 }
-function deleteMemo(id) { recordDeletion('memos', id); memos=memos.filter(m=>m.id!==id); saveToStorage(); renderMemoQueue(); updateBadge(); renderResultsList(); }
-function clearDoneMemos() { memos.filter(m=>m.status==='done').forEach(m=>recordDeletion('memos', m.id)); memos=memos.filter(m=>m.status!=='done'); saveToStorage(); renderMemoQueue(); updateBadge(); renderResultsList(); toast('完了済みを削除しました'); }
+function deleteMemo(id) { const _m=memos.find(x=>x.id===id); if(_m) logSave('delete', `メモを削除（${_m.ownerName||'農場名なし'}${_m.patientNo?' ['+_m.patientNo+']':''}）`); recordDeletion('memos', id); memos=memos.filter(m=>m.id!==id); saveToStorage(); renderMemoQueue(); updateBadge(); renderResultsList(); }
+function clearDoneMemos() { const _n=memos.filter(m=>m.status==='done').length; if(_n) logSave('delete', `完了済みメモ${_n}件を削除`); memos.filter(m=>m.status==='done').forEach(m=>recordDeletion('memos', m.id)); memos=memos.filter(m=>m.status!=='done'); saveToStorage(); renderMemoQueue(); updateBadge(); renderResultsList(); toast('完了済みを削除しました'); }
 function updateBadge() {
   const count = memos.filter(m=>m.status==='pending').length;
   const badge = document.getElementById('pendingBadge');
@@ -2592,6 +2597,7 @@ function dkbDeleteTemplate() {
   const t = TEMPLATES.find(x=>x.id===sel.value);
   if(!t) return toast('削除するセットを選んでください','error');
   if(!confirm(`出力セット「${t.name}」を削除しますか？`)) return;
+  logSave('delete', `出力セット「${t.name}」を削除`);
   recordDeletion('templates', t.id);
   TEMPLATES = TEMPLATES.filter(x=>x.id!==t.id);
   saveToStorage();
@@ -2801,6 +2807,7 @@ function saveTemplate() {
 function deleteTemplate(id) {
   const t = TEMPLATES.find(x=>x.id===id); if(!t) return;
   if(!confirm(`パターン「${t.name}」を削除しますか？`)) return;
+  logSave('delete', `パターン「${t.name}」を削除`);
   recordDeletion('templates', id);
   TEMPLATES = TEMPLATES.filter(x=>x.id!==id);
   saveToStorage();
@@ -3595,6 +3602,8 @@ function deleteRecord(karteId, recIdx) {
   const k = KARTES.find(x=>x.id===karteId);
   if(!k || recIdx<0 || recIdx>=k.records.length) return;
   if(k.records.length<=1) { toast('最後の診療記録は削除できません','error'); return; }
+  const _r = k.records[recIdx];
+  logSave('delete', `【${k.farm} / ${k.cow}】診療記録を削除（${_r.date||'日付なし'} ${_r.content||'内容なし'} ¥${(_r.amount||0).toLocaleString()}）`);
   k.records.splice(recIdx, 1);
   recalcPaperTotal(k);
   saveToStorage();
@@ -3766,6 +3775,8 @@ function toggleArchive(id) {
 }
 function deleteKarte(id){
   if(!confirm('このカルテを削除しますか？'))return;
+  const _k = KARTES.find(x=>x.id===id);
+  if(_k) logSave('delete', `カルテ【${_k.farm} / ${_k.cow}】を削除（診療記録${_k.records.length}件・紙 ¥${(_k.paper_total||0).toLocaleString()}）`);
   if(activeKarteId===id) deselectKarte();
   recordDeletion('kartes', id);
   KARTES=KARTES.filter(k=>k.id!==id);saveToStorage();acceptCurrentCounts();renderKarteList();
