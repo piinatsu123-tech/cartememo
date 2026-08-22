@@ -341,7 +341,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v8.8</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v8.9</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -1120,6 +1120,7 @@ function saveToStorage() {
     localStorage.setItem('cm_farmdist', JSON.stringify(FARM_DIST));
     localStorage.setItem('cm_templates', JSON.stringify(TEMPLATES));
     localStorage.setItem('cm_watch', JSON.stringify(WATCH_ITEMS));
+    localStorage.setItem('cm_deleted', JSON.stringify(DELETED));
   } catch(e){}
   saveMasterMeta();
   if(!_suppressAutoSave) { PENDING_CHANGES++; updateSyncPill(); scheduleCloudAutoSave(); }
@@ -1136,6 +1137,8 @@ function loadFromStorage() {
     const fd = localStorage.getItem('cm_farmdist'); if(fd) FARM_DIST = JSON.parse(fd);
     const tp = localStorage.getItem('cm_templates'); if(tp) TEMPLATES = JSON.parse(tp);
     const wi = localStorage.getItem('cm_watch'); if(wi) WATCH_ITEMS = JSON.parse(wi);
+    const dl2 = localStorage.getItem('cm_deleted'); if(dl2) DELETED = Object.assign({kartes:{},memos:{},templates:{},master:{},watch:{}}, JSON.parse(dl2));
+    pruneDeletions();
     const sl = localStorage.getItem('cm_savelog'); if(sl) SAVE_LOG = JSON.parse(sl);
     const ls = localStorage.getItem('cm_lastsync'); if(ls) LAST_SYNC_AT = Number(ls)||null;
     const ak = localStorage.getItem('cm_active_karte'); if(ak) activeKarteId = ak;
@@ -1304,8 +1307,8 @@ function saveMasterItem() {
   const price = parseFloat(document.getElementById('newMasterPrice').value);
   if(!name) return toast('品目名を入力してください', 'error');
   if(isNaN(price)||price<0) return toast('単価を正しく入力してください', 'error');
-  if(masterEditIndex >= 0) { MASTER[masterEditIndex] = {name, price}; toast(`「${name}」を更新しました`, 'success'); }
-  else { if(MASTER.find(m=>m.name===name)) return toast('同じ品目名がすでに存在します', 'error'); MASTER.push({name, price}); toast(`「${name}」を追加しました`, 'success'); }
+  if(masterEditIndex >= 0) { MASTER[masterEditIndex] = {name, price}; clearDeletion('master', name); toast(`「${name}」を更新しました`, 'success'); }
+  else { if(MASTER.find(m=>m.name===name)) return toast('同じ品目名がすでに存在します', 'error'); MASTER.push({name, price}); clearDeletion('master', name); toast(`「${name}」を追加しました`, 'success'); }
   saveToStorage(); cancelMasterEdit(); renderMasterEditor(); renderMasterList();
   loadPresets(); loadOjiFee();
   const dl = document.getElementById('masterNamesList');
@@ -1313,6 +1316,7 @@ function saveMasterItem() {
 }
 function deleteMasterItem(i) {
   if(!confirm(`「${MASTER[i].name}」を削除しますか？`)) return;
+  recordDeletion('master', MASTER[i].name);
   MASTER.splice(i,1); saveToStorage(); acceptCurrentCounts(); renderMasterEditor(); renderMasterList();
   loadPresets(); loadOjiFee(); toast('削除しました');
 }
@@ -1325,7 +1329,7 @@ function bulkImportMaster() {
     const [name, priceStr] = line.split(sep).map(c=>c.trim().replace(/^"|"$/g,''));
     if(!name) continue; const price = parseFloat(priceStr); if(isNaN(price)||price<0) continue;
     const ex = MASTER.find(m=>m.name===name);
-    if(ex) { ex.price=price; updated++; } else { MASTER.push({name,price}); added++; }
+    if(ex) { ex.price=price; updated++; } else { MASTER.push({name,price}); clearDeletion('master', name); added++; }
   }
   saveToStorage(); renderMasterEditor(); renderMasterList();
   loadPresets(); loadOjiFee();
@@ -1393,7 +1397,7 @@ function addWatchItem() {
   if(!MASTER.find(m=>m.name===n)) {
     if(!confirm(`「${n}」はマスターに存在しません。それでも登録しますか？`)) return;
   }
-  WATCH_ITEMS.push(n);
+  WATCH_ITEMS.push(n); clearDeletion('watch', n);
   WATCH_ITEMS.sort((a,b)=>a.localeCompare(b,'ja'));
   saveToStorage();
   inp.value = '';
@@ -1401,6 +1405,7 @@ function addWatchItem() {
   toast(`「${n}」を注意品目に登録しました`,'success');
 }
 function removeWatchItem(name) {
+  recordDeletion('watch', name);
   WATCH_ITEMS = WATCH_ITEMS.filter(x=>x!==name);
   saveToStorage();
   renderWatchList(); refreshMasterUI(); renderResultsList();
@@ -1485,8 +1490,8 @@ function renderMemoQueue() {
       </div>
     </div>`).join('');
 }
-function deleteMemo(id) { memos=memos.filter(m=>m.id!==id); saveToStorage(); renderMemoQueue(); updateBadge(); renderResultsList(); }
-function clearDoneMemos() { memos=memos.filter(m=>m.status!=='done'); saveToStorage(); renderMemoQueue(); updateBadge(); renderResultsList(); toast('完了済みを削除しました'); }
+function deleteMemo(id) { recordDeletion('memos', id); memos=memos.filter(m=>m.id!==id); saveToStorage(); renderMemoQueue(); updateBadge(); renderResultsList(); }
+function clearDoneMemos() { memos.filter(m=>m.status==='done').forEach(m=>recordDeletion('memos', m.id)); memos=memos.filter(m=>m.status!=='done'); saveToStorage(); renderMemoQueue(); updateBadge(); renderResultsList(); toast('完了済みを削除しました'); }
 function updateBadge() {
   const count = memos.filter(m=>m.status==='pending').length;
   const badge = document.getElementById('pendingBadge');
@@ -1876,7 +1881,8 @@ function _buildPayload(memoLimit, karteMonths) {
     memos: ms.map(_slimMemo),
     dictWords:DICT_WORDS, convPairs,
     kartes: ks.map(_slimKarte),
-    farms:FARMS, master:MASTER, farmDist:FARM_DIST, templates:TEMPLATES, watch:WATCH_ITEMS
+    farms:FARMS, master:MASTER, farmDist:FARM_DIST, templates:TEMPLATES, watch:WATCH_ITEMS,
+    deleted:DELETED
   };
 }
 function _payloadSize(p){ try { return new Blob([JSON.stringify(p)]).size; } catch(e){ return JSON.stringify(p).length; } }
@@ -2065,8 +2071,9 @@ async function cloudAutoLoad() {
     //       保存済みフラグはどちらかで立っていれば保持。ローカルのみのものは追加保持
     const memoScore = m => (m.status==='done'?2 : m.status==='processing'?1 : 0) + ((m.items&&m.items.length)?1:0);
     const localMemoMap = new Map(memos.map(m=>[m.id,m]));
-    const cloudMemoIds = new Set((data.memos||[]).map(m=>m.id));
-    const mergedMemos = (data.memos||[]).map(cm=>{
+    const cloudMemos = _dropDeleted('memos', data.memos, m=>m.id);
+    const cloudMemoIds = new Set(cloudMemos.map(m=>m.id));
+    const mergedMemos = cloudMemos.map(cm=>{
       const lm = localMemoMap.get(cm.id);
       if(!lm) return cm;
       const best = memoScore(lm) >= memoScore(cm) ? lm : cm;
@@ -2079,7 +2086,22 @@ async function cloudAutoLoad() {
     // カルテ: 同じIDは「後から更新された方」を採用する。ローカルのみは保持
     // （レコード数だけで判定すると、電子カルテ金額など件数が変わらない編集が
     //   クラウドの古いデータで上書きされてしまうため）
-    const cloudKartes = data.kartes||[];
+    // 他端末の削除記録を取り込んでから、削除済みを除外する
+    if(data.deleted && typeof data.deleted==='object') {
+      Object.keys(data.deleted).forEach(kind=>{
+        if(!DELETED[kind]) DELETED[kind] = {};
+        const src = data.deleted[kind]||{};
+        Object.keys(src).forEach(k2=>{ DELETED[kind][k2] = Math.max(DELETED[kind][k2]||0, src[k2]||0); });
+      });
+      pruneDeletions();
+      // 取り込んだ削除記録を手元のデータにも反映する
+      KARTES = KARTES.filter(k=>!isDeleted('kartes', k.id));
+      memos  = memos.filter(m=>!isDeleted('memos', m.id));
+      TEMPLATES = TEMPLATES.filter(t=>!isDeleted('templates', t.id));
+      MASTER = MASTER.filter(m=>!isDeleted('master', m.name));
+      WATCH_ITEMS = WATCH_ITEMS.filter(n=>!isDeleted('watch', n));
+    }
+    const cloudKartes = _dropDeleted('kartes', data.kartes, k=>k.id);
     const cloudKarteMap = new Map(cloudKartes.map(k=>[k.id,k]));
     const mergedKartes = cloudKartes.map(ck=>{
       const lk = KARTES.find(x=>x.id===ck.id);
@@ -2101,17 +2123,19 @@ async function cloudAutoLoad() {
     if(data.farmDist && typeof data.farmDist==='object') FARM_DIST = {...FARM_DIST, ...data.farmDist};
     // master: クラウドを基準に、ローカルのみの品目を保持
     if(Array.isArray(data.master) && data.master.length) {
-      const cloudNames = new Set(data.master.map(m=>m.name));
+      const cm2 = _dropDeleted('master', data.master, m=>m.name);
+      const cloudNames = new Set(cm2.map(m=>m.name));
       const localOnly = MASTER.filter(m=>!cloudNames.has(m.name));
-      MASTER = [...data.master, ...localOnly];
+      MASTER = [...cm2, ...localOnly];
     }
     // テンプレ: IDごとにマージ（クラウド基準＋ローカルのみ保持）
     if(Array.isArray(data.templates)) {
-      const cloudTplIds = new Set(data.templates.map(t=>t.id));
+      const ct2 = _dropDeleted('templates', data.templates, t=>t.id);
+      const cloudTplIds = new Set(ct2.map(t=>t.id));
       const localOnlyTpl = TEMPLATES.filter(t=>!cloudTplIds.has(t.id));
-      TEMPLATES = [...data.templates, ...localOnlyTpl];
+      TEMPLATES = [...ct2, ...localOnlyTpl];
     }
-    if(Array.isArray(data.watch)) WATCH_ITEMS = [...new Set([...data.watch, ...WATCH_ITEMS])];
+    if(Array.isArray(data.watch)) WATCH_ITEMS = [...new Set([...data.watch, ...WATCH_ITEMS])].filter(n=>!isDeleted('watch', n));
     _suppressAutoSave = true;
     saveToStorage(); // ローカルにも反映（クラウド再送信はしない）
     _suppressAutoSave = false;
@@ -2231,17 +2255,17 @@ async function cloudLoad() {
     if(!Array.isArray(data.memos)) throw new Error('メモデータが見つかりません');
     (data.memos||[]).forEach(_normMemo); (data.kartes||[]).forEach(_normKarte);
     const existingIds=new Set(memos.map(m=>m.id));
-    const newMemos=data.memos.filter(m=>!existingIds.has(m.id));
+    const newMemos=_dropDeleted('memos', data.memos, m=>m.id).filter(m=>!existingIds.has(m.id));
     memos=[...memos,...newMemos];
     sortMemosChrono();
     if(Array.isArray(data.dictWords)) data.dictWords.forEach(w=>{if(!DICT_WORDS.includes(w))DICT_WORDS.push(w);});
     if(Array.isArray(data.convPairs)){const eIds=new Set(convPairs.map(p=>p.id));data.convPairs.forEach(p=>{if(!eIds.has(p.id))convPairs.push(p);});}
     let newKartes=0;
-    if(Array.isArray(data.kartes)){const eIds=new Set(KARTES.map(k=>k.id));const added=data.kartes.filter(k=>!eIds.has(k.id));KARTES=[...KARTES,...added];newKartes=added.length;}
+    if(Array.isArray(data.kartes)){const eIds=new Set(KARTES.map(k=>k.id));const added=_dropDeleted('kartes', data.kartes, k=>k.id).filter(k=>!eIds.has(k.id));KARTES=[...KARTES,...added];newKartes=added.length;}
     if(Array.isArray(data.farms)){data.farms.forEach(f=>{if(!FARMS.includes(f))FARMS.push(f);});FARMS.sort((a,b)=>a.localeCompare(b,'ja'));updateFarmDatalist();}
-    if(Array.isArray(data.master)){const names=new Set(MASTER.map(m=>m.name));data.master.forEach(m=>{if(!names.has(m.name))MASTER.push(m);});refreshMasterUI();}
+    if(Array.isArray(data.master)){const names=new Set(MASTER.map(m=>m.name));_dropDeleted('master', data.master, m=>m.name).forEach(m=>{if(!names.has(m.name))MASTER.push(m);});refreshMasterUI();}
     if(data.farmDist&&typeof data.farmDist==='object'){Object.keys(data.farmDist).forEach(f=>{if(FARM_DIST[f]==null)FARM_DIST[f]=data.farmDist[f];});}
-    if(Array.isArray(data.templates)){const ids=new Set(TEMPLATES.map(t=>t.id));data.templates.forEach(t=>{if(!ids.has(t.id))TEMPLATES.push(t);});}
+    if(Array.isArray(data.templates)){const ids=new Set(TEMPLATES.map(t=>t.id));_dropDeleted('templates', data.templates, t=>t.id).forEach(t=>{if(!ids.has(t.id))TEMPLATES.push(t);});}
     if(Array.isArray(data.watch)) WATCH_ITEMS = [...new Set([...WATCH_ITEMS, ...data.watch])];
     reconcileFarms();
     saveToStorage(); saveJsonbinSettings();
@@ -2268,16 +2292,16 @@ function importData(input) {
       const data=JSON.parse(e.target.result);
       if(!Array.isArray(data.memos)) throw new Error('メモデータが見つかりません');
       (data.memos||[]).forEach(_normMemo); (data.kartes||[]).forEach(_normKarte);
-      const eIds=new Set(memos.map(m=>m.id));const newMemos=data.memos.filter(m=>!eIds.has(m.id));memos=[...memos,...newMemos];
+      const eIds=new Set(memos.map(m=>m.id));const newMemos=_dropDeleted('memos', data.memos, m=>m.id).filter(m=>!eIds.has(m.id));memos=[...memos,...newMemos];
       sortMemosChrono();
       if(Array.isArray(data.dictWords))data.dictWords.forEach(w=>{if(!DICT_WORDS.includes(w))DICT_WORDS.push(w);});
       if(Array.isArray(data.convPairs)){const eIds2=new Set(convPairs.map(p=>p.id));data.convPairs.forEach(p=>{if(!eIds2.has(p.id))convPairs.push(p);});}
       let newKartes=0;
-      if(Array.isArray(data.kartes)){const eIds3=new Set(KARTES.map(k=>k.id));const added=data.kartes.filter(k=>!eIds3.has(k.id));KARTES=[...KARTES,...added];newKartes=added.length;}
+      if(Array.isArray(data.kartes)){const eIds3=new Set(KARTES.map(k=>k.id));const added=_dropDeleted('kartes', data.kartes, k=>k.id).filter(k=>!eIds3.has(k.id));KARTES=[...KARTES,...added];newKartes=added.length;}
       if(Array.isArray(data.farms)){data.farms.forEach(f=>{if(!FARMS.includes(f))FARMS.push(f);});FARMS.sort((a,b)=>a.localeCompare(b,'ja'));updateFarmDatalist();}
-      if(Array.isArray(data.master)){const mnames=new Set(MASTER.map(m=>m.name));data.master.forEach(m=>{if(!mnames.has(m.name))MASTER.push(m);});refreshMasterUI();}
+      if(Array.isArray(data.master)){const mnames=new Set(MASTER.map(m=>m.name));_dropDeleted('master', data.master, m=>m.name).forEach(m=>{if(!mnames.has(m.name))MASTER.push(m);});refreshMasterUI();}
       if(data.farmDist&&typeof data.farmDist==='object'){Object.keys(data.farmDist).forEach(f=>{if(FARM_DIST[f]==null)FARM_DIST[f]=data.farmDist[f];});}
-      if(Array.isArray(data.templates)){const ids=new Set(TEMPLATES.map(t=>t.id));data.templates.forEach(t=>{if(!ids.has(t.id))TEMPLATES.push(t);});}
+      if(Array.isArray(data.templates)){const ids=new Set(TEMPLATES.map(t=>t.id));_dropDeleted('templates', data.templates, t=>t.id).forEach(t=>{if(!ids.has(t.id))TEMPLATES.push(t);});}
       if(Array.isArray(data.watch)) WATCH_ITEMS = [...new Set([...WATCH_ITEMS, ...data.watch])];
       reconcileFarms();
       saveToStorage();renderMemoQueue();renderResultsList();renderDict();updateBadge();
@@ -2568,6 +2592,7 @@ function dkbDeleteTemplate() {
   const t = TEMPLATES.find(x=>x.id===sel.value);
   if(!t) return toast('削除するセットを選んでください','error');
   if(!confirm(`出力セット「${t.name}」を削除しますか？`)) return;
+  recordDeletion('templates', t.id);
   TEMPLATES = TEMPLATES.filter(x=>x.id!==t.id);
   saveToStorage();
   dkbRefreshTemplateList();
@@ -2776,6 +2801,7 @@ function saveTemplate() {
 function deleteTemplate(id) {
   const t = TEMPLATES.find(x=>x.id===id); if(!t) return;
   if(!confirm(`パターン「${t.name}」を削除しますか？`)) return;
+  recordDeletion('templates', id);
   TEMPLATES = TEMPLATES.filter(x=>x.id!==id);
   saveToStorage();
   renderTemplatePicker();
@@ -3327,6 +3353,38 @@ function floorAmt(v) {
   if(isNaN(n) || n <= 0) return 0;
   return Math.floor(n/10)*10;
 }
+// ===== 削除の記録（tombstone） =====
+// 同期のマージは「クラウドにあるものを残す」方式のため、削除したことを
+// 記録しておかないと未送信のうちに再読み込みすると復活してしまう
+let DELETED = { kartes:{}, memos:{}, templates:{}, master:{}, watch:{} };
+const TOMBSTONE_KEEP_DAYS = 120;
+function recordDeletion(kind, key) {
+  if(!DELETED[kind]) DELETED[kind] = {};
+  DELETED[kind][String(key)] = Date.now();
+  try { localStorage.setItem('cm_deleted', JSON.stringify(DELETED)); } catch(e){}
+}
+function isDeleted(kind, key) {
+  return !!(DELETED[kind] && DELETED[kind][String(key)]);
+}
+// 同じ名前で再登録したときは削除記録を取り消す（名前がキーのものは再利用されるため）
+function clearDeletion(kind, key) {
+  if(DELETED[kind] && DELETED[kind][String(key)]) {
+    delete DELETED[kind][String(key)];
+    try { localStorage.setItem('cm_deleted', JSON.stringify(DELETED)); } catch(e){}
+  }
+}
+// 古い削除記録を捨てる（容量対策）
+function pruneDeletions() {
+  const cutoff = Date.now() - TOMBSTONE_KEEP_DAYS*86400000;
+  Object.keys(DELETED).forEach(kind=>{
+    Object.keys(DELETED[kind]||{}).forEach(k=>{ if(DELETED[kind][k] < cutoff) delete DELETED[kind][k]; });
+  });
+}
+// クラウドから来た配列から、削除済みのものを取り除く
+function _dropDeleted(kind, arr, keyFn) {
+  return (arr||[]).filter(x=>!isDeleted(kind, keyFn(x)));
+}
+
 // ===== 保存状態の可視化 =====
 let PENDING_CHANGES = 0;   // クラウド未送信の変更件数
 let LAST_SYNC_AT = null;   // 最終同期時刻
@@ -3709,6 +3767,7 @@ function toggleArchive(id) {
 function deleteKarte(id){
   if(!confirm('このカルテを削除しますか？'))return;
   if(activeKarteId===id) deselectKarte();
+  recordDeletion('kartes', id);
   KARTES=KARTES.filter(k=>k.id!==id);saveToStorage();acceptCurrentCounts();renderKarteList();
 }
 function duplicateKarte(id){
