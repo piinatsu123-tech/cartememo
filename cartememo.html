@@ -343,7 +343,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v9.0</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v9.1</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -2112,6 +2112,9 @@ async function cloudAutoLoad() {
       const lk = KARTES.find(x=>x.id===ck.id);
       if(!lk) return ck;
       const lt = Number(lk.updatedAt)||0, ct = Number(ck.updatedAt)||0;
+      // 安全側の判定: 更新時刻で負ける場合でも、手元にしかない診療記録が
+      // ある（記録数が多い）なら手元を残す。記録の消失を防ぐことを優先する
+      if(lk.records.length > ck.records.length) return lk;
       if(lt || ct) return lt >= ct ? lk : ck;           // 更新時刻がある場合は新しい方
       if(lk.records.length !== ck.records.length)        // 旧データ: レコード数が多い方
         return lk.records.length > ck.records.length ? lk : ck;
@@ -3082,10 +3085,11 @@ function confirmKarteSave() {
     savedKarte.paper_total = savedKarte.records.reduce((s,r)=>s+r.amount,0);
     const firstDated = savedKarte.records.find(r=>r.date);
     if(firstDated) savedKarte.month = firstDated.date.slice(0,7);
+    touchKarte(savedKarte);
   } else {
     const newId = Date.now().toString();
     KARTES.unshift({id:newId,farm,cow,records:[record],paper_total:amount,electronic_amount:null,diff:null,month:date.slice(0,7),closed:false});
-    savedKarte = KARTES[0];
+    savedKarte = touchKarte(KARTES[0]);
   }
   if(!FARMS.includes(farm)){FARMS.push(farm);FARMS.sort((a,b)=>a.localeCompare(b,'ja'));updateFarmDatalist();}
   if(karteSaveMemoId) {
@@ -3275,6 +3279,7 @@ function toggleOjiNoFee(karteId, recIdx) {
     r.oji = true;
     r.ojiFeeAdded = false;
   }
+  touchKarte(k);
   saveToStorage();
   renderKarteList();
 }
@@ -3514,6 +3519,7 @@ function addAmountOnlyRecord(karteId) {
   const k = KARTES.find(x=>x.id===karteId);
   if(!k) return;
   k.records.push({date:'', content:'', amount:0});
+  touchKarte(k);
   const i = k.records.length - 1;
   saveToStorage();
   // DOMに直接挿入してフォーカス（iOSでは innerHTML 書き換え後の focus() が効かないため）
@@ -3790,6 +3796,7 @@ function duplicateKarte(id){
   copy.electronic_amount = null;
   copy.diff = null;
   copy.records.forEach(r=>{ delete r.karteExported; delete r.karteExportedAt; });
+  touchKarte(copy);
   KARTES.unshift(copy);
   saveToStorage();
   logSave('karte', `【${copy.farm} / ${copy.cow}】カルテを複製（${copy.records.length}件）`);
