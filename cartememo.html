@@ -343,7 +343,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v9.1</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v9.2</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -1084,6 +1084,7 @@ let _suppressAutoSave = false;
 // ===== マスターデータ喪失の検知 =====
 // マスターの規模を記録しておき、次回起動時に大幅に減っていたら警告する
 let _masterAlert = []; // [{msg, detail}] 警告内容（マスター／カルテ）
+let _mergeLossNote = ''; // 同期マージで診療記録が減った場合の説明
 function _masterSig(list) {
   const arr = list||[];
   return { count: arr.length, sum: Math.round(arr.reduce((s,m)=>s+(Number(m.price)||0),0)*100) };
@@ -1215,10 +1216,14 @@ function detectMasterReset(hadStoredMaster) {
   if(km) {
     if(kc.count < km.count) {
       _masterAlert.push({ msg:'カルテの件数が減っています', detail:`前回${km.count}件 → 現在${kc.count}件。削除した覚えがなければ復元してください。` });
-    } else if(kc.count===km.count && km.recs!=null && kc.recs < km.recs) {
-      _masterAlert.push({ msg:'カルテの診療記録が減っています', detail:`前回${km.recs}件の診療記録 → 現在${kc.recs}件。削除した覚えがなければ復元してください。` });
+    }
+    // 診療記録の減少はカルテ件数の増減とは独立に判定する
+    if(km.recs!=null && kc.recs < km.recs) {
+      _masterAlert.push({ msg:'診療記録の件数が減っています', detail:`前回${km.recs}件 → 現在${kc.recs}件（${km.recs-kc.recs}件減）。削除した覚えがなければ復元してください。` });
     }
   }
+  // 同期のマージで記録が失われた場合の警告（発生した時点で検知したもの）
+  if(_mergeLossNote) _masterAlert.push({ msg:'同期で診療記録が失われた可能性があります', detail:_mergeLossNote });
 }
 // vetmemo から cartememo への一回限りのデータ移行
 function migrateFromVetMemo() {
@@ -2106,6 +2111,8 @@ async function cloudAutoLoad() {
       MASTER = MASTER.filter(m=>!isDeleted('master', m.name));
       WATCH_ITEMS = WATCH_ITEMS.filter(n=>!isDeleted('watch', n));
     }
+    // マージ前の診療記録数を控えておき、失われていないか後で確認する
+    const _beforeRecs = new Map(KARTES.map(k=>[k.id, {n:(k.records||[]).length, farm:k.farm, cow:k.cow}]));
     const cloudKartes = _dropDeleted('kartes', data.kartes, k=>k.id);
     const cloudKarteMap = new Map(cloudKartes.map(k=>[k.id,k]));
     const mergedKartes = cloudKartes.map(ck=>{
@@ -2124,6 +2131,18 @@ async function cloudAutoLoad() {
     });
     KARTES.forEach(lk=>{ if(!cloudKarteMap.has(lk.id)) mergedKartes.push(lk); });
     KARTES = mergedKartes;
+    // マージで診療記録が減っていないか確認する（減っていれば警告する）
+    const _lost = [];
+    KARTES.forEach(k=>{
+      const b = _beforeRecs.get(k.id);
+      if(b && (k.records||[]).length < b.n) _lost.push(`【${b.farm} / ${b.cow}】${b.n}件→${k.records.length}件`);
+    });
+    _beforeRecs.forEach((b,id)=>{ if(!KARTES.some(k=>k.id===id)) _lost.push(`【${b.farm} / ${b.cow}】カルテごと消失（${b.n}件）`); });
+    if(_lost.length) {
+      _mergeLossNote = `同期で次のカルテの診療記録が減りました: ${_lost.slice(0,5).join('、')}${_lost.length>5?` ほか${_lost.length-5}件`:''}`;
+      logSave('delete', '⚠️ ' + _mergeLossNote);
+      toast('同期で診療記録が減りました。画面上部の警告を確認してください','error');
+    }
 
     if(Array.isArray(data.dictWords)) DICT_WORDS = data.dictWords;
     if(Array.isArray(data.convPairs)) convPairs = data.convPairs;
