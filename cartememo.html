@@ -343,7 +343,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v9.2</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v9.3</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -1898,6 +1898,7 @@ function _buildPayload(memoLimit, karteMonths) {
 function _payloadSize(p){ try { return new Blob([JSON.stringify(p)]).size; } catch(e){ return JSON.stringify(p).length; } }
 // 上限に収まるまで段階的に絞り込む。
 // メモ→古い確定済カルテの順に外し、診療中・電子未入力のカルテは必ず残す
+const NO_MEMOS = -999; // メモを1件も送らないことを表す（0は「全件」なので区別する）
 function buildCloudPayload() {
   const base = [SYNC_MEMO_LIMIT, SYNC_KARTE_MONTHS];
   // メモを削りすぎないよう、古い確定済カルテの除外を先に進める
@@ -1906,13 +1907,14 @@ function buildCloudPayload() {
     [100, SYNC_KARTE_MONTHS], [50, SYNC_KARTE_MONTHS],
     [50, 12], [50, 6], [50, 3],
     [20, 3], [20, 1], [20, -1],
-    [5, -1], [0.5, -1] // 最終段はメモを送らない
+    [5, -1], [NO_MEMOS, -1] // 最終段はメモを送らない
   ];
   let payload = null, note = '';
   for(let i=0;i<steps.length;i++){
     const [ml, km] = steps[i];
-    const p = _buildPayload(ml<1?1:ml, km);
-    if(ml<1) p.memos = []; // メモを完全に除外
+    // memoLimit は 0 = 全件、NO_MEMOS = 1件も送らない
+    const p = _buildPayload(ml===NO_MEMOS ? 0 : ml, km);
+    if(ml===NO_MEMOS) p.memos = [];
     if(_payloadSize(p) <= CLOUD_SIZE_LIMIT || i===steps.length-1) {
       payload = p;
       if(i>0) {
