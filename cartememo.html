@@ -339,7 +339,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v9.4</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v9.5</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -3857,8 +3857,21 @@ function exportCSV() {
   const farms=[...new Set(closed.map(k=>k.farm))].sort((a,b)=>a.localeCompare(b,'ja'));
   const tbl={};farms.forEach(f=>{tbl[f]={};});
   closed.forEach(k=>{if(months.includes(k.month)&&farms.includes(k.farm))tbl[k.farm][k.month]=(tbl[k.farm][k.month]||0)+k.diff;});
-  let csv='﻿農場名,'+months.join(',')+'\n';
-  farms.forEach(f=>{csv+=f+','+months.map(m=>tbl[f][m]!==undefined?tbl[f][m]:'').join(',')+'\n';});
+  const esc2 = s => `"${String(s).replace(/"/g,'""')}"`; // 農場名にカンマがあっても崩れないようにする
+  const mLabel = m => { const [y,mo]=m.split('-'); return `${y}年${parseInt(mo)}月`; };
+  let csv='﻿'+['農場名',...months.map(mLabel),'合計','件数'].map(esc2).join(',')+'\n';
+  // 農場ごとの行（右端に農場合計と確定済み件数）
+  farms.forEach(f=>{
+    let rowTotal=0;
+    const cells=months.map(m=>{ const v=tbl[f][m]; if(v===undefined) return ''; rowTotal+=v; return v; });
+    const cnt=closed.filter(k=>k.farm===f&&months.includes(k.month)).length;
+    csv+=[esc2(f),...cells,rowTotal,cnt].join(',')+'\n';
+  });
+  // 月ごとの合計行
+  const colTotals=months.map(m=>farms.reduce((s,f)=>s+(tbl[f][m]||0),0));
+  const grand=colTotals.reduce((s,v)=>s+v,0);
+  const grandCnt=closed.filter(k=>months.includes(k.month)).length;
+  csv+=[esc2('合計'),...colTotals,grand,grandCnt].join(',')+'\n';
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
   a.download=`差額集計_${new Date().toISOString().slice(0,10)}.csv`;a.click();
