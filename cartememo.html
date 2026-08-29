@@ -264,6 +264,7 @@ input[type=checkbox]{width:auto;margin:0}
 .cmp-part{color:#8a4b00;background:#fff3cd}
 .cmp-over{color:#c00;background:#ffe9e9}
 .cmp-none{color:#e07800;background:#fff8e8}
+.cmp-adj{font-size:9px;font-weight:700;margin-left:3px;padding:1px 3px;border-radius:3px;color:#1a4b8a;background:#eef4ff}
 .stats-table .total-col,.stats-table tr.total-row td{font-weight:700;background:var(--surface)!important}
 .stats-table tr.total-row td:first-child{font-weight:700}
 
@@ -350,7 +351,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v11.5</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v11.6</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -510,6 +511,11 @@ input[type=checkbox]{width:auto;margin:0}
         <input type="checkbox" id="importPriority" onchange="setImportPriority(this.checked)" style="width:auto">
         取込データを優先する
       </label>
+      <div style="margin-top:10px;padding:8px 10px;background:#eef4ff;border:1px solid #1a4b8a;border-radius:6px">
+        <button class="btn btn-primary btn-sm" style="width:100%;justify-content:center" onclick="applyImportAsAdjustment()">✅ 取込額に合わせて確定する</button>
+        <p class="input-hint" style="margin-top:4px;margin-bottom:0">カルテごと消えて復元できない分を<b>調整額として固定</b>します。実行すると集計金額が取込額と一致し、取込データは不要になるため消去されます。<br><b>以降に確定したカルテはこの調整額に加算されます</b>ので、今後の集計も正しくなります。</p>
+        <button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="clearAdjustments()">調整額を取り消す</button>
+      </div>
       <p class="input-hint" style="margin-top:4px">カルテの確定が一部しか復元できていない期間で使います。オンにすると、取込データがある月はCSVの金額を採用します（カルテ側の不完全な合計で過少表示になるのを防げます）。<br>確定を入力し直した月は、オフに戻すとカルテ側の実データが使われます。</p>
       <div id="importedStatsInfo" style="font-size:12px;color:var(--text2);margin-top:8px"></div>
       <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
@@ -1241,6 +1247,7 @@ function loadFromStorage() {
     const sl = localStorage.getItem('cm_savelog'); if(sl) SAVE_LOG = JSON.parse(sl);
     const ist = localStorage.getItem('cm_impstats'); if(ist) IMPORTED_STATS = JSON.parse(ist);
     IMPORT_PRIORITY = localStorage.getItem('cm_imppri')==='1';
+    const adj = localStorage.getItem('cm_adjust'); if(adj) ADJUSTMENTS = JSON.parse(adj);
     STATS_SCOPE = localStorage.getItem('cm_statsscope')||'all';
     STATS_SINCE = localStorage.getItem('cm_statssince')||'';
     RESTORE_MODE = localStorage.getItem('cm_restoremode')==='1';
@@ -4440,6 +4447,51 @@ function duplicateKarte(id){
 // 形式: {"農場名": {"YYYY-MM": 差額, ...}, ...}
 let IMPORTED_STATS = {};
 let IMPORT_PRIORITY = false; // 取込データをカルテより優先するか
+// 消えたカルテの分を固定の調整額として保持する {農場:{YYYY-MM:金額}}
+// 表示は「カルテ合計 + 調整額」となるため、以降に確定した分は正しく加算される
+let ADJUSTMENTS = {};
+// 現在のカルテ合計と取込額の差を調整額として確定する
+function applyImportAsAdjustment() {
+  const impFarms=Object.keys(IMPORTED_STATS);
+  const adjFarms=Object.keys(ADJUSTMENTS);
+  const adjMonths=new Set(); adjFarms.forEach(f=>Object.keys(ADJUSTMENTS[f]).forEach(m=>adjMonths.add(m)));
+  if(!impFarms.length) return toast('取込データがありません','error');
+  // 現在のカルテ側の合計を農場・月ごとに集計（調整前の実データ）
+  const cur={};
+  KARTES.filter(k=>k.closed&&k.diff!==null).forEach(k=>{
+    if(!k.farm||!k.month) return;
+    if(!cur[k.farm]) cur[k.farm]={};
+    cur[k.farm][k.month]=(cur[k.farm][k.month]||0)+k.diff;
+  });
+  const nf=s=>String(s||'').normalize('NFKC').replace(/\s+/g,'').toLowerCase();
+  const curByNorm={}; Object.keys(cur).forEach(f=>{curByNorm[nf(f)]=f;});
+  const plan=[];
+  impFarms.forEach(f=>Object.keys(IMPORTED_STATS[f]).forEach(m=>{
+    const kf = cur[f] ? f : (curByNorm[nf(f)]||f);
+    const kv = (cur[kf]&&cur[kf][m]!==undefined) ? cur[kf][m] : 0;
+    const adj = IMPORTED_STATS[f][m] - kv;
+    if(adj!==0) plan.push({farm:kf, month:m, adj, imp:IMPORTED_STATS[f][m], kv});
+  }));
+  if(!plan.length) return toast('すべて一致しているため調整は不要です','success');
+  const list=plan.slice(0,10).map(x=>`${x.farm} ${x.month}: カルテ${fmtAmt(x.kv)} → ${fmtAmt(x.imp)}（調整 ${x.adj>=0?'+':''}${fmtAmt(x.adj)}）`).join('\n');
+  if(!confirm(`消えたカルテの分を調整額として確定します。\n\n${plan.length}件の農場・月が対象:\n${list}${plan.length>10?`\n…ほか${plan.length-10}件`:''}\n\n確定後、集計は取込額と一致します。\n以降に新しく確定した分は正しく加算されます。\n\nよろしいですか？`)) return;
+  plan.forEach(x=>{ if(!ADJUSTMENTS[x.farm]) ADJUSTMENTS[x.farm]={};
+    ADJUSTMENTS[x.farm][x.month]=(ADJUSTMENTS[x.farm][x.month]||0)+x.adj; });
+  try { localStorage.setItem('cm_adjust', JSON.stringify(ADJUSTMENTS)); } catch(e){}
+  // 調整を確定したので取込データと優先設定は不要になる
+  IMPORTED_STATS={}; IMPORT_PRIORITY=false;
+  try { localStorage.setItem('cm_impstats','{}'); localStorage.setItem('cm_imppri','0'); } catch(e){}
+  logSave('karte', `消えたカルテ分を調整額として確定（${plan.length}件）`);
+  renderStats();
+  alert(`調整額を確定しました（${plan.length}件）。\n\n集計金額が取込額と一致しているか確認してください。\n以降に確定したカルテは、この調整額に加算されます。`);
+}
+function clearAdjustments() {
+  if(!Object.keys(ADJUSTMENTS).length) return toast('調整額はありません');
+  if(!confirm('調整額をすべて取り消しますか？（カルテには影響しません）')) return;
+  ADJUSTMENTS={};
+  try { localStorage.setItem('cm_adjust','{}'); } catch(e){}
+  renderStats(); toast('調整額を取り消しました');
+}
 function setImportPriority(on){
   IMPORT_PRIORITY = !!on;
   try { localStorage.setItem('cm_imppri', IMPORT_PRIORITY?'1':'0'); } catch(e){}
@@ -4578,14 +4630,19 @@ function renderStats() {
   // 照合は絞り込みに関わらず常に行うため、農場一覧は常に取込側も含める
   const impFarms=Object.keys(IMPORTED_STATS);
   const impMonths=new Set(); impFarms.forEach(f=>Object.keys(IMPORTED_STATS[f]).forEach(m=>impMonths.add(m)));
-  let months=[...new Set([...closed.map(k=>k.month), ...impMonths])].filter(Boolean).sort();
+  let months=[...new Set([...closed.map(k=>k.month), ...impMonths, ...adjMonths])].filter(Boolean).sort();
   if(rangeN>0){const cutoff=monthOffset(-rangeN);months=months.filter(m=>m>=cutoff);}
-  const farms=[...new Set([...closed.map(k=>k.farm), ...impFarms])].sort((a,b)=>a.localeCompare(b,'ja'));
+  const farms=[...new Set([...closed.map(k=>k.farm), ...impFarms, ...adjFarms])].sort((a,b)=>a.localeCompare(b,'ja'));
   if(!months.length||!farms.length){el.innerHTML=`<div class="empty-state"><div class="es-icon">📊</div>${STATS_SCOPE!=='all'?'この条件に該当するカルテはまだありません':'差額確定済みのデータがありません'}</div>`;return;}
   const tbl={}, isImp={}; farms.forEach(f=>{tbl[f]={};isImp[f]={};});
   // カルテ側を先に集計する
   closed.forEach(k=>{if(months.includes(k.month)&&farms.includes(k.farm)){
     tbl[k.farm][k.month]=(tbl[k.farm][k.month]||0)+k.diff; }});
+  // 消えたカルテ分の調整額を加算する（以降の確定はこれに積み上がる）
+  const hasAdj={}; farms.forEach(f=>{hasAdj[f]={};});
+  adjFarms.forEach(f=>Object.keys(ADJUSTMENTS[f]).forEach(m=>{
+    if(!months.includes(m)||!(f in tbl)) return;
+    tbl[f][m]=(tbl[f][m]||0)+ADJUSTMENTS[f][m]; hasAdj[f][m]=true; }));
   // 取込データの扱い: 既定はカルテ優先（カルテに無い月だけ補う）。
   // IMPORT_PRIORITY が有効なら、取込データがある月は取込側を採用する
   // （カルテの確定が一部しか復元できていない期間で正しい合計を出すため）
@@ -4626,6 +4683,7 @@ function renderStats() {
       let cp=cmp[f]&&cmp[f][m];
       if(!cp){ const key=Object.keys(cmp).find(x=>_nf(x)===_nf(f)&&cmp[x][m]); if(key) cp=cmp[key][m]; }
       let mark='', tip='';
+      if(hasAdj[f]&&hasAdj[f][m]) mark+=`<span class="cmp-adj" title="消えたカルテ分の調整 ${(ADJUSTMENTS[f][m]>=0?'+':'')+fmtAmt(ADJUSTMENTS[f][m])} を含みます">調整</span>`;
       if(cp){
         if(cp.st==='match'){ mark='<span class="cmp-ok" title="CSVと一致（復元完了）">✓一致</span>'; tip='CSVと一致（復元完了）'; }
         else if(cp.st==='partial'){ mark=`<span class="cmp-part" title="CSV ${fmtAmt(cp.imp)} に対しカルテ ${fmtAmt(cp.kv)}">未完</span>`; tip=`CSV ${fmtAmt(cp.imp)} / カルテ ${fmtAmt(cp.kv)}`; }
