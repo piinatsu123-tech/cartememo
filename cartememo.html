@@ -345,7 +345,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v11.2</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v11.3</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -593,6 +593,15 @@ input[type=checkbox]{width:auto;margin:0}
           この端末はメモのみ同期する（カルテは編集しない端末向け）
         </label>
         <p class="input-hint" style="margin-top:4px">スマホなど、カルテを編集せず<b>音声メモの共有だけ</b>に使う端末で有効にしてください。<br>カルテはクラウドの内容を<b>そのまま保持して送り返す</b>ため、この端末がカルテを削ったり壊したりすることがありません。容量が足りない場合もメモだけを減らします。</p>
+        <label style="margin-top:10px">古いカルテの同期（復旧作業中の容量対策）</label>
+        <select id="syncOldMonths" onchange="setSyncOldMonths(this.value)" style="width:100%">
+          <option value="0">除外しない</option>
+          <option value="12">12ヶ月より古いカルテは同期しない</option>
+          <option value="6">6ヶ月より古いカルテは同期しない</option>
+          <option value="3">3ヶ月より古いカルテは同期しない</option>
+          <option value="2">2ヶ月より古いカルテは同期しない</option>
+        </select>
+        <p class="input-hint" style="margin-top:4px"><b>確定・未確定を問わず</b>、古いカルテを同期対象から外します。確定が失われて未確定に戻ったカルテが容量を圧迫する場合に使ってください。<br>⚠️ 除外したカルテは<b>この端末には残りますが、他の端末には共有されず、クラウドのバックアップからも外れます</b>。先に「↓ JSONをダウンロード」で保存しておいてください。</p>
         <label style="margin-top:10px">同期するカルテの範囲</label>
         <select id="syncKarteMonths" onchange="setSyncKarteMonths(this.value)" style="width:100%">
           <option value="0">全件を同期</option>
@@ -2026,7 +2035,8 @@ async function reparse(id){const memo=memos.find(m=>m.id===id);if(!memo)return;m
 let _autoSaveTimer = null;
 // ===== クラウド送信データの構築（容量削減のため空・既定値のフィールドを除去） =====
 let SYNC_MEMO_LIMIT = 0;      // 0 = 全件同期。N>0 なら直近N件のメモのみ同期
-let SYNC_KARTE_MONTHS = 0;    // 0 = 全件同期。N>0 なら「確定済かつNヶ月より古い」カルテを同期対象外
+let SYNC_KARTE_MONTHS = 0;
+let SYNC_OLD_MONTHS = 0;   // 0=無効。N>0 ならNヶ月より古いカルテを確定状態に関わらず同期しない    // 0 = 全件同期。N>0 なら「確定済かつNヶ月より古い」カルテを同期対象外
 function _slim(obj, defaults) {
   // 値が空文字/null/undefined、または既定値と同じキーを削除した新オブジェクトを返す
   const out = {};
@@ -2095,6 +2105,13 @@ function _buildPayload(memoLimit, karteMonths, stripSavedText) {
     const d = new Date(); d.setMonth(d.getMonth() - karteMonths);
     const cutoff = d.toISOString().slice(0,7);
     ks = KARTES.filter(k => !(k.closed && k.month && k.month < cutoff));
+  }
+  // 古いカルテは確定・未確定を問わず同期から外す（復旧作業中に未確定へ
+  // 戻ったカルテが容量を圧迫するのを防ぐ）
+  if(SYNC_OLD_MONTHS > 0) {
+    const d2 = new Date(); d2.setMonth(d2.getMonth() - SYNC_OLD_MONTHS);
+    const cutoff2 = d2.toISOString().slice(0,7);
+    ks = ks.filter(k => !(k.month && k.month < cutoff2));
   }
   return {
     version:2, savedAt:new Date().toISOString(),
@@ -2190,6 +2207,18 @@ function setMemoOnlySync(on) {
   if(MEMO_ONLY_SYNC && !_cloudKartesSnapshot)
     toast('一度クラウドから読み込むとカルテの保持が有効になります','error');
 }
+function setSyncOldMonths(v) {
+  SYNC_OLD_MONTHS = parseInt(v)||0;
+  try { localStorage.setItem('cm_syncoldm', String(SYNC_OLD_MONTHS)); } catch(e){}
+  renderCloudSize();
+  scheduleCloudAutoSave();
+  if(SYNC_OLD_MONTHS>0){
+    const d=new Date(); d.setMonth(d.getMonth()-SYNC_OLD_MONTHS);
+    const cutoff=d.toISOString().slice(0,7);
+    const n=KARTES.filter(k=>k.month&&k.month<cutoff).length;
+    toast(`${cutoff} より前のカルテ${n}件を同期対象から外しました`,'success');
+  }
+}
 function setSyncKarteMonths(v) {
   SYNC_KARTE_MONTHS = parseInt(v)||0;
   try { localStorage.setItem('cm_synckmonths', String(SYNC_KARTE_MONTHS)); } catch(e){}
@@ -2200,10 +2229,13 @@ function loadSyncMemoLimit() {
   try {
     SYNC_MEMO_LIMIT = parseInt(localStorage.getItem('cm_synclimit')||'0')||0;
     SYNC_KARTE_MONTHS = parseInt(localStorage.getItem('cm_synckmonths')||'0')||0;
+    SYNC_OLD_MONTHS = parseInt(localStorage.getItem('cm_syncoldm')||'0')||0;
     MEMO_ONLY_SYNC = localStorage.getItem('cm_memoonly')==='1';
   } catch(e){}
   const sel = document.getElementById('syncMemoLimit');
   if(sel) sel.value = String(SYNC_MEMO_LIMIT);
+  const sel3 = document.getElementById('syncOldMonths');
+  if(sel3) sel3.value = String(SYNC_OLD_MONTHS);
   const sel2 = document.getElementById('syncKarteMonths');
   if(sel2) { sel2.value = String(SYNC_KARTE_MONTHS); sel2.disabled = MEMO_ONLY_SYNC; }
   const cb = document.getElementById('memoOnlySync');
