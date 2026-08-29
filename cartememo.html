@@ -339,7 +339,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v9.6</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v9.8</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -525,6 +525,11 @@ input[type=checkbox]{width:auto;margin:0}
           <option value="50">直近50件のみ</option>
           <option value="20">直近20件のみ</option>
         </select>
+        <label style="margin-top:12px" class="memo-only-label">
+          <input type="checkbox" id="memoOnlySync" onchange="setMemoOnlySync(this.checked)" style="width:auto;margin-right:6px">
+          この端末はメモのみ同期する（カルテは編集しない端末向け）
+        </label>
+        <p class="input-hint" style="margin-top:4px">スマホなど、カルテを編集せず<b>音声メモの共有だけ</b>に使う端末で有効にしてください。<br>カルテはクラウドの内容を<b>そのまま保持して送り返す</b>ため、この端末がカルテを削ったり壊したりすることがありません。容量が足りない場合もメモだけを減らします。</p>
         <label style="margin-top:10px">同期するカルテの範囲</label>
         <select id="syncKarteMonths" onchange="setSyncKarteMonths(this.value)" style="width:100%">
           <option value="0">全件を同期</option>
@@ -1861,9 +1866,12 @@ function _slimKarte(k) {
   o.records = (k.records||[]).map(_slimRecord);
   return o;
 }
-function _slimMemo(m) {
+function _slimMemo(m, stripSavedText) {
   const o = _slim(m, {hidden:false, karte_saved:false, multiplier:1, temp:'', symptom:''});
   if(Array.isArray(m.items)) o.items = m.items.map(it=>_slim(it, {unit:'', unknown:false, qty:1}));
+  // カルテ保存済みのメモは音声原文を送らない（内容はカルテ側に残っており、
+  // 共有が必要なのは未保存の新しいメモのため）
+  if(stripSavedText && m.karte_saved && o.text) { o.text = o.text.slice(0,20) + '…（原文は端末に保存）'; }
   return o;
 }
 function _syncTargetKartes() {
@@ -1877,11 +1885,26 @@ function _syncTargetKartes() {
 }
 const CLOUD_SIZE_LIMIT = 95*1024; // 安全マージンを見た送信上限
 let LAST_TRIM_NOTE = '';          // 自動で除外した内容の説明
+// 「メモのみ同期」モード用: 最後にクラウドから受け取ったカルテをそのまま保持し、
+// 送信時に手を加えず返す。これにより、この端末がクラウドのカルテを壊さない
+let MEMO_ONLY_SYNC = false;
+let _cloudKartesSnapshot = null;
 // 指定した条件でペイロードを作る（memoLimit / karteMonths を上書き可能）
-function _buildPayload(memoLimit, karteMonths) {
+function _buildPayload(memoLimit, karteMonths, stripSavedText) {
   let ms = memos;
   if(memoLimit > 0 && memos.length > memoLimit) ms = memos.slice(-memoLimit);
   let ks;
+  // メモのみ同期: クラウドのカルテをそのまま返し、この端末では一切変更しない
+  if(MEMO_ONLY_SYNC && _cloudKartesSnapshot) {
+    return {
+      version:2, savedAt:new Date().toISOString(),
+      memos: ms.map(m=>_slimMemo(m, stripSavedText)),
+      dictWords:DICT_WORDS, convPairs,
+      kartes: _cloudKartesSnapshot,
+      farms:FARMS, master:MASTER, farmDist:FARM_DIST, templates:TEMPLATES, watch:WATCH_ITEMS,
+      deleted:DELETED
+    };
+  }
   if(karteMonths === 0) ks = KARTES;
   else if(karteMonths < 0) ks = KARTES.filter(k => !k.closed);
   else {
@@ -1891,7 +1914,7 @@ function _buildPayload(memoLimit, karteMonths) {
   }
   return {
     version:2, savedAt:new Date().toISOString(),
-    memos: ms.map(_slimMemo),
+    memos: ms.map(m=>_slimMemo(m, stripSavedText)),
     dictWords:DICT_WORDS, convPairs,
     kartes: ks.map(_slimKarte),
     farms:FARMS, master:MASTER, farmDist:FARM_DIST, templates:TEMPLATES, watch:WATCH_ITEMS,
@@ -1905,25 +1928,35 @@ const NO_MEMOS = -999; // メモを1件も送らないことを表す（0は「�
 function buildCloudPayload() {
   const base = [SYNC_MEMO_LIMIT, SYNC_KARTE_MONTHS];
   // メモを削りすぎないよう、古い確定済カルテの除外を先に進める
-  const steps = [
+  // メモのみ同期では、カルテは触らずメモだけを絞る
+  const steps = MEMO_ONLY_SYNC ? [
+    base, [SYNC_MEMO_LIMIT, 0, true], [100, 0, true], [50, 0, true],
+    [20, 0, true], [5, 0, true], [NO_MEMOS, 0, true]
+  ] : [
+  // [メモ上限, カルテ月数, 保存済みメモの原文を落とすか]
     base,
-    [100, SYNC_KARTE_MONTHS], [50, SYNC_KARTE_MONTHS],
-    [50, 12], [50, 6], [50, 3],
-    [20, 3], [20, 1], [20, -1],
-    [5, -1], [NO_MEMOS, -1] // 最終段はメモを送らない
+    [SYNC_MEMO_LIMIT, SYNC_KARTE_MONTHS, true], // まず保存済みメモの原文だけ落とす
+    [100, SYNC_KARTE_MONTHS, true], [50, SYNC_KARTE_MONTHS, true],
+    [50, 12, true], [50, 6, true], [50, 3, true],
+    [20, 3, true], [20, 1, true], [20, -1, true],
+    [5, -1, true], [NO_MEMOS, -1, true] // 最終段はメモを送らない
   ];
   let payload = null, note = '';
   for(let i=0;i<steps.length;i++){
-    const [ml, km] = steps[i];
+    const [ml, km, strip] = steps[i];
     // memoLimit は 0 = 全件、NO_MEMOS = 1件も送らない
-    const p = _buildPayload(ml===NO_MEMOS ? 0 : ml, km);
+    const p = _buildPayload(ml===NO_MEMOS ? 0 : ml, km, strip);
     if(ml===NO_MEMOS) p.memos = [];
     if(_payloadSize(p) <= CLOUD_SIZE_LIMIT || i===steps.length-1) {
       payload = p;
       if(i>0) {
         const dropM = memos.length - p.memos.length;
         const dropK = KARTES.length - p.kartes.length;
-        note = `容量超過のため自動で除外: ${dropM?`メモ${dropM}件`:''}${dropM&&dropK?'・':''}${dropK?`確定済カルテ${dropK}件`:''}`;
+        const parts = [];
+        if(steps[i][2]) parts.push('カルテ保存済みメモの音声原文');
+        if(dropM) parts.push(`メモ${dropM}件`);
+        if(dropK) parts.push(`確定済カルテ${dropK}件`);
+        note = '容量超過のため自動で除外: ' + parts.join('・');
       }
       break;
     }
@@ -1961,6 +1994,16 @@ function setSyncMemoLimit(v) {
   renderCloudSize();
   scheduleCloudAutoSave();
 }
+function setMemoOnlySync(on) {
+  MEMO_ONLY_SYNC = !!on;
+  try { localStorage.setItem('cm_memoonly', MEMO_ONLY_SYNC?'1':'0'); } catch(e){}
+  const sel = document.getElementById('syncKarteMonths');
+  if(sel) sel.disabled = MEMO_ONLY_SYNC; // カルテ範囲の設定は無効化する
+  renderCloudSize();
+  scheduleCloudAutoSave();
+  if(MEMO_ONLY_SYNC && !_cloudKartesSnapshot)
+    toast('一度クラウドから読み込むとカルテの保持が有効になります','error');
+}
 function setSyncKarteMonths(v) {
   SYNC_KARTE_MONTHS = parseInt(v)||0;
   try { localStorage.setItem('cm_synckmonths', String(SYNC_KARTE_MONTHS)); } catch(e){}
@@ -1971,11 +2014,14 @@ function loadSyncMemoLimit() {
   try {
     SYNC_MEMO_LIMIT = parseInt(localStorage.getItem('cm_synclimit')||'0')||0;
     SYNC_KARTE_MONTHS = parseInt(localStorage.getItem('cm_synckmonths')||'0')||0;
+    MEMO_ONLY_SYNC = localStorage.getItem('cm_memoonly')==='1';
   } catch(e){}
   const sel = document.getElementById('syncMemoLimit');
   if(sel) sel.value = String(SYNC_MEMO_LIMIT);
   const sel2 = document.getElementById('syncKarteMonths');
-  if(sel2) sel2.value = String(SYNC_KARTE_MONTHS);
+  if(sel2) { sel2.value = String(SYNC_KARTE_MONTHS); sel2.disabled = MEMO_ONLY_SYNC; }
+  const cb = document.getElementById('memoOnlySync');
+  if(cb) cb.checked = MEMO_ONLY_SYNC;
 }
 function cloudPayloadSize() {
   try { return new Blob([JSON.stringify(buildCloudPayload())]).size; } catch(e) { return JSON.stringify(buildCloudPayload()).length; }
@@ -2119,6 +2165,7 @@ async function cloudAutoLoad() {
     // マージ前の診療記録数を控えておき、失われていないか後で確認する
     const _beforeRecs = new Map(KARTES.map(k=>[k.id, {n:(k.records||[]).length, farm:k.farm, cow:k.cow}]));
     const cloudKartes = _dropDeleted('kartes', data.kartes, k=>k.id);
+    _cloudKartesSnapshot = cloudKartes; // メモのみ同期モードでそのまま送り返すため保持
     const cloudKarteMap = new Map(cloudKartes.map(k=>[k.id,k]));
     const mergedKartes = cloudKartes.map(ck=>{
       const lk = KARTES.find(x=>x.id===ck.id);
