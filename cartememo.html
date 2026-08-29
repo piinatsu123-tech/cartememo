@@ -339,7 +339,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v10.0</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v10.1</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -574,6 +574,10 @@ input[type=checkbox]{width:auto;margin:0}
             <label class="btn btn-ghost btn-sm" style="cursor:pointer">CSVファイル<input type="file" accept=".csv,.txt" style="display:none" onchange="handleMasterCsvImport(this)"></label>
             <button class="btn btn-ghost btn-sm" onclick="exportMasterCsv()">↓ CSVエクスポート</button>
           </div>
+        </div>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+          <button class="btn btn-primary btn-sm" style="width:100%;justify-content:center" onclick="restoreMasterFromCloud()">☁️ クラウドから薬価を復元</button>
+          <p class="input-hint" style="margin-top:4px">品目が減ってしまった場合に使います。削除の記録を取り消したうえで、クラウドにある品目をすべて取り戻します。<b>現在の単価は上書きしません</b>（無くなった品目だけ追加します）。</p>
         </div>
       </details>
       <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
@@ -2370,6 +2374,32 @@ async function loadMemoBin(key) {
     sortMemosChrono();
   } catch(e){ console.warn('Memo bin load failed:', e.message); }
 }
+// クラウドから薬価（マスター品目）を復元する。
+// 削除記録があると通常の同期では戻らないため、ここで明示的に取り消す
+async function restoreMasterFromCloud() {
+  const key=(localStorage.getItem('cm_jbk')||'').trim();
+  const binId=(localStorage.getItem('cm_jbid')||'').trim();
+  if(!key||!binId) return toast('クラウド同期が設定されていません','error');
+  if(!confirm('クラウドにある薬価を取り戻します。\n（削除した品目も復活します。現在の単価は変更しません）')) return;
+  try {
+    setSyncStatus('loading');
+    const resp=await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`,{headers:{'X-Master-Key':key}});
+    const r=await resp.json();
+    if(!resp.ok) throw new Error(r.message||'HTTP '+resp.status);
+    const cloudMaster=(r.record||{}).master;
+    if(!Array.isArray(cloudMaster)||!cloudMaster.length) { setSyncStatus('synced'); return toast('クラウドに薬価データがありません','error'); }
+    DELETED.master = {};                       // 薬価の削除記録を取り消す
+    const names=new Set(MASTER.map(m=>m.name));
+    let added=0;
+    cloudMaster.forEach(m=>{ if(m&&m.name&&!names.has(m.name)){ MASTER.push(m); added++; } });
+    saveToStorage();
+    loadPresets(); loadOjiFee(); refreshMasterUI();
+    acceptCurrentCounts();
+    setSyncStatus('synced');
+    if(added) { logSave('master', `クラウドから薬価${added}件を復元`); toast(`${added}件の薬価を復元しました（現在${MASTER.length}件）`,'success'); }
+    else toast(`不足している品目はありませんでした（現在${MASTER.length}件）`);
+  } catch(e){ setSyncStatus('error'); toast('復元に失敗しました: '+e.message,'error'); }
+}
 function copyBinId() {
   const id=document.getElementById('jsonbinId').value.trim();
   if(!id) return toast('Bin IDがありません。先に「クラウドに保存」してください');
@@ -2465,7 +2495,8 @@ function importData(input) {
       let newKartes=0;
       if(Array.isArray(data.kartes)){const eIds3=new Set(KARTES.map(k=>k.id));const added=_dropDeleted('kartes', data.kartes, k=>k.id).filter(k=>!eIds3.has(k.id));KARTES=[...KARTES,...added];newKartes=added.length;}
       if(Array.isArray(data.farms)){data.farms.forEach(f=>{if(!FARMS.includes(f))FARMS.push(f);});FARMS.sort((a,b)=>a.localeCompare(b,'ja'));updateFarmDatalist();}
-      if(Array.isArray(data.master)){const mnames=new Set(MASTER.map(m=>m.name));_dropDeleted('master', data.master, m=>m.name).forEach(m=>{if(!mnames.has(m.name))MASTER.push(m);});refreshMasterUI();}
+      // バックアップからの復元は明示操作のため、薬価は削除記録を無視して取り込む
+      if(Array.isArray(data.master)){const mnames=new Set(MASTER.map(m=>m.name));let restored=0;data.master.forEach(m=>{if(m&&m.name&&!mnames.has(m.name)){MASTER.push(m);delete DELETED.master[m.name];restored++;}});if(restored)logSave('master',`バックアップから薬価${restored}件を復元`);refreshMasterUI();}
       if(data.farmDist&&typeof data.farmDist==='object'){Object.keys(data.farmDist).forEach(f=>{if(FARM_DIST[f]==null)FARM_DIST[f]=data.farmDist[f];});}
       if(Array.isArray(data.templates)){const ids=new Set(TEMPLATES.map(t=>t.id));_dropDeleted('templates', data.templates, t=>t.id).forEach(t=>{if(!ids.has(t.id))TEMPLATES.push(t);});}
       if(Array.isArray(data.watch)) WATCH_ITEMS = [...new Set([...WATCH_ITEMS, ...data.watch])];
