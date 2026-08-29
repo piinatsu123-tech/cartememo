@@ -27,6 +27,11 @@ header .spacer{flex:1}
 .hdr-pill.pill-ok{color:#1a8a4a;border-color:#1a8a4a;background:#f2fbf5;font-weight:700}
 .hdr-pill.pill-pending{color:#8a4b00;border-color:#e07800;background:#fff8e8;font-weight:700}
 .hdr-pill.pill-error{color:#c00;border-color:#c00;background:#fff4f4;font-weight:700}
+.hdr-backup{font-size:12px;font-weight:700;color:var(--text2);background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px 12px;cursor:pointer;white-space:nowrap;font-family:'Noto Sans JP',sans-serif;display:flex;align-items:center;gap:4px}
+.hdr-backup:hover{background:#fff;color:#111}
+.hdr-backup.warn{color:#8a4b00;border-color:#e07800;background:#fff8e8}
+.hdr-backup.danger{color:#c00;border-color:#c00;background:#fff4f4}
+@media(max-width:640px){.hdr-backup #backupLabel{display:none}.hdr-backup{padding:4px 9px}}
 /* 保存できた入力欄を一瞬光らせる */
 @keyframes saveFlash{0%{background:#d4f5e0;box-shadow:0 0 0 3px rgba(26,138,74,.35)}100%{background:transparent;box-shadow:none}}
 .save-flash{animation:saveFlash 1.1s ease-out}
@@ -351,9 +356,10 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v11.6</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v11.7</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
+  <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
 </header>
 
@@ -1098,6 +1104,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   detectMasterReset(!!localStorage.getItem('cm_master'));
   renderMasterAlert();
   updateSyncPill();
+  updateBackupBtn();
   renderRestoreBanner();
   handleUrlParams();
 });
@@ -2851,11 +2858,28 @@ async function cloudLoad() {
 }
 
 // ==================== JSON BACKUP ====================
+// バックアップからの経過日数に応じてボタンの見た目を変える
+function updateBackupBtn() {
+  const btn=document.getElementById('backupBtn'), lbl=document.getElementById('backupLabel');
+  if(!btn||!lbl) return;
+  let last=0; try { last=Number(localStorage.getItem('cm_lastbackup'))||0; } catch(e){}
+  btn.classList.remove('warn','danger');
+  if(!last){ lbl.textContent='バックアップ'; btn.classList.add('warn');
+    btn.title='まだバックアップを取っていません。押すとJSONを保存します'; return; }
+  const days=Math.floor((Date.now()-last)/86400000);
+  lbl.textContent = days===0 ? 'バックアップ済' : `${days}日前`;
+  if(days>=14) btn.classList.add('danger');
+  else if(days>=7) btn.classList.add('warn');
+  btn.title=`最終バックアップ: ${new Date(last).toLocaleString('ja-JP')}\n押すとJSONを保存します`;
+}
 function exportData() {
   const data={version:2,exportedAt:new Date().toISOString(),memos,dictWords:DICT_WORDS,convPairs,kartes:KARTES,farms:FARMS,master:MASTER,farmDist:FARM_DIST,templates:TEMPLATES,watch:WATCH_ITEMS};
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
   a.download=`cartememo_${new Date().toISOString().slice(0,10)}.json`;a.click();
+  try { localStorage.setItem('cm_lastbackup', String(Date.now())); } catch(e){}
+  updateBackupBtn();
+  logSave('karte', `JSONバックアップを保存（カルテ${KARTES.length}件・メモ${memos.length}件）`);
   toast('JSONをダウンロードしました','success');
 }
 function importData(input) {
