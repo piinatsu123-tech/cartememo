@@ -345,7 +345,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v10.8</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v10.9</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -476,6 +476,17 @@ input[type=checkbox]{width:auto;margin:0}
     <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="exportCSV()">↓ CSVエクスポート</button>
   </div>
   <div id="statsContainer"></div>
+  <details style="margin-top:14px;border:1px solid var(--border);border-radius:7px;background:var(--surface)">
+    <summary style="cursor:pointer;font-size:14px;font-weight:700;color:var(--text2);padding:10px 12px;user-select:none">📥 過去の集計CSVを取り込む</summary>
+    <div style="padding:0 12px 12px">
+      <p class="input-hint" style="margin-bottom:8px">カルテが失われて集計に出なくなった期間を、以前エクスポートしたCSVから復元します。取り込んだ月は集計表に<b>（取込）</b>として表示されます。<br>同じ農場・月がカルテ側にもある場合はカルテ側を優先します。</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <label class="btn btn-primary btn-sm" style="cursor:pointer">CSVを選択<input type="file" accept=".csv,.txt" style="display:none" onchange="importStatsCsv(this)"></label>
+        <button class="btn btn-ghost btn-sm" onclick="clearImportedStats()">取込データを消去</button>
+      </div>
+      <div id="importedStatsInfo" style="font-size:12px;color:var(--text2);margin-top:8px"></div>
+    </div>
+  </details>
 </div>
 
 <!-- ===== 設定 ===== -->
@@ -1177,6 +1188,7 @@ function loadFromStorage() {
     const dl2 = localStorage.getItem('cm_deleted'); if(dl2) DELETED = Object.assign({kartes:{},memos:{},templates:{},master:{},watch:{}}, JSON.parse(dl2));
     pruneDeletions();
     const sl = localStorage.getItem('cm_savelog'); if(sl) SAVE_LOG = JSON.parse(sl);
+    const ist = localStorage.getItem('cm_impstats'); if(ist) IMPORTED_STATS = JSON.parse(ist);
     const ls = localStorage.getItem('cm_lastsync'); if(ls) LAST_SYNC_AT = Number(ls)||null;
     const ak = localStorage.getItem('cm_active_karte'); if(ak) activeKarteId = ak;
     sortMemosChrono(); // 過去に崩れた並びも起動時に整列する
@@ -2567,15 +2579,36 @@ async function browseCloudVersions() {
   _verCache=[];
   // 版番号は新しい方から順に遡って取得する（一覧APIが使えない場合に備える）
   let cur=null;
+  let verNums=null, listErr='';
+  // まず版の一覧を取得する（これが使えれば確実）
   try {
-    const resp=await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`,{headers:{'X-Master-Key':key}});
+    const resp=await fetch(`https://api.jsonbin.io/v3/b/${binId}/versions`,{headers:{'X-Master-Key':key}});
     const r=await resp.json();
     if(!resp.ok) throw new Error(r.message||'HTTP '+resp.status);
-    cur=(r.metadata&&(r.metadata.versionNumber??r.metadata.version));
-    if(cur==null) cur=30; // 取得できない場合は仮に30版まで遡る
-  } catch(e){ el.innerHTML=`<div class="tpl-empty" style="color:#c00">最新版の取得に失敗: ${esc(e.message)}</div>`; return; }
+    const arr = Array.isArray(r.record) ? r.record : (Array.isArray(r.record&&r.record.versions) ? r.record.versions : null);
+    if(arr && arr.length) verNums = arr.map(x=>(x.versionNumber??x.version??x)).filter(x=>x!=null);
+  } catch(e){ listErr=e.message; }
+  // 一覧が使えない場合は最新版の番号から遡る
+  if(!verNums) {
+    try {
+      const resp=await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`,{headers:{'X-Master-Key':key}});
+      const r=await resp.json();
+      if(!resp.ok) throw new Error(r.message||'HTTP '+resp.status);
+      const meta=r.metadata||{};
+      cur = meta.versionNumber ?? meta.version ?? null;
+    } catch(e){ el.innerHTML=`<div class="tpl-empty" style="color:#c00">最新版の取得に失敗: ${esc(e.message)}</div>`; return; }
+    if(cur==null) {
+      el.innerHTML=`<div class="tpl-empty" style="color:#c00;text-align:left">過去バージョンを取得できませんでした。<br><br>
+        <b>版の一覧:</b> ${esc(listErr||'取得不可')}<br>
+        <b>最新版の番号:</b> 応答に含まれていません<br><br>
+        このBinはバージョン管理が無効か、無料プランでは過去版を取り出せない可能性があります。</div>`;
+      return;
+    }
+    verNums=[]; for(let v=cur; v>=Math.max(0,cur-29); v--) verNums.push(v);
+  }
+  verNums = verNums.slice(0,30);
   const rows=[]; let lastErr='';
-  for(let v=cur; v>=Math.max(0,cur-29); v--) {
+  for(const v of verNums) {
     try {
       const d=await _fetchBinVersion(key,binId,v);
       const s=_summarizeRecord(d);
@@ -2585,7 +2618,7 @@ async function browseCloudVersions() {
   }
   if(!rows.length) {
     el.innerHTML=`<div class="tpl-empty" style="color:#c00;text-align:left">過去バージョンを取得できませんでした。<br><br>
-      <b>最新版の番号:</b> ${cur}<br>
+      <b>調べた版:</b> ${esc(verNums.join(', ').slice(0,80))}<br>
       <b>エラー:</b> ${esc(lastErr||'(応答なし)')}<br><br>
       「requires a paid plan」等と表示される場合、無料プランでは過去版を取り出せません。<br>
       その場合はJSONバックアップからの復元をお試しください。</div>`;
@@ -4318,21 +4351,96 @@ function duplicateKarte(id){
 }
 
 // ==================== STATS ====================
+// ===== 過去の集計CSVの取り込み =====
+// カルテが失われた期間の集計を、以前エクスポートしたCSVから補う
+// 形式: {"農場名": {"YYYY-MM": 差額, ...}, ...}
+let IMPORTED_STATS = {};
+function _csvSplitLine(line) {
+  const out=[]; let cur='', q=false;
+  for(let i=0;i<line.length;i++){
+    const ch=line[i];
+    if(q){ if(ch==='"'){ if(line[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=ch; }
+    else if(ch==='"') q=true;
+    else if(ch===',') { out.push(cur); cur=''; }
+    else cur+=ch;
+  }
+  out.push(cur); return out;
+}
+// 「2026年7月」「2026-07」などを YYYY-MM に揃える
+function _parseMonthLabel(s) {
+  const t=String(s||'').trim();
+  let m=t.match(/^(\d{4})\D+(\d{1,2})/);
+  if(m) return `${m[1]}-${String(parseInt(m[2])).padStart(2,'0')}`;
+  return null;
+}
+function importStatsCsv(input) {
+  const f=input.files&&input.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=e=>{
+    try {
+      const text=String(e.target.result||'').replace(/^﻿/,'');
+      const lines=text.split(/\r?\n/).filter(l=>l.trim()!=='');
+      if(lines.length<2) throw new Error('データが見つかりません');
+      const head=_csvSplitLine(lines[0]);
+      // 月の列を特定する（合計・件数などの列は除く）
+      const monthCols=[];
+      head.forEach((h,i)=>{ const m=_parseMonthLabel(h); if(m) monthCols.push({i,m}); });
+      if(!monthCols.length) throw new Error('月の列が見つかりません（1行目に「2026年7月」等が必要です）');
+      let farms=0, cells=0;
+      lines.slice(1).forEach(l=>{
+        const cols=_csvSplitLine(l);
+        const farm=(cols[0]||'').trim();
+        if(!farm || farm==='合計') return;     // 合計行は取り込まない
+        let any=false;
+        monthCols.forEach(({i,m})=>{
+          const raw=(cols[i]||'').trim().replace(/[,¥￥+\s]/g,'');
+          if(raw===''||isNaN(Number(raw))) return;
+          if(!IMPORTED_STATS[farm]) IMPORTED_STATS[farm]={};
+          IMPORTED_STATS[farm][m]=Number(raw); cells++; any=true;
+        });
+        if(any) farms++;
+      });
+      if(!cells) throw new Error('取り込める数値がありませんでした');
+      try { localStorage.setItem('cm_impstats', JSON.stringify(IMPORTED_STATS)); } catch(err){}
+      logSave('karte', `集計CSVを取り込み（${farms}農場・${cells}件）`);
+      renderStats();
+      toast(`${farms}農場・${cells}件を取り込みました`,'success');
+    } catch(err){ toast('取り込みエラー: '+err.message,'error'); }
+    input.value='';
+  };
+  r.readAsText(f);
+}
+function clearImportedStats() {
+  if(!Object.keys(IMPORTED_STATS).length) return toast('取込データはありません');
+  if(!confirm('取り込んだ集計データを消去しますか？（カルテには影響しません）')) return;
+  IMPORTED_STATS={};
+  try { localStorage.setItem('cm_impstats','{}'); } catch(e){}
+  renderStats();
+  toast('取込データを消去しました');
+}
 function renderStats() {
   const rangeN = parseInt(document.getElementById('stats-range').value);
   const closed = KARTES.filter(k=>k.closed&&k.diff!==null);
   const el=document.getElementById('statsContainer');
-  let months=[...new Set(closed.map(k=>k.month))].sort();
+  // 取り込んだ集計（カルテが失われた期間の補完）も対象に含める
+  const impFarms=Object.keys(IMPORTED_STATS);
+  const impMonths=new Set(); impFarms.forEach(f=>Object.keys(IMPORTED_STATS[f]).forEach(m=>impMonths.add(m)));
+  let months=[...new Set([...closed.map(k=>k.month), ...impMonths])].filter(Boolean).sort();
   if(rangeN>0){const cutoff=monthOffset(-rangeN);months=months.filter(m=>m>=cutoff);}
-  const farms=[...new Set(closed.map(k=>k.farm))].sort((a,b)=>a.localeCompare(b,'ja'));
+  const farms=[...new Set([...closed.map(k=>k.farm), ...impFarms])].sort((a,b)=>a.localeCompare(b,'ja'));
   if(!months.length||!farms.length){el.innerHTML='<div class="empty-state"><div class="es-icon">📊</div>差額確定済みのデータがありません</div>';return;}
-  const tbl={};farms.forEach(f=>{tbl[f]={};});
-  closed.forEach(k=>{if(months.includes(k.month)&&farms.includes(k.farm))tbl[k.farm][k.month]=(tbl[k.farm][k.month]||0)+k.diff;});
+  const tbl={}, isImp={}; farms.forEach(f=>{tbl[f]={};isImp[f]={};});
+  // 先に取込データを入れ、カルテ側があれば上書きする（カルテ優先）
+  impFarms.forEach(f=>Object.keys(IMPORTED_STATS[f]).forEach(m=>{
+    if(months.includes(m)){ tbl[f][m]=IMPORTED_STATS[f][m]; isImp[f][m]=true; } }));
+  closed.forEach(k=>{if(months.includes(k.month)&&farms.includes(k.farm)){
+    if(isImp[k.farm][k.month]){ tbl[k.farm][k.month]=0; isImp[k.farm][k.month]=false; }
+    tbl[k.farm][k.month]=(tbl[k.farm][k.month]||0)+k.diff; }});
   const ths=months.map(m=>{const[y,mo]=m.split('-');return`<th>${y}年${parseInt(mo)}月</th>`;}).join('');
   const fmtCell=(v,extra='')=>{const cls=v>0?'diff-pos':v<0?'diff-neg':'';return`<td class="${cls} ${extra}">${(v>=0?'+':'')+fmtAmt(v)}</td>`;};
   const rows=farms.map(f=>{
     let rowTotal=0;
-    const cells=months.map(m=>{const v=tbl[f][m];if(v===undefined)return'<td style="color:var(--text3)">—</td>';rowTotal+=v;const cls=v>0?'diff-pos':v<0?'diff-neg':'';return`<td class="${cls}">${(v>=0?'+':'')+fmtAmt(v)}</td>`;}).join('');
+    const cells=months.map(m=>{const v=tbl[f][m];if(v===undefined)return'<td style="color:var(--text3)">—</td>';rowTotal+=v;const cls=v>0?'diff-pos':v<0?'diff-neg':'';return`<td class="${cls}" ${isImp[f][m]?'title="取り込んだ集計データ"':''}>${(v>=0?'+':'')+fmtAmt(v)}${isImp[f][m]?'<span style="font-size:9px;color:#e07800">（取込）</span>':''}</td>`;}).join('');
     return`<tr><td>${esc(f)}</td>${cells}${fmtCell(rowTotal,'total-col')}</tr>`;
   }).join('');
   // 月ごとの合計行
@@ -4341,6 +4449,9 @@ function renderStats() {
   const totalCells=colTotals.map(v=>fmtCell(v)).join('');
   const totalRow=`<tr class="total-row"><td>合計</td>${totalCells}${fmtCell(grandRange,'total-col')}</tr>`;
   el.innerHTML=`<table class="stats-table"><thead><tr><th>農場名</th>${ths}<th class="total-col">合計</th></tr></thead><tbody>${rows}${totalRow}</tbody></table>`;
+  const info=document.getElementById('importedStatsInfo');
+  if(info){ const n=impFarms.reduce((s,f)=>s+Object.keys(IMPORTED_STATS[f]).length,0);
+    info.textContent = n ? `取込済み: ${impFarms.length}農場・${n}件（表内に「（取込）」と表示されます）` : '取込データはありません'; }
 }
 function monthOffset(n){const d=new Date();d.setMonth(d.getMonth()+n);return d.toISOString().slice(0,7);}
 function exportCSV() {
