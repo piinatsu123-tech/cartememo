@@ -345,7 +345,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v10.7</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v10.8</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -2574,16 +2574,23 @@ async function browseCloudVersions() {
     cur=(r.metadata&&(r.metadata.versionNumber??r.metadata.version));
     if(cur==null) cur=30; // 取得できない場合は仮に30版まで遡る
   } catch(e){ el.innerHTML=`<div class="tpl-empty" style="color:#c00">最新版の取得に失敗: ${esc(e.message)}</div>`; return; }
-  const rows=[];
+  const rows=[]; let lastErr='';
   for(let v=cur; v>=Math.max(0,cur-29); v--) {
     try {
       const d=await _fetchBinVersion(key,binId,v);
       const s=_summarizeRecord(d);
       _verCache.push({v, d, s});
       rows.push({v, s});
-    } catch(e){ /* その版が無い場合は飛ばす */ }
+    } catch(e){ if(!lastErr) lastErr=e.message; }
   }
-  if(!rows.length) { el.innerHTML='<div class="tpl-empty">過去バージョンを取得できませんでした（保存されていない可能性があります）</div>'; return; }
+  if(!rows.length) {
+    el.innerHTML=`<div class="tpl-empty" style="color:#c00;text-align:left">過去バージョンを取得できませんでした。<br><br>
+      <b>最新版の番号:</b> ${cur}<br>
+      <b>エラー:</b> ${esc(lastErr||'(応答なし)')}<br><br>
+      「requires a paid plan」等と表示される場合、無料プランでは過去版を取り出せません。<br>
+      その場合はJSONバックアップからの復元をお試しください。</div>`;
+    return;
+  }
   el.innerHTML = rows.map(({v,s})=>{
     const when = s.savedAt ? new Date(s.savedAt).toLocaleString('ja-JP') : '(日時不明)';
     const hi = s.confirmed>0;
@@ -2746,7 +2753,25 @@ function importData(input) {
       if(Array.isArray(data.dictWords))data.dictWords.forEach(w=>{if(!DICT_WORDS.includes(w))DICT_WORDS.push(w);});
       if(Array.isArray(data.convPairs)){const eIds2=new Set(convPairs.map(p=>p.id));data.convPairs.forEach(p=>{if(!eIds2.has(p.id))convPairs.push(p);});}
       let newKartes=0;
-      if(Array.isArray(data.kartes)){const eIds3=new Set(KARTES.map(k=>k.id));const added=_dropDeleted('kartes', data.kartes, k=>k.id).filter(k=>!eIds3.has(k.id));KARTES=[...KARTES,...added];newKartes=added.length;}
+      let restoredElec=0;
+      if(Array.isArray(data.kartes)){
+        const src=_dropDeleted('kartes', data.kartes, k=>k.id);
+        src.forEach(_normKarte);
+        const eIds3=new Set(KARTES.map(k=>k.id));
+        const added=src.filter(k=>!eIds3.has(k.id));
+        KARTES=[...KARTES,...added];newKartes=added.length;
+        // 既存カルテの確定（電子カルテ金額）が失われている場合は書き戻す
+        src.forEach(ok=>{
+          if(ok.electronic_amount==null) return;
+          const k=KARTES.find(x=>x.id===ok.id)||KARTES.find(x=>x.farm===ok.farm&&x.cow===ok.cow);
+          if(!k||k===ok) return;
+          if(k.electronic_amount==null){
+            k.electronic_amount=ok.electronic_amount;
+            k.diff=ok.electronic_amount-(k.paper_total||0);
+            k.closed=true; touchKarte(k); restoredElec++;
+          }
+        });
+      }
       if(Array.isArray(data.farms)){data.farms.forEach(f=>{if(!FARMS.includes(f))FARMS.push(f);});FARMS.sort((a,b)=>a.localeCompare(b,'ja'));updateFarmDatalist();}
       // バックアップからの復元は明示操作のため、薬価は削除記録を無視して取り込む
       if(Array.isArray(data.master)){const mnames=new Set(MASTER.map(m=>m.name));let restored=0;data.master.forEach(m=>{if(m&&m.name&&!mnames.has(m.name)){MASTER.push(m);delete DELETED.master[m.name];restored++;}});if(restored)logSave('master',`バックアップから薬価${restored}件を復元`);refreshMasterUI();}
@@ -2756,7 +2781,8 @@ function importData(input) {
       reconcileFarms();
       saveToStorage();renderMemoQueue();renderResultsList();renderDict();updateBadge();
       updateFarmDatalist();updateKarteFarmFilter();renderKarteList();
-      toast(`メモ${newMemos.length}件・カルテ${newKartes}件を追加しました`,'success');
+      if(restoredElec) logSave('elec', `バックアップから確定（電子カルテ金額）${restoredElec}件を復元`);
+      toast(`メモ${newMemos.length}件・カルテ${newKartes}件を追加${restoredElec?`／確定${restoredElec}件を復元`:''}しました`,'success');
     } catch(err){toast('読み込みエラー: '+err.message,'error');}
     input.value='';
   };
