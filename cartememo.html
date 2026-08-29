@@ -345,7 +345,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v11.0</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v11.1</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -467,6 +467,12 @@ input[type=checkbox]{width:auto;margin:0}
 <div class="tab-page" id="page-stats">
   <div class="batch-bar">
     <label style="font-size:13px;color:var(--text2);margin:0;font-weight:500">表示期間:</label>
+    <select id="stats-scope" onchange="setStatsScope(this.value)" style="width:auto;flex:none" title="復旧作業中の確認用">
+      <option value="all">すべての確定</option>
+      <option value="new">この日以降に確定した分のみ</option>
+      <option value="old">この日より前に確定した分のみ</option>
+    </select>
+    <input type="date" id="stats-since" onchange="setStatsSince(this.value)" style="width:auto;flex:none;display:none">
     <select id="stats-range" onchange="renderStats()" style="width:auto;flex:none">
       <option value="3">直近3ヶ月</option>
       <option value="6">直近6ヶ月</option>
@@ -1123,7 +1129,12 @@ function switchTab(name) {
   document.getElementById('page-'+name).classList.add('active');
   if(name === 'calc') renderResultsList();
   if(name === 'karte') { updateKarteFarmFilter(); renderKarteList(); }
-  if(name === 'stats') renderStats();
+  if(name === 'stats') {
+    const sc=document.getElementById('stats-scope'), si=document.getElementById('stats-since');
+    if(sc) sc.value=STATS_SCOPE;
+    if(si){ si.value=STATS_SINCE; si.style.display = STATS_SCOPE==='all' ? 'none' : ''; }
+    renderStats();
+  }
   if(name === 'settings') { renderFarmDistList(); renderWatchList(); renderSaveLog(); loadSyncMemoLimit(); renderCloudSize(); renderCloudError(); }
 }
 
@@ -1195,6 +1206,8 @@ function loadFromStorage() {
     const sl = localStorage.getItem('cm_savelog'); if(sl) SAVE_LOG = JSON.parse(sl);
     const ist = localStorage.getItem('cm_impstats'); if(ist) IMPORTED_STATS = JSON.parse(ist);
     IMPORT_PRIORITY = localStorage.getItem('cm_imppri')==='1';
+    STATS_SCOPE = localStorage.getItem('cm_statsscope')||'all';
+    STATS_SINCE = localStorage.getItem('cm_statssince')||'';
     const ls = localStorage.getItem('cm_lastsync'); if(ls) LAST_SYNC_AT = Number(ls)||null;
     const ak = localStorage.getItem('cm_active_karte'); if(ak) activeKarteId = ak;
     sortMemosChrono(); // 過去に崩れた並びも起動時に整列する
@@ -4277,7 +4290,9 @@ function setElectronicAmount(id, val) {
   }
   if(isNaN(val)||val<0) return false;
   if(k.electronic_amount===val) return false;
-  k.electronic_amount=val; k.diff=val-k.paper_total; k.closed=true; touchKarte(k);
+  k.electronic_amount=val; k.diff=val-k.paper_total; k.closed=true;
+  k.closedAt = Date.now(); // 確定した日時（復旧作業中の入力を区別するため）
+  touchKarte(k);
   saveToStorage();
   logSave('elec', `【${k.farm} / ${k.cow}】電子 ¥${val.toLocaleString()}（差額 ${k.diff>=0?'+':''}${fmtAmt(k.diff)}）`);
   renderKarteList();
@@ -4431,17 +4446,35 @@ function clearImportedStats() {
   renderStats();
   toast('取込データを消去しました');
 }
+// 復旧作業中の確認用: 確定した日時で集計対象を絞る
+let STATS_SCOPE='all', STATS_SINCE='';
+function setStatsScope(v){
+  STATS_SCOPE=v;
+  try{localStorage.setItem('cm_statsscope',v);}catch(e){}
+  const inp=document.getElementById('stats-since');
+  if(inp){ inp.style.display = v==='all' ? 'none' : '';
+    if(v!=='all' && !inp.value){ inp.value = STATS_SINCE || new Date().toISOString().slice(0,10); STATS_SINCE=inp.value; try{localStorage.setItem('cm_statssince',STATS_SINCE);}catch(e){} } }
+  renderStats();
+}
+function setStatsSince(v){ STATS_SINCE=v; try{localStorage.setItem('cm_statssince',v);}catch(e){} renderStats(); }
+function _inStatsScope(k){
+  if(STATS_SCOPE==='all' || !STATS_SINCE) return true;
+  const t = Number(k.closedAt)||0;
+  const border = new Date(STATS_SINCE+'T00:00:00').getTime();
+  // closedAt が無い＝この機能より前に確定したもの → 「以前の分」として扱う
+  return STATS_SCOPE==='new' ? (t>=border) : (t<border || !t);
+}
 function renderStats() {
   const rangeN = parseInt(document.getElementById('stats-range').value);
-  const closed = KARTES.filter(k=>k.closed&&k.diff!==null);
+  const closed = KARTES.filter(k=>k.closed&&k.diff!==null&&_inStatsScope(k));
   const el=document.getElementById('statsContainer');
   // 取り込んだ集計（カルテが失われた期間の補完）も対象に含める
-  const impFarms=Object.keys(IMPORTED_STATS);
+  const impFarms=(STATS_SCOPE==='new')?[]:Object.keys(IMPORTED_STATS); // 新規分のみの表示では取込データを含めない
   const impMonths=new Set(); impFarms.forEach(f=>Object.keys(IMPORTED_STATS[f]).forEach(m=>impMonths.add(m)));
   let months=[...new Set([...closed.map(k=>k.month), ...impMonths])].filter(Boolean).sort();
   if(rangeN>0){const cutoff=monthOffset(-rangeN);months=months.filter(m=>m>=cutoff);}
   const farms=[...new Set([...closed.map(k=>k.farm), ...impFarms])].sort((a,b)=>a.localeCompare(b,'ja'));
-  if(!months.length||!farms.length){el.innerHTML='<div class="empty-state"><div class="es-icon">📊</div>差額確定済みのデータがありません</div>';return;}
+  if(!months.length||!farms.length){el.innerHTML=`<div class="empty-state"><div class="es-icon">📊</div>${STATS_SCOPE==='new'?esc(STATS_SINCE)+' 以降に確定したカルテはまだありません':'差額確定済みのデータがありません'}</div>`;return;}
   const tbl={}, isImp={}; farms.forEach(f=>{tbl[f]={};isImp[f]={};});
   // カルテ側を先に集計する
   closed.forEach(k=>{if(months.includes(k.month)&&farms.includes(k.farm)){
@@ -4466,7 +4499,11 @@ function renderStats() {
   const grandRange=colTotals.reduce((s,v)=>s+v,0);
   const totalCells=colTotals.map(v=>fmtCell(v)).join('');
   const totalRow=`<tr class="total-row"><td>合計</td>${totalCells}${fmtCell(grandRange,'total-col')}</tr>`;
-  el.innerHTML=`<table class="stats-table"><thead><tr><th>農場名</th>${ths}<th class="total-col">合計</th></tr></thead><tbody>${rows}${totalRow}</tbody></table>`;
+  const scopeNote = STATS_SCOPE==='all' ? '' :
+    `<div style="font-size:12px;font-weight:700;color:#8a4b00;background:#fff8e8;border:1px solid #e07800;border-radius:6px;padding:7px 10px;margin-bottom:8px">
+      ${STATS_SCOPE==='new'?`🆕 ${esc(STATS_SINCE)} 以降に確定した分のみ表示中（取込データは含みません）`:`🕘 ${esc(STATS_SINCE)} より前に確定した分のみ表示中`}
+     </div>`;
+  el.innerHTML=scopeNote+`<table class="stats-table"><thead><tr><th>農場名</th>${ths}<th class="total-col">合計</th></tr></thead><tbody>${rows}${totalRow}</tbody></table>`;
   const info=document.getElementById('importedStatsInfo');
   if(info){ const n=impFarms.reduce((s,f)=>s+Object.keys(IMPORTED_STATS[f]).length,0);
     info.textContent = n ? `取込済み: ${impFarms.length}農場・${n}件（表内に「（取込）」と表示されます）${IMPORT_PRIORITY?' ／ 取込データを優先中':''}` : '取込データはありません'; }
