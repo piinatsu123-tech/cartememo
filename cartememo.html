@@ -339,7 +339,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v9.5</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v9.6</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -1523,6 +1523,13 @@ ${memo.text}
 
 【ルール】
 - 品目名はマスターリストと完全一致させる。数量不明は1。ml数や個数があれば反映。同一品目は数量合計。処置(再診/初診/直検等)も含める。
+- 【重要】メモは原則「品目名 → 数量」の順で書かれている。例:「メトクロ10」はメトクロが品目でqty=10。
+  「10メトクロ」のように数字が先に来ていても、マスターリストにある語が品目名であり、数字は必ず数量として扱う。
+  数字だけの語やマスターリストに無い数値表現を品目名にしてはいけない。
+- 品目名か数量か迷ったら、マスターリストに一致する語を必ず品目名とすること。
+  マスターリストに無い語は品目にせず、数量・単位・症状のいずれかとして扱うか無視する。
+- 「点滴1000」「留置2000」「生食1000ml」など、数字を含む語そのものがマスターリストにある場合は、
+  その数字は品目名の一部であり数量ではない。マスターリストとの一致を優先する。
 - ownerNameは農場名・飼い主の氏名のみ。メモに明記されていない場合は必ず空文字にする。
 - 診療内容（投薬・処置）とownerNameを混同しない。判断に迷う場合は空文字にする。
 - tempは数値のみ（単位なし）。symptomは診断名・主訴を短く。`;
