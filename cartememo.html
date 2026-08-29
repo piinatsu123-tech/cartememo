@@ -339,7 +339,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v9.8</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v9.9</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -1900,7 +1900,8 @@ function _buildPayload(memoLimit, karteMonths, stripSavedText) {
       version:2, savedAt:new Date().toISOString(),
       memos: ms.map(m=>_slimMemo(m, stripSavedText)),
       dictWords:DICT_WORDS, convPairs,
-      kartes: _cloudKartesSnapshot,
+      // 読み込み時に省略フィールドが復元されているため、送信時は圧縮し直す
+      kartes: _cloudKartesSnapshot.map(_slimKarte),
       farms:FARMS, master:MASTER, farmDist:FARM_DIST, templates:TEMPLATES, watch:WATCH_ITEMS,
       deleted:DELETED
     };
