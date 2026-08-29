@@ -259,6 +259,11 @@ input[type=checkbox]{width:auto;margin:0}
 .stats-table td{padding:8px 12px;text-align:right;border:1px solid var(--border);font-family:'JetBrains Mono',monospace}
 .stats-table td:first-child{text-align:left;font-weight:600;font-family:'Noto Sans JP',sans-serif}
 .stats-table tr:nth-child(even) td{background:var(--surface)}
+.cmp-ok,.cmp-part,.cmp-over,.cmp-none{font-size:9px;font-weight:700;margin-left:3px;padding:1px 3px;border-radius:3px;white-space:nowrap}
+.cmp-ok{color:#1a8a4a;background:#e6f7ec}
+.cmp-part{color:#8a4b00;background:#fff3cd}
+.cmp-over{color:#c00;background:#ffe9e9}
+.cmp-none{color:#e07800;background:#fff8e8}
 .stats-table .total-col,.stats-table tr.total-row td{font-weight:700;background:var(--surface)!important}
 .stats-table tr.total-row td:first-child{font-weight:700}
 
@@ -345,7 +350,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v11.3</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v11.4</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -4581,16 +4586,39 @@ function renderStats() {
   // 取込データの扱い: 既定はカルテ優先（カルテに無い月だけ補う）。
   // IMPORT_PRIORITY が有効なら、取込データがある月は取込側を採用する
   // （カルテの確定が一部しか復元できていない期間で正しい合計を出すため）
+  // CSVとカルテを照合して復元の進み具合を判定する
+  // match: 一致（復元完了） / partial: カルテ側が不足 / over: カルテ側が超過 / none: カルテ側なし
+  const cmp={}; farms.forEach(f=>{cmp[f]={};});
   impFarms.forEach(f=>Object.keys(IMPORTED_STATS[f]).forEach(m=>{
     if(!months.includes(m)) return;
-    const hasKarte = tbl[f][m]!==undefined;
-    if(!hasKarte || IMPORT_PRIORITY){ tbl[f][m]=IMPORTED_STATS[f][m]; isImp[f][m]=true; }
+    const imp=IMPORTED_STATS[f][m];
+    const kv=tbl[f][m];
+    cmp[f][m] = (kv===undefined) ? {st:'none', imp}
+              : (kv===imp)       ? {st:'match', imp, kv}
+              : (Math.abs(kv)<Math.abs(imp)) ? {st:'partial', imp, kv}
+              : {st:'over', imp, kv};
+    const hasKarte = kv!==undefined;
+    if(!hasKarte || IMPORT_PRIORITY){ tbl[f][m]=imp; isImp[f][m]=true; }
   }));
   const ths=months.map(m=>{const[y,mo]=m.split('-');return`<th>${y}年${parseInt(mo)}月</th>`;}).join('');
   const fmtCell=(v,extra='')=>{const cls=v>0?'diff-pos':v<0?'diff-neg':'';return`<td class="${cls} ${extra}">${(v>=0?'+':'')+fmtAmt(v)}</td>`;};
   const rows=farms.map(f=>{
     let rowTotal=0;
-    const cells=months.map(m=>{const v=tbl[f][m];if(v===undefined)return'<td style="color:var(--text3)">—</td>';rowTotal+=v;const cls=v>0?'diff-pos':v<0?'diff-neg':'';return`<td class="${cls}" ${isImp[f][m]?'title="取り込んだ集計データ"':''}>${(v>=0?'+':'')+fmtAmt(v)}${isImp[f][m]?'<span style="font-size:9px;color:#e07800">（取込）</span>':''}</td>`;}).join('');
+    const cells=months.map(m=>{
+      const v=tbl[f][m];
+      if(v===undefined)return'<td style="color:var(--text3)">—</td>';
+      rowTotal+=v;
+      const cls=v>0?'diff-pos':v<0?'diff-neg':'';
+      const cp=cmp[f]&&cmp[f][m];
+      let mark='', tip='';
+      if(cp){
+        if(cp.st==='match'){ mark='<span class="cmp-ok" title="CSVと一致（復元完了）">✓一致</span>'; tip='CSVと一致（復元完了）'; }
+        else if(cp.st==='partial'){ mark=`<span class="cmp-part" title="CSV ${fmtAmt(cp.imp)} に対しカルテ ${fmtAmt(cp.kv)}">未完</span>`; tip=`CSV ${fmtAmt(cp.imp)} / カルテ ${fmtAmt(cp.kv)}`; }
+        else if(cp.st==='over'){ mark=`<span class="cmp-over" title="CSVより多い">超過</span>`; tip=`CSV ${fmtAmt(cp.imp)} / カルテ ${fmtAmt(cp.kv)}`; }
+        else if(cp.st==='none'){ mark='<span class="cmp-none" title="カルテ側にデータなし">取込</span>'; tip='カルテ側にデータがありません'; }
+      }
+      return `<td class="${cls}" ${tip?`title="${esc(tip)}"`:''}>${(v>=0?'+':'')+fmtAmt(v)}${mark}</td>`;
+    }).join('');
     return`<tr><td>${esc(f)}</td>${cells}${fmtCell(rowTotal,'total-col')}</tr>`;
   }).join('');
   // 月ごとの合計行
@@ -4600,11 +4628,26 @@ function renderStats() {
   const totalRow=`<tr class="total-row"><td>合計</td>${totalCells}${fmtCell(grandRange,'total-col')}</tr>`;
   const SCOPE_LABEL={'new':`🆕 ${esc(STATS_SINCE)} 以降に確定した分のみ`,'old':`🕘 ${esc(STATS_SINCE)} より前に確定した分のみ`,
     'kind-new':'🆕 新規の確定のみ','kind-restore':'🔧 復元による確定のみ'};
+  // 復元の進み具合をまとめる
+  let cMatch=0,cPart=0,cOver=0,cNone=0;
+  farms.forEach(f=>Object.keys(cmp[f]||{}).forEach(m=>{
+    const st=cmp[f][m].st;
+    if(st==='match')cMatch++; else if(st==='partial')cPart++; else if(st==='over')cOver++; else cNone++;
+  }));
+  const cmpNote = (cMatch+cPart+cOver+cNone)===0 ? '' :
+    `<div style="font-size:12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:8px">
+      <b>取込CSVとの照合:</b>
+      <span class="cmp-ok">✓一致</span> ${cMatch}件
+      <span class="cmp-part">未完</span> ${cPart}件
+      <span class="cmp-over">超過</span> ${cOver}件
+      <span class="cmp-none">取込</span> ${cNone}件
+      <span style="color:var(--text3)">（一致＝その月の復元が完了）</span>
+     </div>`;
   const scopeNote = STATS_SCOPE==='all' ? '' :
     `<div style="font-size:12px;font-weight:700;color:#8a4b00;background:#fff8e8;border:1px solid #e07800;border-radius:6px;padding:7px 10px;margin-bottom:8px">
       ${SCOPE_LABEL[STATS_SCOPE]||''}を表示中${STATS_SCOPE!=='old'?'（取込データは含みません）':''}
      </div>`;
-  el.innerHTML=scopeNote+`<table class="stats-table"><thead><tr><th>農場名</th>${ths}<th class="total-col">合計</th></tr></thead><tbody>${rows}${totalRow}</tbody></table>`;
+  el.innerHTML=scopeNote+cmpNote+`<table class="stats-table"><thead><tr><th>農場名</th>${ths}<th class="total-col">合計</th></tr></thead><tbody>${rows}${totalRow}</tbody></table>`;
   const info=document.getElementById('importedStatsInfo');
   if(info){ const n=impFarms.reduce((s,f)=>s+Object.keys(IMPORTED_STATS[f]).length,0);
     info.textContent = n ? `取込済み: ${impFarms.length}農場・${n}件（表内に「（取込）」と表示されます）${IMPORT_PRIORITY?' ／ 取込データを優先中':''}` : '取込データはありません'; }
