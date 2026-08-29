@@ -350,7 +350,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v11.4</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v11.5</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -4573,7 +4573,10 @@ function renderStats() {
   const closed = KARTES.filter(k=>k.closed&&k.diff!==null&&_inStatsScope(k));
   const el=document.getElementById('statsContainer');
   // 取り込んだ集計（カルテが失われた期間の補完）も対象に含める
-  const impFarms=(STATS_SCOPE==='new'||STATS_SCOPE.startsWith('kind-'))?[]:Object.keys(IMPORTED_STATS); // 新規分のみの表示では取込データを含めない
+  // 表に取込データを合成するかどうか（新規/種別の絞り込み時は合成しない）
+  const useImp = !(STATS_SCOPE==='new'||STATS_SCOPE.startsWith('kind-'));
+  // 照合は絞り込みに関わらず常に行うため、農場一覧は常に取込側も含める
+  const impFarms=Object.keys(IMPORTED_STATS);
   const impMonths=new Set(); impFarms.forEach(f=>Object.keys(IMPORTED_STATS[f]).forEach(m=>impMonths.add(m)));
   let months=[...new Set([...closed.map(k=>k.month), ...impMonths])].filter(Boolean).sort();
   if(rangeN>0){const cutoff=monthOffset(-rangeN);months=months.filter(m=>m>=cutoff);}
@@ -4589,16 +4592,26 @@ function renderStats() {
   // CSVとカルテを照合して復元の進み具合を判定する
   // match: 一致（復元完了） / partial: カルテ側が不足 / over: カルテ側が超過 / none: カルテ側なし
   const cmp={}; farms.forEach(f=>{cmp[f]={};});
+  // 農場名の表記ゆれ（空白や全半角の違い）を吸収して対応づける
+  const normFarm = s => String(s||'').normalize('NFKC').replace(/\s+/g,'').toLowerCase();
+  // 同じ正規化名の中から、カルテ側の値を持つ農場名を優先して選ぶ
+  const farmByNorm = {};
+  farms.forEach(f=>{ const n=normFarm(f);
+    const hasVal = tbl[f] && Object.keys(tbl[f]).length>0;
+    if(!(n in farmByNorm) || hasVal) farmByNorm[n]=f; });
   impFarms.forEach(f=>Object.keys(IMPORTED_STATS[f]).forEach(m=>{
     if(!months.includes(m)) return;
     const imp=IMPORTED_STATS[f][m];
-    const kv=tbl[f][m];
+    // カルテ側の同名（表記ゆれ含む）農場の値と比較する
+    const kf = (tbl[f] && tbl[f][m]!==undefined) ? f : (farmByNorm[normFarm(f)]||f);
+    const kv = tbl[kf] ? tbl[kf][m] : undefined;
+    if(!cmp[f]) cmp[f]={};
     cmp[f][m] = (kv===undefined) ? {st:'none', imp}
               : (kv===imp)       ? {st:'match', imp, kv}
               : (Math.abs(kv)<Math.abs(imp)) ? {st:'partial', imp, kv}
               : {st:'over', imp, kv};
     const hasKarte = kv!==undefined;
-    if(!hasKarte || IMPORT_PRIORITY){ tbl[f][m]=imp; isImp[f][m]=true; }
+    if(useImp && (!hasKarte || IMPORT_PRIORITY)){ tbl[f][m]=imp; isImp[f][m]=true; }
   }));
   const ths=months.map(m=>{const[y,mo]=m.split('-');return`<th>${y}年${parseInt(mo)}月</th>`;}).join('');
   const fmtCell=(v,extra='')=>{const cls=v>0?'diff-pos':v<0?'diff-neg':'';return`<td class="${cls} ${extra}">${(v>=0?'+':'')+fmtAmt(v)}</td>`;};
@@ -4609,7 +4622,9 @@ function renderStats() {
       if(v===undefined)return'<td style="color:var(--text3)">—</td>';
       rowTotal+=v;
       const cls=v>0?'diff-pos':v<0?'diff-neg':'';
-      const cp=cmp[f]&&cmp[f][m];
+      const _nf=s=>String(s||'').normalize('NFKC').replace(/\s+/g,'').toLowerCase();
+      let cp=cmp[f]&&cmp[f][m];
+      if(!cp){ const key=Object.keys(cmp).find(x=>_nf(x)===_nf(f)&&cmp[x][m]); if(key) cp=cmp[key][m]; }
       let mark='', tip='';
       if(cp){
         if(cp.st==='match'){ mark='<span class="cmp-ok" title="CSVと一致（復元完了）">✓一致</span>'; tip='CSVと一致（復元完了）'; }
@@ -4630,7 +4645,7 @@ function renderStats() {
     'kind-new':'🆕 新規の確定のみ','kind-restore':'🔧 復元による確定のみ'};
   // 復元の進み具合をまとめる
   let cMatch=0,cPart=0,cOver=0,cNone=0;
-  farms.forEach(f=>Object.keys(cmp[f]||{}).forEach(m=>{
+  Object.keys(cmp).forEach(f=>Object.keys(cmp[f]||{}).forEach(m=>{
     const st=cmp[f][m].st;
     if(st==='match')cMatch++; else if(st==='partial')cPart++; else if(st==='over')cOver++; else cNone++;
   }));
