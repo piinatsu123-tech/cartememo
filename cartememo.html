@@ -236,6 +236,8 @@ input[type=checkbox]{width:auto;margin:0}
 .tpl-item .tpl-name{font-size:14px;font-weight:700;color:#111}
 .tpl-item .tpl-content{font-size:12px;color:var(--text2);font-family:'JetBrains Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tpl-item .tpl-insert{flex-shrink:0;font-size:12px;font-weight:700;color:#fff;background:#111;border:none;border-radius:5px;padding:7px 10px;cursor:pointer}
+.tpl-item .tpl-edit{flex-shrink:0;background:none;border:none;cursor:pointer;font-size:14px;padding:0 2px}
+.tpl-item.tpl-editing{background:#fff8e8;border-color:#e07800}
 .tpl-item .tpl-del{flex-shrink:0;background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px}
 .tpl-item .tpl-del:hover{color:#c00}
 .tpl-empty{font-size:13px;color:var(--text3);text-align:center;padding:16px}
@@ -343,7 +345,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v10.4</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v10.5</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -732,7 +734,10 @@ input[type=checkbox]{width:auto;margin:0}
       <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
         <input type="text" id="tpl-new-name" placeholder="パターン名（例: 下痢セット）" autocomplete="off">
         <input type="text" id="tpl-new-content" placeholder="診療内容 例: iv/メトクロ*10/スタマー*150" autocomplete="off">
-        <button class="btn btn-primary btn-sm" onclick="saveTemplate()">保存</button>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-primary btn-sm" id="tpl-save-btn" style="flex:1" onclick="saveTemplate()">保存</button>
+          <button class="btn btn-ghost btn-sm" id="tpl-cancel-btn" style="display:none" onclick="cancelEditTemplate()">キャンセル</button>
+        </div>
       </div>
     </details>
     <div style="display:flex;gap:8px;margin-top:16px">
@@ -2635,6 +2640,7 @@ function _openTemplateModal(prefillContent, type, locked) {
   document.getElementById('tpl-new-name').value = '';
   document.getElementById('tpl-new-content').value = prefillContent || '';
   document.getElementById('tpl-new-details').open = false;
+  _tplEditId = null; _updateTplEditUI();
   renderTemplatePicker();
   document.getElementById('templateModal').style.display = 'flex';
 }
@@ -2660,6 +2666,7 @@ function _updateTplTabs() {
 function switchTplType(type) {
   if(_tplTypeLocked) return;
   _tplType = type;
+  _tplEditId = null; _updateTplEditUI();
   _updateTplTabs();
   renderTemplatePicker();
 }
@@ -3072,12 +3079,13 @@ function renderTemplatePicker() {
   const typeCount = list.length;
   if(q) list = list.filter(t => (t.name||'').toLowerCase().includes(q) || (t.content||'').toLowerCase().includes(q));
   if(!list.length) { el.innerHTML = `<div class="tpl-empty">${typeCount?'一致するパターンがありません':'まだパターンがありません。下の「＋ 新しいパターンを保存」から追加できます'}</div>`; return; }
-  el.innerHTML = list.map(t => `<div class="tpl-item">
+  el.innerHTML = list.map(t => `<div class="tpl-item${_tplEditId===t.id?' tpl-editing':''}">
     <div class="tpl-main" onclick="applyTemplate('${t.id}')">
       <div class="tpl-name">${esc(t.name||'（無名）')}</div>
       <div class="tpl-content">${esc(t.content||'')}</div>
     </div>
     ${_tplTarget?`<button class="tpl-insert" onclick="applyTemplate('${t.id}')">挿入</button>`:''}
+    <button class="tpl-edit" onclick="startEditTemplate('${t.id}')" title="編集">✏️</button>
     <button class="tpl-del" onclick="deleteTemplate('${t.id}')" title="削除">×</button>
   </div>`).join('');
 }
@@ -3091,24 +3099,64 @@ function applyTemplate(id) {
     toast('挿入先がありません（診療内容欄の💊から開いてください）','error');
   }
 }
+let _tplEditId = null; // 編集中のパターンID（null なら新規追加）
+// 既存パターンを編集フォームに読み込む
+function startEditTemplate(id) {
+  const t = TEMPLATES.find(x=>x.id===id); if(!t) return;
+  _tplEditId = id;
+  document.getElementById('tpl-new-name').value = t.name||'';
+  document.getElementById('tpl-new-content').value = t.content||'';
+  document.getElementById('tpl-new-details').open = true;
+  _updateTplEditUI();
+  document.getElementById('tpl-new-name').focus();
+  renderTemplatePicker();
+}
+function cancelEditTemplate() {
+  _tplEditId = null;
+  document.getElementById('tpl-new-name').value = '';
+  document.getElementById('tpl-new-content').value = '';
+  _updateTplEditUI();
+  renderTemplatePicker();
+}
+// 編集中か新規かで見出しとボタンの文言を切り替える
+function _updateTplEditUI() {
+  const editing = !!_tplEditId;
+  const sum = document.querySelector('#tpl-new-details summary');
+  const isSym = _tplType==='symptom';
+  if(sum) sum.textContent = editing ? '✏️ 編集中' : (isSym ? '＋ 新しい症状を保存' : '＋ 新しいパターンを保存');
+  const btn = document.getElementById('tpl-save-btn');
+  if(btn) btn.textContent = editing ? '更新' : '保存';
+  const cancel = document.getElementById('tpl-cancel-btn');
+  if(cancel) cancel.style.display = editing ? '' : 'none';
+}
 function saveTemplate() {
   const name = document.getElementById('tpl-new-name').value.trim();
   const content = document.getElementById('tpl-new-content').value.trim();
   if(!name) return toast('パターン名を入力してください','error');
   if(!content) return toast('診療内容を入力してください','error');
-  TEMPLATES.unshift({ id: Date.now().toString(), name, content, type: _tplType });
-  saveToStorage();
+  if(_tplEditId) {
+    const t = TEMPLATES.find(x=>x.id===_tplEditId);
+    if(t) { t.name = name; t.content = content; }
+    _tplEditId = null;
+    saveToStorage();
+    toast(`「${name}」を更新しました`,'success');
+  } else {
+    TEMPLATES.unshift({ id: Date.now().toString(), name, content, type: _tplType });
+    saveToStorage();
+    toast(`「${name}」を保存しました`,'success');
+  }
   document.getElementById('tpl-new-name').value = '';
   document.getElementById('tpl-new-content').value = '';
   document.getElementById('tpl-new-details').open = false;
+  _updateTplEditUI();
   renderTemplatePicker();
-  toast(`「${name}」を保存しました`,'success');
 }
 function deleteTemplate(id) {
   const t = TEMPLATES.find(x=>x.id===id); if(!t) return;
   if(!confirm(`パターン「${t.name}」を削除しますか？`)) return;
   logSave('delete', `パターン「${t.name}」を削除`);
   recordDeletion('templates', id);
+  if(_tplEditId===id) { _tplEditId=null; document.getElementById('tpl-new-name').value=''; document.getElementById('tpl-new-content').value=''; _updateTplEditUI(); }
   TEMPLATES = TEMPLATES.filter(x=>x.id!==id);
   saveToStorage();
   renderTemplatePicker();
