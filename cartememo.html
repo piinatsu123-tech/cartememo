@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- ブラウザに古い版を保持させない（GitHub PagesのCDNキャッシュ10分には効かない） -->
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>CarteMemo</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap');
@@ -339,7 +343,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v10.2</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v10.3</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -506,6 +510,7 @@ input[type=checkbox]{width:auto;margin:0}
       <div style="display:flex;gap:6px">
         <input type="text" id="jsonbinMemoId" placeholder="未設定（メモも上のBinに保存）" style="font-family:'JetBrains Mono',monospace;font-size:12px" onchange="onMemoBinIdChange()">
         <button class="btn btn-ghost btn-xs" onclick="createMemoBin()">新規作成</button>
+        <button class="btn btn-ghost btn-xs" onclick="testMemoBin()">接続確認</button>
       </div>
       <p class="input-hint" style="margin-top:4px">カルテとメモで容量を取り合う場合に設定します。「新規作成」を押すと専用の保存先が作られ、以降メモはそちらに保存されます。<b>他の端末にも同じIDを貼り付けてください。</b></p>
       <div style="margin-top:6px">
@@ -2056,6 +2061,7 @@ function renderCloudSize() {
   const color = pct>=90 ? '#c00' : pct>=70 ? '#e07800' : 'var(--text2)';
   const mSize = mp ? _payloadSize(mp) : 0;
   el.innerHTML = `<div style="font-size:12px;color:${color};font-weight:600">送信サイズ: ${fmtBytes(size)} / 目安上限 100 KB（${pct}%）${mb?`　＋ メモ用Bin ${fmtBytes(mSize)}`:''}</div>
+    ${mb?`<div style="font-size:11px;margin-top:4px;padding:5px 8px;border-radius:5px;background:${MEMO_BIN_STATUS.includes('失敗')?'#fff4f4':'#f2fbf5'};color:${MEMO_BIN_STATUS.includes('失敗')?'#c00':'#1a8a4a'};font-weight:600">メモ用Bin: ${esc(MEMO_BIN_STATUS||'まだ通信していません（メモを追加するか再読み込みしてください）')}</div>`:''}
     <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:4px"><div style="height:100%;width:${pct}%;background:${pct>=90?'#c00':pct>=70?'#e07800':'#111'}"></div></div>
     <div style="font-size:11px;color:var(--text3);margin-top:4px">圧縮前 ${fmtBytes(raw)} → 圧縮後 ${fmtBytes(size)}</div>
     <div style="font-size:11px;color:var(--text3);margin-top:2px">同期対象: メモ ${syncedMemos}/${memos.length}件・カルテ ${syncedKartes}/${KARTES.length}件${excluded?` <span style="color:#e07800">（${excluded}件を除外中）</span>`:''}</div>
@@ -2307,7 +2313,29 @@ function saveJsonbinSettings() {
   try { localStorage.setItem('cm_jbk',document.getElementById('jsonbinKey').value.trim()); localStorage.setItem('cm_jbid',document.getElementById('jsonbinId').value.trim()); localStorage.setItem('cm_jbmid',document.getElementById('jsonbinMemoId').value.trim()); } catch(e){}
 }
 // ===== メモ専用Bin（カルテと容量を取り合わないようにする） =====
+let MEMO_BIN_STATUS = '';
 function memoBinId(){ return (localStorage.getItem('cm_jbmid')||'').trim(); }
+// メモ用Binに実際に読み書きできるか確認する
+async function testMemoBin() {
+  const key=(localStorage.getItem('cm_jbk')||'').trim();
+  const id=memoBinId();
+  if(!key) return toast('APIキーが未設定です','error');
+  if(!id) return toast('メモ用Bin IDが未設定です','error');
+  toast('確認中…');
+  try {
+    const resp=await fetch(`https://api.jsonbin.io/v3/b/${id}/latest`,{headers:{'X-Master-Key':key}});
+    const r=await resp.json();
+    if(!resp.ok) throw new Error(r.message||'HTTP '+resp.status);
+    const n=Array.isArray((r.record||{}).memos)?r.record.memos.length:0;
+    const ok=await saveMemoBin(key);
+    MEMO_BIN_STATUS=`確認OK ${new Date().toLocaleTimeString('ja-JP')}／クラウドに${n}件`;
+    renderCloudSize();
+    alert(`メモ用Binに接続できました。\n\nBin ID: ${id}\nクラウド上のメモ: ${n}件\nこの端末のメモ: ${memos.length}件\n書き込み: ${ok?'成功':'失敗'}\n\n他の端末にも同じBin IDが設定されているか確認してください。`);
+  } catch(e){
+    MEMO_BIN_STATUS='接続失敗: '+e.message; renderCloudSize();
+    alert(`メモ用Binに接続できませんでした。\n\nBin ID: ${id}\nエラー: ${e.message}\n\nIDが正しいか、APIキーが同じアカウントのものかを確認してください。`);
+  }
+}
 // IDを設定・変更したら、まず読み込む（先に保存すると他端末のメモを上書きしてしまうため）
 async function onMemoBinIdChange() {
   saveJsonbinSettings();
@@ -2360,8 +2388,12 @@ async function saveMemoBin(key) {
     const resp=await fetch(`https://api.jsonbin.io/v3/b/${id}`,{method:'PUT',
       headers:{'Content-Type':'application/json','X-Master-Key':key},body:JSON.stringify(buildMemoPayload())});
     if(!resp.ok){let m='HTTP '+resp.status;try{const r=await resp.json();m=r.message||m;}catch(e){}throw new Error(m);}
+    MEMO_BIN_STATUS=`最終保存 ${new Date().toLocaleTimeString('ja-JP')}／${buildMemoPayload().memos.length}件を送信`;
+    renderCloudSize();
     return true;
-  } catch(e){ console.warn('Memo bin save failed:', e.message); _syncErrMsg='メモ用Binの保存失敗: '+e.message; renderCloudError(); return false; }
+  } catch(e){ console.warn('Memo bin save failed:', e.message);
+    MEMO_BIN_STATUS='保存失敗: '+(e.message||'通信エラー');
+    _syncErrMsg='メモ用Binの保存失敗: '+e.message; renderCloudError(); renderCloudSize(); return false; }
 }
 async function loadMemoBin(key) {
   const id = memoBinId(); if(!id) return;
@@ -2388,7 +2420,11 @@ async function loadMemoBin(key) {
     memos.forEach(lm=>{ if(!ids.has(lm.id)) merged.push(lm); });
     memos = merged;
     sortMemosChrono();
-  } catch(e){ console.warn('Memo bin load failed:', e.message); }
+    MEMO_BIN_STATUS=`最終読み込み ${new Date().toLocaleTimeString('ja-JP')}／クラウドに${cloudMemos.length}件`;
+    renderCloudSize();
+  } catch(e){ console.warn('Memo bin load failed:', e.message);
+    MEMO_BIN_STATUS='読み込み失敗: '+(e.message||'通信エラー');
+    _syncErrMsg='メモ用Binの読み込み失敗: '+e.message; renderCloudError(); renderCloudSize(); }
 }
 // クラウドから薬価（マスター品目）を復元する。
 // 削除記録があると通常の同期では戻らないため、ここで明示的に取り消す
