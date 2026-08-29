@@ -345,7 +345,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v10.5</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v10.6</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -611,6 +611,10 @@ input[type=checkbox]{width:auto;margin:0}
           <option value="delete">削除</option>
         </select>
         <button class="btn btn-ghost btn-sm" onclick="clearSaveLog()">履歴を消去</button>
+      </div>
+      <div style="margin-bottom:8px;padding:8px 10px;background:#f2fbf5;border:1px solid #1a8a4a;border-radius:6px">
+        <button class="btn btn-primary btn-sm" style="width:100%;justify-content:center" onclick="restoreElecFromLog()">🔧 履歴から電子カルテ金額を復元</button>
+        <p class="input-hint" style="margin-top:4px;margin-bottom:0">確定（電子カルテ金額）が消えて差額集計が出なくなった場合に使います。履歴に残っている金額を農場名・牛番号で照合し、該当するカルテに戻します。実行前に対象を確認できます。</p>
       </div>
       <div id="saveLogList" class="save-log"></div>
     </div>
@@ -1398,6 +1402,50 @@ function renderSaveLog() {
       <span class="sl-text">${esc(x.text)}</span>
     </div>`;
   }).join('');
+}
+// ===== 保存履歴から電子カルテ金額を復元する =====
+// 「【農場 / 牛番号】電子 ¥12,345（差額 …）」という履歴から金額を読み取り、
+// 該当カルテの確定（電子カルテ金額）を復元する
+function _parseElecLog(text) {
+  const m = String(text||'').match(/^【(.+?)\s*\/\s*(.+?)】電子\s*¥([\d,]+)/);
+  if(!m) return null;
+  return { farm:m[1].trim(), cow:m[2].trim(), amount:parseInt(m[3].replace(/,/g,''),10) };
+}
+function restoreElecFromLog() {
+  // 同じカルテが複数回記録されている場合は最も新しいものを採用する
+  const latest = new Map();
+  SAVE_LOG.filter(x=>x.kind==='elec').forEach(x=>{
+    const p = _parseElecLog(x.text);
+    if(p && !isNaN(p.amount)) latest.set(p.farm+' '+p.cow, {...p, t:x.t});
+  });
+  if(!latest.size) return toast('履歴に電子カルテ金額の記録がありません','error');
+  const plan = [];
+  latest.forEach(p=>{
+    const k = KARTES.find(x=>x.farm===p.farm && x.cow===p.cow);
+    if(!k) { plan.push({p, k:null, why:'カルテが見つからない'}); return; }
+    if(k.electronic_amount===p.amount) { plan.push({p, k, why:'すでに同じ金額'}); return; }
+    plan.push({p, k, apply:true});
+  });
+  const target = plan.filter(x=>x.apply);
+  if(!target.length) {
+    const miss = plan.filter(x=>x.why==='カルテが見つからない').length;
+    return toast(`復元できるものはありませんでした（一致${plan.length-miss}件はすでに反映済み・${miss}件はカルテなし）`);
+  }
+  const list = target.slice(0,10).map(x=>`【${x.p.farm} / ${x.p.cow}】¥${x.p.amount.toLocaleString()}${x.k.electronic_amount!==null?`（現在 ¥${x.k.electronic_amount.toLocaleString()}）`:''}`).join('\n');
+  if(!confirm(`保存履歴から${target.length}件の電子カルテ金額を復元します。\n\n${list}${target.length>10?`\n…ほか${target.length-10}件`:''}\n\nよろしいですか？`)) return;
+  let n=0;
+  target.forEach(x=>{
+    x.k.electronic_amount = x.p.amount;
+    x.k.diff = x.p.amount - x.k.paper_total;
+    x.k.closed = true;
+    touchKarte(x.k);
+    n++;
+  });
+  saveToStorage();
+  acceptCurrentCounts();
+  renderKarteList(); renderStats();
+  logSave('elec', `保存履歴から電子カルテ金額${n}件を復元`);
+  toast(`${n}件の電子カルテ金額を復元しました`,'success');
 }
 function clearSaveLog() {
   if(!confirm('保存履歴を消去しますか？（カルテやメモのデータは消えません）')) return;
