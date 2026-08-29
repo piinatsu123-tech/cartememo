@@ -343,7 +343,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v10.3</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v10.4</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -1525,6 +1525,36 @@ function updateBadge() {
   document.getElementById('pendingCount').textContent=count;
 }
 
+// ==================== 品目名の表記ゆれ吸収 ====================
+// 比較用に正規化する（全角/半角・大小文字・かなカナ・記号や空白の違いを吸収）
+function normItemName(s) {
+  return String(s||'')
+    .normalize('NFKC')                                   // 全角英数→半角、半角カナ→全角
+    .toLowerCase()
+    .replace(/[ぁ-ゖ]/g, ch=>String.fromCharCode(ch.charCodeAt(0)+0x60)) // ひらがな→カタカナ
+    .replace(/[\s・･,、．。\-‐－_/／]/g, '')              // 空白・区切り記号を除去
+    .replace(/[ｰー]/g, '');                              // 長音を無視
+}
+// AIが返した品目名をマスターの品目に対応づける。見つからなければ null
+function matchMasterItem(name) {
+  const raw = String(name||'').trim();
+  if(!raw) return null;
+  let m = MASTER.find(x=>x.name===raw);                   // 1) 完全一致
+  if(m) return m;
+  const n = normItemName(raw);
+  if(!n) return null;
+  m = MASTER.find(x=>normItemName(x.name)===n);           // 2) 正規化して一致
+  if(m) return m;
+  // 3) 部分一致（より長く一致するものを優先。短すぎる語は誤対応を避けるため除外）
+  const cands = MASTER.filter(x=>{
+    const xn = normItemName(x.name);
+    return xn.length>=2 && (xn.includes(n) || n.includes(xn));
+  });
+  if(!cands.length) return null;
+  cands.sort((a,b)=>normItemName(b.name).length - normItemName(a.name).length);
+  return cands[0];
+}
+
 // ==================== AI PARSE ====================
 async function parseMemo(memo) {
   const ak = document.getElementById('anthropicKey').value.trim();
@@ -1550,6 +1580,29 @@ ${memo.text}
   マスターリストに無い語は品目にせず、数量・単位・症状のいずれかとして扱うか無視する。
 - 「点滴1000」「留置2000」「生食1000ml」など、数字を含む語そのものがマスターリストにある場合は、
   その数字は品目名の一部であり数量ではない。マスターリストとの一致を優先する。
+
+【数量の読み取り（音声入力の誤変換対策・特に重要）】
+- 音声入力のため、数量が漢数字とアラビア数字の混在で書かれることが多い。
+  必ず「その語全体をひとつの数」として解釈すること。前半だけを読んではいけない。
+  例: 「二十5」→ 25    「十5」→ 15    「三十2」→ 32    「四十」→ 40
+      「二百5」→ 205   「百5」→ 105   「1十5」→ 15
+- 「二十5」を 20 と読むのは誤り。末尾の数字も必ず加算すること。
+- 「ベルパリン二十5 パンカル10 im1」→ ベルパリン=25, パンカル=10, im=1 が正解。
+  数量を取り違えると誤請求になるため、変換は特に慎重に行うこと。
+- 漢数字のみの場合も同様に変換する。例:「五」→5、「十」→10、「二十」→20、「百」→100。
+
+【品目名の表記ゆれ（完全一致でなくてよい）】
+- メモの品目名がマスターリストと完全一致しなくても、明らかに同じ物を指すと
+  判断できる場合はマスターリストの正式名に置き換えて出力すること。
+  出力する name は必ずマスターリストの表記にする。
+- 対応すべきゆれの例:
+  ・音声誤変換（例:「めとくろ」「メトクロプラミド」→「メトクロ」）
+  ・カタカナ/ひらがな/漢字/ローマ字の違い（例:「あいぶい」「IV」「iv」→「iv」）
+  ・省略形・語尾の違い（例:「ペニシリンG」→「ペニシリン」、「デキサメタゾン」→「デキサ」）
+  ・送り仮名や中黒・スペースの有無（例:「ビタミン K」→「ビタミンK」）
+- 部分一致で複数の候補が考えられる場合は、より長く一致する方を選ぶ
+  （例:「ウルソ粉」は「ウルソ」ではなく「ウルソ粉」）。
+- どうしてもマスターリストのどれとも判断できない場合のみ、聞こえたままの名前で出力する。
 - ownerNameは農場名・飼い主の氏名のみ。メモに明記されていない場合は必ず空文字にする。
 - 診療内容（投薬・処置）とownerNameを混同しない。判断に迷う場合は空文字にする。
 - tempは数値のみ（単位なし）。symptomは診断名・主訴を短く。`;
@@ -1564,8 +1617,9 @@ ${memo.text}
   text = text.replace(/```json\s*/g,'').replace(/```\s*/g,'').trim();
   const parsed = JSON.parse(text);
   const items = (parsed.items||[]).map(p=>{
-    const m = MASTER.find(x=>x.name===p.name);
-    return {name:p.name,qty:parseFloat(p.qty)||1,unit:p.unit||'',price:m?m.price:0,unknown:!m};
+    // 完全一致しない場合も表記ゆれを吸収してマスターに寄せる
+    const m = matchMasterItem(p.name);
+    return {name:m?m.name:p.name,qty:parseFloat(p.qty)||1,unit:p.unit||'',price:m?m.price:0,unknown:!m};
   });
   const masterNameSet = new Set(MASTER.map(m=>m.name));
   const ownerName = masterNameSet.has(parsed.ownerName) ? '' : (parsed.ownerName||'');
