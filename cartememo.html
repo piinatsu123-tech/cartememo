@@ -345,7 +345,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v11.1</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v11.2</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -370,6 +370,13 @@ input[type=checkbox]{width:auto;margin:0}
 </aside>
 
 <main>
+
+<!-- 復元モードの表示 -->
+<div id="restoreBanner" style="display:none;align-items:center;gap:10px;background:#eef4ff;border:2px solid #1a4b8a;border-radius:8px;padding:10px 14px;margin-bottom:12px">
+  <span style="font-size:18px">🔧</span>
+  <div style="flex:1;font-size:13px;color:#1a4b8a;font-weight:700">復元モード中：これ以降の確定は「復元分」として記録されます</div>
+  <button class="btn btn-ghost btn-sm" onclick="setRestoreMode(false)">終了する</button>
+</div>
 
 <!-- マスターデータ喪失の警告 -->
 <div id="masterAlert" class="master-alert" style="display:none">
@@ -443,6 +450,8 @@ input[type=checkbox]{width:auto;margin:0}
       <option value="unclosed">電子未入力のみ</option>
       <option value="open">未確定（診療中＋電子未入力）</option>
       <option value="closed">確定済のみ</option>
+      <option value="origUnconf">もともと未確定だったもの</option>
+      <option value="needRestore">確定が失われた可能性（要確認）</option>
     </select>
     <select id="karte-filter-cutoff" onchange="renderKarteList()" style="width:190px" title="請求の締め日で分けます">
       <option value="">締め日で分けない</option>
@@ -471,6 +480,8 @@ input[type=checkbox]{width:auto;margin:0}
       <option value="all">すべての確定</option>
       <option value="new">この日以降に確定した分のみ</option>
       <option value="old">この日より前に確定した分のみ</option>
+      <option value="kind-new">新規の確定のみ</option>
+      <option value="kind-restore">復元による確定のみ</option>
     </select>
     <input type="date" id="stats-since" onchange="setStatsSince(this.value)" style="width:auto;flex:none;display:none">
     <select id="stats-range" onchange="renderStats()" style="width:auto;flex:none">
@@ -496,6 +507,15 @@ input[type=checkbox]{width:auto;margin:0}
       </label>
       <p class="input-hint" style="margin-top:4px">カルテの確定が一部しか復元できていない期間で使います。オンにすると、取込データがある月はCSVの金額を採用します（カルテ側の不完全な合計で過少表示になるのを防げます）。<br>確定を入力し直した月は、オフに戻すとカルテ側の実データが使われます。</p>
       <div id="importedStatsInfo" style="font-size:12px;color:var(--text2);margin-top:8px"></div>
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer">
+          <input type="checkbox" id="restoreModeChk" onchange="setRestoreMode(this.checked)" style="width:auto">
+          🔧 復元モード（失われた確定を入力し直す間はオンにする）
+        </label>
+        <p class="input-hint" style="margin-top:4px">オンの間に確定したカルテは「復元分」として記録され、まったく新規の確定と区別できます。集計の絞り込みで分けて確認できます。</p>
+        <label class="btn btn-ghost btn-sm" style="cursor:pointer;margin-top:8px">📁 もともと未確定だったカルテを記録<input type="file" accept=".json" style="display:none" onchange="markOriginallyUnconfirmed(this)"></label>
+        <p class="input-hint" style="margin-top:4px">復旧作業を始める前にエクスポートしたJSONを選ぶと、その時点で未確定だったカルテに印が付きます。カルテ一覧の状態で「もともと未確定」として絞り込めます。</p>
+      </div>
     </div>
   </details>
 </div>
@@ -1058,6 +1078,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   detectMasterReset(!!localStorage.getItem('cm_master'));
   renderMasterAlert();
   updateSyncPill();
+  renderRestoreBanner();
   handleUrlParams();
 });
 window.addEventListener('pageshow', e => { if(e.persisted) handleUrlParams(); });
@@ -1132,7 +1153,7 @@ function switchTab(name) {
   if(name === 'stats') {
     const sc=document.getElementById('stats-scope'), si=document.getElementById('stats-since');
     if(sc) sc.value=STATS_SCOPE;
-    if(si){ si.value=STATS_SINCE; si.style.display = STATS_SCOPE==='all' ? 'none' : ''; }
+    if(si){ si.value=STATS_SINCE; si.style.display = (STATS_SCOPE==='new'||STATS_SCOPE==='old') ? '' : 'none'; }
     renderStats();
   }
   if(name === 'settings') { renderFarmDistList(); renderWatchList(); renderSaveLog(); loadSyncMemoLimit(); renderCloudSize(); renderCloudError(); }
@@ -1208,6 +1229,7 @@ function loadFromStorage() {
     IMPORT_PRIORITY = localStorage.getItem('cm_imppri')==='1';
     STATS_SCOPE = localStorage.getItem('cm_statsscope')||'all';
     STATS_SINCE = localStorage.getItem('cm_statssince')||'';
+    RESTORE_MODE = localStorage.getItem('cm_restoremode')==='1';
     const ls = localStorage.getItem('cm_lastsync'); if(ls) LAST_SYNC_AT = Number(ls)||null;
     const ak = localStorage.getItem('cm_active_karte'); if(ak) activeKarteId = ak;
     sortMemosChrono(); // 過去に崩れた並びも起動時に整列する
@@ -3753,7 +3775,7 @@ function buildKarteCard(k, isDetail) {
     <div class="karte-hdr">
       <span class="karte-title" style="display:inline-flex;align-items:center;gap:4px">【<input type="text" class="karte-title-edit" value="${esc(k.farm)}" onclick="event.stopPropagation()" onblur="updateKarteField('${k.id}','farm',this.value)" onkeydown="if(event.key==='Enter')this.blur()" title="農場名" style="width:8em"> / <input type="text" class="karte-title-edit" value="${esc(k.cow)}" onclick="event.stopPropagation()" onblur="updateKarteField('${k.id}','cow',this.value)" onkeydown="if(event.key==='Enter')this.blur()" title="牛番号" style="width:5em">】</span>
       <div style="display:flex;gap:8px;align-items:center">
-        ${(()=>{const stage=k.closed?2:k.finished?1:0;const bc=stage===2?'badge-closed':stage===1?'badge-unclosed':'badge-active';const bt=stage===2?'確定済':stage===1?'電子未入力':'診療中';return`<span class="karte-badge ${bc}">${bt}</span>`+(!k.closed?`<button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();toggleFinished('${k.id}')">${k.finished?'診療中に戻す':'終診にする'}</button>`:'');})()}
+        ${(()=>{const stage=k.closed?2:k.finished?1:0;const bc=stage===2?'badge-closed':stage===1?'badge-unclosed':'badge-active';const bt=stage===2?'確定済':stage===1?'電子未入力':'診療中';return`<span class="karte-badge ${bc}">${bt}</span>`+(k.origUnconfirmed?'<span class="karte-badge" style="color:#1a4b8a;border-color:#1a4b8a">もともと未確定</span>':'')+(k.confirmKind==='restore'?'<span class="karte-badge" style="color:#8a4b00;border-color:#e07800">復元</span>':'')+(!k.closed?`<button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();toggleFinished('${k.id}')">${k.finished?'診療中に戻す':'終診にする'}</button>`:'');})()}
         <button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();duplicateKarte('${k.id}')" title="このカルテ全体を複製して編集">⧉ カルテ複製</button>
         <button class="btn btn-danger btn-xs" onclick="event.stopPropagation();deleteKarte('${k.id}')">削除</button>
       </div>
@@ -4247,6 +4269,9 @@ function renderKarteList() {
   else if(stageF==='unclosed') list = list.filter(k=>k.finished && !k.closed);
   else if(stageF==='open')     list = list.filter(k=>!k.closed);
   else if(stageF==='closed')   list = list.filter(k=>k.closed);
+  // 復旧作業用: もともと未確定だったもの／確定が失われた可能性のあるもの
+  else if(stageF==='origUnconf')  list = list.filter(k=>k.origUnconfirmed);
+  else if(stageF==='needRestore') list = list.filter(k=>!k.closed && !k.origUnconfirmed);
   // 締め日（毎月20日）で区別する
   const cutoffF = document.getElementById('karte-filter-cutoff').value;
   if(cutoffF==='within')    list = list.filter(k=>_lastRecDay(k)>0 && _lastRecDay(k)<=CUTOFF_DAY);
@@ -4291,7 +4316,8 @@ function setElectronicAmount(id, val) {
   if(isNaN(val)||val<0) return false;
   if(k.electronic_amount===val) return false;
   k.electronic_amount=val; k.diff=val-k.paper_total; k.closed=true;
-  k.closedAt = Date.now(); // 確定した日時（復旧作業中の入力を区別するため）
+  k.closedAt = Date.now();                       // 確定した日時
+  k.confirmKind = RESTORE_MODE ? 'restore' : 'new'; // 復元による確定か、新規の確定か
   touchKarte(k);
   saveToStorage();
   logSave('elec', `【${k.farm} / ${k.cow}】電子 ¥${val.toLocaleString()}（差額 ${k.diff>=0?'+':''}${fmtAmt(k.diff)}）`);
@@ -4448,33 +4474,74 @@ function clearImportedStats() {
 }
 // 復旧作業中の確認用: 確定した日時で集計対象を絞る
 let STATS_SCOPE='all', STATS_SINCE='';
+// 復元モード: オンの間に確定したものは「復元による確定」として記録する
+let RESTORE_MODE=false;
+function setRestoreMode(on){
+  RESTORE_MODE=!!on;
+  try{localStorage.setItem('cm_restoremode',RESTORE_MODE?'1':'0');}catch(e){}
+  renderRestoreBanner();
+  const cb=document.getElementById('restoreModeChk'); if(cb) cb.checked=RESTORE_MODE;
+  toast(RESTORE_MODE?'復元モード: これ以降の確定は「復元分」として記録します':'通常モードに戻しました');
+}
+function renderRestoreBanner(){
+  const el=document.getElementById('restoreBanner'); if(!el) return;
+  el.style.display = RESTORE_MODE ? 'flex' : 'none';
+}
 function setStatsScope(v){
   STATS_SCOPE=v;
   try{localStorage.setItem('cm_statsscope',v);}catch(e){}
   const inp=document.getElementById('stats-since');
-  if(inp){ inp.style.display = v==='all' ? 'none' : '';
-    if(v!=='all' && !inp.value){ inp.value = STATS_SINCE || new Date().toISOString().slice(0,10); STATS_SINCE=inp.value; try{localStorage.setItem('cm_statssince',STATS_SINCE);}catch(e){} } }
+  const needDate = (v==='new'||v==='old');
+  if(inp){ inp.style.display = needDate ? '' : 'none';
+    if(needDate && !inp.value){ inp.value = STATS_SINCE || new Date().toISOString().slice(0,10); STATS_SINCE=inp.value; try{localStorage.setItem('cm_statssince',STATS_SINCE);}catch(e){} } }
   renderStats();
 }
 function setStatsSince(v){ STATS_SINCE=v; try{localStorage.setItem('cm_statssince',v);}catch(e){} renderStats(); }
 function _inStatsScope(k){
+  if(STATS_SCOPE==='kind-new')     return k.confirmKind==='new';
+  if(STATS_SCOPE==='kind-restore') return k.confirmKind==='restore';
   if(STATS_SCOPE==='all' || !STATS_SINCE) return true;
   const t = Number(k.closedAt)||0;
   const border = new Date(STATS_SINCE+'T00:00:00').getTime();
   // closedAt が無い＝この機能より前に確定したもの → 「以前の分」として扱う
   return STATS_SCOPE==='new' ? (t>=border) : (t<border || !t);
 }
+// バックアップから「もともと未確定だったカルテ」を特定して印を付ける
+// （復旧作業の前にエクスポートした、確定が失われていない時点のファイルを使う）
+function markOriginallyUnconfirmed(input){
+  const f=input.files&&input.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=e=>{
+    try{
+      const d=JSON.parse(e.target.result);
+      if(!Array.isArray(d.kartes)) throw new Error('カルテデータが見つかりません');
+      let marked=0, cleared=0;
+      d.kartes.forEach(ok=>{
+        const k=KARTES.find(x=>x.id===ok.id)||KARTES.find(x=>x.farm===ok.farm&&x.cow===ok.cow);
+        if(!k) return;
+        if(ok.electronic_amount==null){ if(!k.origUnconfirmed){k.origUnconfirmed=true;marked++;} }
+        else if(k.origUnconfirmed){ delete k.origUnconfirmed; cleared++; }
+      });
+      if(!marked&&!cleared) { toast('該当するカルテがありませんでした','error'); input.value=''; return; }
+      saveToStorage(); renderKarteList(); renderStats();
+      logSave('karte', `もともと未確定のカルテを${marked}件記録`);
+      alert(`このファイルの時点で未確定だったカルテに印を付けました。\n\n記録: ${marked}件${cleared?`\n解除: ${cleared}件（確定済みだったもの）`:''}\n\nカルテ一覧の状態で「もともと未確定」を選ぶと絞り込めます。`);
+    }catch(err){ toast('読み込みエラー: '+err.message,'error'); }
+    input.value='';
+  };
+  r.readAsText(f);
+}
 function renderStats() {
   const rangeN = parseInt(document.getElementById('stats-range').value);
   const closed = KARTES.filter(k=>k.closed&&k.diff!==null&&_inStatsScope(k));
   const el=document.getElementById('statsContainer');
   // 取り込んだ集計（カルテが失われた期間の補完）も対象に含める
-  const impFarms=(STATS_SCOPE==='new')?[]:Object.keys(IMPORTED_STATS); // 新規分のみの表示では取込データを含めない
+  const impFarms=(STATS_SCOPE==='new'||STATS_SCOPE.startsWith('kind-'))?[]:Object.keys(IMPORTED_STATS); // 新規分のみの表示では取込データを含めない
   const impMonths=new Set(); impFarms.forEach(f=>Object.keys(IMPORTED_STATS[f]).forEach(m=>impMonths.add(m)));
   let months=[...new Set([...closed.map(k=>k.month), ...impMonths])].filter(Boolean).sort();
   if(rangeN>0){const cutoff=monthOffset(-rangeN);months=months.filter(m=>m>=cutoff);}
   const farms=[...new Set([...closed.map(k=>k.farm), ...impFarms])].sort((a,b)=>a.localeCompare(b,'ja'));
-  if(!months.length||!farms.length){el.innerHTML=`<div class="empty-state"><div class="es-icon">📊</div>${STATS_SCOPE==='new'?esc(STATS_SINCE)+' 以降に確定したカルテはまだありません':'差額確定済みのデータがありません'}</div>`;return;}
+  if(!months.length||!farms.length){el.innerHTML=`<div class="empty-state"><div class="es-icon">📊</div>${STATS_SCOPE!=='all'?'この条件に該当するカルテはまだありません':'差額確定済みのデータがありません'}</div>`;return;}
   const tbl={}, isImp={}; farms.forEach(f=>{tbl[f]={};isImp[f]={};});
   // カルテ側を先に集計する
   closed.forEach(k=>{if(months.includes(k.month)&&farms.includes(k.farm)){
@@ -4499,9 +4566,11 @@ function renderStats() {
   const grandRange=colTotals.reduce((s,v)=>s+v,0);
   const totalCells=colTotals.map(v=>fmtCell(v)).join('');
   const totalRow=`<tr class="total-row"><td>合計</td>${totalCells}${fmtCell(grandRange,'total-col')}</tr>`;
+  const SCOPE_LABEL={'new':`🆕 ${esc(STATS_SINCE)} 以降に確定した分のみ`,'old':`🕘 ${esc(STATS_SINCE)} より前に確定した分のみ`,
+    'kind-new':'🆕 新規の確定のみ','kind-restore':'🔧 復元による確定のみ'};
   const scopeNote = STATS_SCOPE==='all' ? '' :
     `<div style="font-size:12px;font-weight:700;color:#8a4b00;background:#fff8e8;border:1px solid #e07800;border-radius:6px;padding:7px 10px;margin-bottom:8px">
-      ${STATS_SCOPE==='new'?`🆕 ${esc(STATS_SINCE)} 以降に確定した分のみ表示中（取込データは含みません）`:`🕘 ${esc(STATS_SINCE)} より前に確定した分のみ表示中`}
+      ${SCOPE_LABEL[STATS_SCOPE]||''}を表示中${STATS_SCOPE!=='old'?'（取込データは含みません）':''}
      </div>`;
   el.innerHTML=scopeNote+`<table class="stats-table"><thead><tr><th>農場名</th>${ths}<th class="total-col">合計</th></tr></thead><tbody>${rows}${totalRow}</tbody></table>`;
   const info=document.getElementById('importedStatsInfo');
