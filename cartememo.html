@@ -339,7 +339,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v10.1</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v10.2</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -504,7 +504,7 @@ input[type=checkbox]{width:auto;margin:0}
       </div>
       <label style="margin-top:8px">メモ用 Bin ID <span style="font-size:10px;font-weight:400;color:var(--text3)">（任意・メモを別枠で同期して容量不足を解消）</span></label>
       <div style="display:flex;gap:6px">
-        <input type="text" id="jsonbinMemoId" placeholder="未設定（メモも上のBinに保存）" style="font-family:'JetBrains Mono',monospace;font-size:12px" onchange="saveJsonbinSettings()">
+        <input type="text" id="jsonbinMemoId" placeholder="未設定（メモも上のBinに保存）" style="font-family:'JetBrains Mono',monospace;font-size:12px" onchange="onMemoBinIdChange()">
         <button class="btn btn-ghost btn-xs" onclick="createMemoBin()">新規作成</button>
       </div>
       <p class="input-hint" style="margin-top:4px">カルテとメモで容量を取り合う場合に設定します。「新規作成」を押すと専用の保存先が作られ、以降メモはそちらに保存されます。<b>他の端末にも同じIDを貼り付けてください。</b></p>
@@ -2093,6 +2093,9 @@ async function cloudAutoSave(key, binId, attempt) {
   const data = buildCloudPayload();
   const body = JSON.stringify(data);
   const bodySize = new Blob([body]).size;
+  // メモ用Binはメイン側の成否に関わらず先に保存する（メイン失敗でメモまで
+  // 同期されなくなるのを防ぐ）
+  const memoSaved = await saveMemoBin(key);
   try {
     const resp = await fetch(`https://api.jsonbin.io/v3/b/${binId}`, {
       method:'PUT',
@@ -2107,7 +2110,6 @@ async function cloudAutoSave(key, binId, attempt) {
     document.getElementById('cloudInfo').textContent = `最終自動保存: ${new Date().toLocaleString('ja-JP')}（メモ${memos.length}件・カルテ${KARTES.length}件・${fmtBytes(sz)}）`;
     renderCloudSize();
     if(sz > 90*1024 && !_sizeWarned) { _sizeWarned = true; toast('クラウド容量が上限に近づいています（設定タブで確認）','error'); }
-    await saveMemoBin(key);
     return true;
   } catch(e) {
     const msg = e && e.message ? e.message : '通信エラー';
@@ -2306,6 +2308,20 @@ function saveJsonbinSettings() {
 }
 // ===== メモ専用Bin（カルテと容量を取り合わないようにする） =====
 function memoBinId(){ return (localStorage.getItem('cm_jbmid')||'').trim(); }
+// IDを設定・変更したら、まず読み込む（先に保存すると他端末のメモを上書きしてしまうため）
+async function onMemoBinIdChange() {
+  saveJsonbinSettings();
+  const key=(localStorage.getItem('cm_jbk')||'').trim();
+  const id=memoBinId();
+  if(!key || !id) { renderCloudSize(); return; }
+  const before = memos.length;
+  await loadMemoBin(key);
+  _suppressAutoSave = true; saveToStorage(); _suppressAutoSave = false;
+  renderMemoQueue(); renderResultsList(); updateBadge(); renderCloudSize();
+  const added = memos.length - before;
+  toast(added>0 ? `メモ用Binから${added}件を取り込みました` : 'メモ用Binを設定しました','success');
+  scheduleCloudAutoSave();
+}
 async function createMemoBin() {
   const key=(localStorage.getItem('cm_jbk')||document.getElementById('jsonbinKey').value).trim();
   if(!key) return toast('先にAPIキーを設定してください','error');
@@ -2435,6 +2451,7 @@ async function cloudSave() {
     if(!resp.ok) throw new Error(result.message||'HTTP '+resp.status);
     if(!binId) { const newId=result.metadata.id; document.getElementById('jsonbinId').value=newId; localStorage.setItem('cm_jbid',newId); }
     saveJsonbinSettings();
+    if(memoBinId()) await saveMemoBin(key); // メモ用Binにも保存する
     document.getElementById('cloudInfo').textContent=`最終保存: ${new Date().toLocaleString('ja-JP')}（メモ${memos.length}件・カルテ${KARTES.length}件）`;
     toast('クラウドに保存しました','success');
   } catch(e) { toast('保存エラー: '+e.message,'error'); }
@@ -2464,6 +2481,7 @@ async function cloudLoad() {
     if(Array.isArray(data.templates)){const ids=new Set(TEMPLATES.map(t=>t.id));_dropDeleted('templates', data.templates, t=>t.id).forEach(t=>{if(!ids.has(t.id))TEMPLATES.push(t);});}
     if(Array.isArray(data.watch)) WATCH_ITEMS = [...new Set([...WATCH_ITEMS, ...data.watch])];
     reconcileFarms();
+    if(memoBinId()) await loadMemoBin(key); // メモ用Binからも読み込む
     saveToStorage(); saveJsonbinSettings();
     renderMemoQueue();renderResultsList();renderDict();updateBadge();
     updateFarmDatalist();updateKarteFarmFilter();renderKarteList();
