@@ -339,7 +339,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v9.9</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v10.0</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -502,6 +502,12 @@ input[type=checkbox]{width:auto;margin:0}
         <input type="text" id="jsonbinId" placeholder="初回保存後に自動入力されます" style="font-family:'JetBrains Mono',monospace;font-size:12px">
         <button class="btn btn-ghost btn-xs" onclick="copyBinId()">コピー</button>
       </div>
+      <label style="margin-top:8px">メモ用 Bin ID <span style="font-size:10px;font-weight:400;color:var(--text3)">（任意・メモを別枠で同期して容量不足を解消）</span></label>
+      <div style="display:flex;gap:6px">
+        <input type="text" id="jsonbinMemoId" placeholder="未設定（メモも上のBinに保存）" style="font-family:'JetBrains Mono',monospace;font-size:12px" onchange="saveJsonbinSettings()">
+        <button class="btn btn-ghost btn-xs" onclick="createMemoBin()">新規作成</button>
+      </div>
+      <p class="input-hint" style="margin-top:4px">カルテとメモで容量を取り合う場合に設定します。「新規作成」を押すと専用の保存先が作られ、以降メモはそちらに保存されます。<b>他の端末にも同じIDを貼り付けてください。</b></p>
       <div style="margin-top:6px">
         <button class="btn btn-ghost btn-xs" style="width:100%;justify-content:center" onclick="copyAllSettings()">📋 APIキー＋Bin IDをまとめてコピー</button>
       </div>
@@ -1927,6 +1933,8 @@ function _payloadSize(p){ try { return new Blob([JSON.stringify(p)]).size; } cat
 // メモ→古い確定済カルテの順に外し、診療中・電子未入力のカルテは必ず残す
 const NO_MEMOS = -999; // メモを1件も送らないことを表す（0は「全件」なので区別する）
 function buildCloudPayload() {
+  // メモ用Binを使う場合、メイン側にメモは載せない（容量の取り合いを避ける）
+  if(memoBinId()) { const p=_buildPayload(0, SYNC_KARTE_MONTHS, true); p.memos=[]; LAST_TRIM_NOTE=''; return p; }
   const base = [SYNC_MEMO_LIMIT, SYNC_KARTE_MONTHS];
   // メモを削りすぎないよう、古い確定済カルテの除外を先に進める
   // メモのみ同期では、カルテは触らずメモだけを絞る
@@ -2036,11 +2044,14 @@ function renderCloudSize() {
   const pct = Math.min(100, Math.round(size/LIMIT*100));
   // 自動調整後の実際の送信内容から件数を出す
   const p = buildCloudPayload();
+  const mb = memoBinId();
+  const mp = mb ? buildMemoPayload() : null;
   const syncedKartes = p.kartes.length;
-  const syncedMemos = p.memos.length;
+  const syncedMemos = mp ? mp.memos.length : p.memos.length;
   const excluded = (KARTES.length - syncedKartes) + (memos.length - syncedMemos);
   const color = pct>=90 ? '#c00' : pct>=70 ? '#e07800' : 'var(--text2)';
-  el.innerHTML = `<div style="font-size:12px;color:${color};font-weight:600">送信サイズ: ${fmtBytes(size)} / 目安上限 100 KB（${pct}%）</div>
+  const mSize = mp ? _payloadSize(mp) : 0;
+  el.innerHTML = `<div style="font-size:12px;color:${color};font-weight:600">送信サイズ: ${fmtBytes(size)} / 目安上限 100 KB（${pct}%）${mb?`　＋ メモ用Bin ${fmtBytes(mSize)}`:''}</div>
     <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:4px"><div style="height:100%;width:${pct}%;background:${pct>=90?'#c00':pct>=70?'#e07800':'#111'}"></div></div>
     <div style="font-size:11px;color:var(--text3);margin-top:4px">圧縮前 ${fmtBytes(raw)} → 圧縮後 ${fmtBytes(size)}</div>
     <div style="font-size:11px;color:var(--text3);margin-top:2px">同期対象: メモ ${syncedMemos}/${memos.length}件・カルテ ${syncedKartes}/${KARTES.length}件${excluded?` <span style="color:#e07800">（${excluded}件を除外中）</span>`:''}</div>
@@ -2092,6 +2103,7 @@ async function cloudAutoSave(key, binId, attempt) {
     document.getElementById('cloudInfo').textContent = `最終自動保存: ${new Date().toLocaleString('ja-JP')}（メモ${memos.length}件・カルテ${KARTES.length}件・${fmtBytes(sz)}）`;
     renderCloudSize();
     if(sz > 90*1024 && !_sizeWarned) { _sizeWarned = true; toast('クラウド容量が上限に近づいています（設定タブで確認）','error'); }
+    await saveMemoBin(key);
     return true;
   } catch(e) {
     const msg = e && e.message ? e.message : '通信エラー';
@@ -2224,6 +2236,8 @@ async function cloudAutoLoad() {
     renderMemoQueue(); renderResultsList(); renderDict(); updateBadge();
     updateFarmDatalist(); updateKarteFarmFilter(); renderKarteList();
     refreshMasterUI();
+    await loadMemoBin(key);
+    renderMemoQueue(); renderResultsList(); updateBadge();
     setSyncStatus('synced');
     document.getElementById('cloudInfo').textContent = `起動時読み込み: ${new Date().toLocaleString('ja-JP')}（メモ${memos.length}件・カルテ${KARTES.length}件）`;
   } catch(e) {
@@ -2279,10 +2293,82 @@ function loadJsonbinSettings() {
     const key=localStorage.getItem('cm_jbk')||'', id=localStorage.getItem('cm_jbid')||'';
     if(key) document.getElementById('jsonbinKey').value=key;
     if(id) document.getElementById('jsonbinId').value=id;
+    const mid=localStorage.getItem('cm_jbmid')||'';
+    if(mid) document.getElementById('jsonbinMemoId').value=mid;
   } catch(e){}
 }
 function saveJsonbinSettings() {
-  try { localStorage.setItem('cm_jbk',document.getElementById('jsonbinKey').value.trim()); localStorage.setItem('cm_jbid',document.getElementById('jsonbinId').value.trim()); } catch(e){}
+  try { localStorage.setItem('cm_jbk',document.getElementById('jsonbinKey').value.trim()); localStorage.setItem('cm_jbid',document.getElementById('jsonbinId').value.trim()); localStorage.setItem('cm_jbmid',document.getElementById('jsonbinMemoId').value.trim()); } catch(e){}
+}
+// ===== メモ専用Bin（カルテと容量を取り合わないようにする） =====
+function memoBinId(){ return (localStorage.getItem('cm_jbmid')||'').trim(); }
+async function createMemoBin() {
+  const key=(localStorage.getItem('cm_jbk')||document.getElementById('jsonbinKey').value).trim();
+  if(!key) return toast('先にAPIキーを設定してください','error');
+  if(memoBinId() && !confirm('すでにメモ用Binが設定されています。新しく作り直しますか？')) return;
+  try {
+    const resp=await fetch('https://api.jsonbin.io/v3/b',{method:'POST',
+      headers:{'Content-Type':'application/json','X-Master-Key':key,'X-Bin-Name':'CarteMemo-Memos','X-Bin-Private':'true'},
+      body:JSON.stringify(buildMemoPayload())});
+    const r=await resp.json();
+    if(!resp.ok) throw new Error(r.message||'HTTP '+resp.status);
+    const id=r.metadata.id;
+    document.getElementById('jsonbinMemoId').value=id;
+    saveJsonbinSettings();
+    renderCloudSize();
+    toast('メモ用Binを作成しました。他の端末にもこのIDを設定してください','success');
+  } catch(e){ toast('作成に失敗しました: '+e.message,'error'); }
+}
+// メモ用Binに送る内容
+function buildMemoPayload() {
+  let ms = memos;
+  if(SYNC_MEMO_LIMIT > 0 && memos.length > SYNC_MEMO_LIMIT) ms = memos.slice(-SYNC_MEMO_LIMIT);
+  let p = { version:2, savedAt:new Date().toISOString(), memos: ms.map(m=>_slimMemo(m,false)), deleted:DELETED };
+  // 上限を超える場合は保存済みメモの原文→古いメモの順に減らす
+  if(_payloadSize(p) > CLOUD_SIZE_LIMIT) {
+    p.memos = ms.map(m=>_slimMemo(m,true));
+    for(const lim of [200,100,50,20]) {
+      if(_payloadSize(p) <= CLOUD_SIZE_LIMIT) break;
+      p.memos = memos.slice(-lim).map(m=>_slimMemo(m,true));
+    }
+  }
+  return p;
+}
+async function saveMemoBin(key) {
+  const id = memoBinId(); if(!id) return true;
+  try {
+    const resp=await fetch(`https://api.jsonbin.io/v3/b/${id}`,{method:'PUT',
+      headers:{'Content-Type':'application/json','X-Master-Key':key},body:JSON.stringify(buildMemoPayload())});
+    if(!resp.ok){let m='HTTP '+resp.status;try{const r=await resp.json();m=r.message||m;}catch(e){}throw new Error(m);}
+    return true;
+  } catch(e){ console.warn('Memo bin save failed:', e.message); _syncErrMsg='メモ用Binの保存失敗: '+e.message; renderCloudError(); return false; }
+}
+async function loadMemoBin(key) {
+  const id = memoBinId(); if(!id) return;
+  try {
+    const resp=await fetch(`https://api.jsonbin.io/v3/b/${id}/latest`,{headers:{'X-Master-Key':key}});
+    const r=await resp.json();
+    if(!resp.ok) throw new Error(r.message||'HTTP '+resp.status);
+    const d=r.record||{};
+    if(d.deleted&&typeof d.deleted==='object'){
+      Object.keys(d.deleted).forEach(kind=>{ if(!DELETED[kind])DELETED[kind]={};
+        Object.keys(d.deleted[kind]||{}).forEach(k2=>{DELETED[kind][k2]=Math.max(DELETED[kind][k2]||0,d.deleted[kind][k2]||0);}); });
+      pruneDeletions();
+      memos = memos.filter(m=>!isDeleted('memos', m.id));
+    }
+    if(!Array.isArray(d.memos)) return;
+    d.memos.forEach(_normMemo);
+    const cloudMemos=_dropDeleted('memos', d.memos, m=>m.id);
+    const score=m=>(m.status==='done'?2:m.status==='processing'?1:0)+((m.items&&m.items.length)?1:0);
+    const localMap=new Map(memos.map(m=>[m.id,m]));
+    const ids=new Set(cloudMemos.map(m=>m.id));
+    const merged=cloudMemos.map(cm=>{ const lm=localMap.get(cm.id); if(!lm) return cm;
+      const best=score(lm)>=score(cm)?lm:cm;
+      return {...best, karte_saved: best.karte_saved||lm.karte_saved||cm.karte_saved}; });
+    memos.forEach(lm=>{ if(!ids.has(lm.id)) merged.push(lm); });
+    memos = merged;
+    sortMemosChrono();
+  } catch(e){ console.warn('Memo bin load failed:', e.message); }
 }
 function copyBinId() {
   const id=document.getElementById('jsonbinId').value.trim();
