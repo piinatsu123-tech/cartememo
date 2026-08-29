@@ -345,7 +345,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v10.6</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v10.7</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -524,6 +524,14 @@ input[type=checkbox]{width:auto;margin:0}
         <button class="btn btn-ghost btn-sm" onclick="cloudLoad()">↓ クラウドから読み込む</button>
       </div>
       <div id="cloudInfo" style="font-size:11px;color:var(--text3);margin-top:8px"></div>
+      <details style="margin-top:10px;border:1px solid var(--border);border-radius:6px">
+        <summary style="cursor:pointer;font-size:14px;font-weight:700;color:var(--text2);padding:10px 12px;user-select:none">🕘 過去バージョンから復元</summary>
+        <div style="padding:0 12px 12px">
+          <p class="input-hint" style="margin-bottom:8px">クラウドは保存のたびに過去の版を残しています。上書きで失われたカルテや確定（電子カルテ金額）を取り戻せる場合があります。<br><b>現在のカルテの診療記録は消しません</b>。不足分の追加と、失われた確定の書き戻しだけを行います。</p>
+          <button class="btn btn-primary btn-sm" style="width:100%;justify-content:center" onclick="browseCloudVersions()">過去バージョンを調べる</button>
+          <div id="verList" class="tpl-list" style="margin-top:8px;max-height:340px"></div>
+        </div>
+      </details>
       <div id="cloudError" style="display:none;margin-top:8px;background:#fff4f4;border:1px solid #c00;border-radius:6px;padding:10px">
         <div style="font-size:12px;font-weight:700;color:#c00;margin-bottom:4px">⚠️ 最後の同期エラー</div>
         <div id="cloudErrorMsg" style="font-size:12px;color:var(--text2);word-break:break-all;font-family:'JetBrains Mono',monospace"></div>
@@ -2533,6 +2541,90 @@ async function loadMemoBin(key) {
     MEMO_BIN_STATUS='読み込み失敗: '+(e.message||'通信エラー');
     _syncErrMsg='メモ用Binの読み込み失敗: '+e.message; renderCloudError(); renderCloudSize(); }
 }
+// ===== クラウドの過去バージョンから復元する =====
+// jsonbin.io は保存のたびに版を残しているため、上書きで失われたデータを
+// 取り戻せる場合がある
+let _verCache = [];
+async function _fetchBinVersion(key, binId, v) {
+  const resp = await fetch(`https://api.jsonbin.io/v3/b/${binId}/${v}`, {headers:{'X-Master-Key':key}});
+  if(!resp.ok) { let m='HTTP '+resp.status; try{const r=await resp.json();m=r.message||m;}catch(e){} throw new Error(m); }
+  const r = await resp.json();
+  return r.record || {};
+}
+function _summarizeRecord(d) {
+  const ks = Array.isArray(d.kartes)?d.kartes:[];
+  const confirmed = ks.filter(k=>k && k.closed && k.electronic_amount!=null);
+  const sum = confirmed.reduce((s,k)=>s+((k.electronic_amount||0)-(k.paper_total||0)),0);
+  return { kartes:ks.length, confirmed:confirmed.length, memos:(d.memos||[]).length,
+           master:(d.master||[]).length, savedAt:d.savedAt||'', diffSum:sum };
+}
+async function browseCloudVersions() {
+  const key=(localStorage.getItem('cm_jbk')||'').trim();
+  const binId=(localStorage.getItem('cm_jbid')||'').trim();
+  if(!key||!binId) return toast('クラウド同期が設定されていません','error');
+  const el=document.getElementById('verList');
+  el.innerHTML='<div class="tpl-empty">確認中…（少し時間がかかります）</div>';
+  _verCache=[];
+  // 版番号は新しい方から順に遡って取得する（一覧APIが使えない場合に備える）
+  let cur=null;
+  try {
+    const resp=await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`,{headers:{'X-Master-Key':key}});
+    const r=await resp.json();
+    if(!resp.ok) throw new Error(r.message||'HTTP '+resp.status);
+    cur=(r.metadata&&(r.metadata.versionNumber??r.metadata.version));
+    if(cur==null) cur=30; // 取得できない場合は仮に30版まで遡る
+  } catch(e){ el.innerHTML=`<div class="tpl-empty" style="color:#c00">最新版の取得に失敗: ${esc(e.message)}</div>`; return; }
+  const rows=[];
+  for(let v=cur; v>=Math.max(0,cur-29); v--) {
+    try {
+      const d=await _fetchBinVersion(key,binId,v);
+      const s=_summarizeRecord(d);
+      _verCache.push({v, d, s});
+      rows.push({v, s});
+    } catch(e){ /* その版が無い場合は飛ばす */ }
+  }
+  if(!rows.length) { el.innerHTML='<div class="tpl-empty">過去バージョンを取得できませんでした（保存されていない可能性があります）</div>'; return; }
+  el.innerHTML = rows.map(({v,s})=>{
+    const when = s.savedAt ? new Date(s.savedAt).toLocaleString('ja-JP') : '(日時不明)';
+    const hi = s.confirmed>0;
+    return `<div class="tpl-item" style="${hi?'border-color:#1a8a4a;background:#f2fbf5':''}">
+      <div class="tpl-main">
+        <div class="tpl-name">版 ${v}　<span style="font-weight:400;font-size:12px;color:var(--text3)">${esc(when)}</span></div>
+        <div class="tpl-content">カルテ${s.kartes}件・<b style="color:${hi?'#1a8a4a':'#c00'}">確定済 ${s.confirmed}件</b>・メモ${s.memos}件・薬価${s.master}件${s.confirmed?`　差額計 ${s.diffSum>=0?'+':''}${fmtAmt(s.diffSum)}`:''}</div>
+      </div>
+      <button class="tpl-insert" onclick="restoreFromVersion(${v})">この版から復元</button>
+    </div>`;
+  }).join('');
+  toast(`${rows.length}件の過去バージョンを取得しました`,'success');
+}
+// 選んだ版のカルテ内容を現在のデータに取り込む（不足分の追加と確定の復元）
+async function restoreFromVersion(v) {
+  const hit=_verCache.find(x=>x.v===v); if(!hit) return;
+  const d=hit.d, s=hit.s;
+  if(!confirm(`版 ${v} から復元します。\n\nカルテ${s.kartes}件・確定済${s.confirmed}件\n\n・この版にしか無いカルテを追加します\n・確定（電子カルテ金額）が失われているカルテに書き戻します\n・現在のカルテの診療記録は消しません\n\nよろしいですか？`)) return;
+  const ks=Array.isArray(d.kartes)?d.kartes:[];
+  ks.forEach(_normKarte);
+  let added=0, restored=0;
+  ks.forEach(ok=>{
+    let k=KARTES.find(x=>x.id===ok.id) || KARTES.find(x=>x.farm===ok.farm && x.cow===ok.cow);
+    if(!k) { KARTES.push(ok); touchKarte(ok); added++; return; }
+    // 確定が失われている場合のみ書き戻す（現在の内容は壊さない）
+    if(k.electronic_amount==null && ok.electronic_amount!=null) {
+      k.electronic_amount=ok.electronic_amount;
+      k.diff=ok.electronic_amount-(k.paper_total||0);
+      k.closed=true; touchKarte(k); restored++;
+    }
+  });
+  if(!added && !restored) return toast('この版から追加・復元できるものはありませんでした');
+  _recalcAllMonths();
+  saveToStorage();
+  acceptCurrentCounts();
+  updateKarteFarmFilter(); renderKarteList(); renderStats();
+  logSave('karte', `クラウドの版${v}から復元（カルテ追加${added}件・確定復元${restored}件）`);
+  alert(`復元しました。\n\nカルテ追加: ${added}件\n確定（電子カルテ金額）の復元: ${restored}件\n\n集計ページで差額が戻っているか確認してください。`);
+}
+function _recalcAllMonths(){ KARTES.forEach(k=>{ const d=(k.records||[]).map(r=>r.date).filter(Boolean).sort(); if(d.length) k.month=d[0].slice(0,7); }); }
+
 // クラウドから薬価（マスター品目）を復元する。
 // 削除記録があると通常の同期では戻らないため、ここで明示的に取り消す
 async function restoreMasterFromCloud() {
