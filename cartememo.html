@@ -345,7 +345,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v10.9</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v11.0</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <div class="hdr-pill"><div class="dot" id="apiDot"></div><span id="apiStatus">未設定</span></div>
@@ -484,6 +484,11 @@ input[type=checkbox]{width:auto;margin:0}
         <label class="btn btn-primary btn-sm" style="cursor:pointer">CSVを選択<input type="file" accept=".csv,.txt" style="display:none" onchange="importStatsCsv(this)"></label>
         <button class="btn btn-ghost btn-sm" onclick="clearImportedStats()">取込データを消去</button>
       </div>
+      <label style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer">
+        <input type="checkbox" id="importPriority" onchange="setImportPriority(this.checked)" style="width:auto">
+        取込データを優先する
+      </label>
+      <p class="input-hint" style="margin-top:4px">カルテの確定が一部しか復元できていない期間で使います。オンにすると、取込データがある月はCSVの金額を採用します（カルテ側の不完全な合計で過少表示になるのを防げます）。<br>確定を入力し直した月は、オフに戻すとカルテ側の実データが使われます。</p>
       <div id="importedStatsInfo" style="font-size:12px;color:var(--text2);margin-top:8px"></div>
     </div>
   </details>
@@ -1189,6 +1194,7 @@ function loadFromStorage() {
     pruneDeletions();
     const sl = localStorage.getItem('cm_savelog'); if(sl) SAVE_LOG = JSON.parse(sl);
     const ist = localStorage.getItem('cm_impstats'); if(ist) IMPORTED_STATS = JSON.parse(ist);
+    IMPORT_PRIORITY = localStorage.getItem('cm_imppri')==='1';
     const ls = localStorage.getItem('cm_lastsync'); if(ls) LAST_SYNC_AT = Number(ls)||null;
     const ak = localStorage.getItem('cm_active_karte'); if(ak) activeKarteId = ak;
     sortMemosChrono(); // 過去に崩れた並びも起動時に整列する
@@ -4355,6 +4361,13 @@ function duplicateKarte(id){
 // カルテが失われた期間の集計を、以前エクスポートしたCSVから補う
 // 形式: {"農場名": {"YYYY-MM": 差額, ...}, ...}
 let IMPORTED_STATS = {};
+let IMPORT_PRIORITY = false; // 取込データをカルテより優先するか
+function setImportPriority(on){
+  IMPORT_PRIORITY = !!on;
+  try { localStorage.setItem('cm_imppri', IMPORT_PRIORITY?'1':'0'); } catch(e){}
+  renderStats();
+  toast(IMPORT_PRIORITY?'取込データを優先します':'カルテの実データを優先します');
+}
 function _csvSplitLine(line) {
   const out=[]; let cur='', q=false;
   for(let i=0;i<line.length;i++){
@@ -4430,12 +4443,17 @@ function renderStats() {
   const farms=[...new Set([...closed.map(k=>k.farm), ...impFarms])].sort((a,b)=>a.localeCompare(b,'ja'));
   if(!months.length||!farms.length){el.innerHTML='<div class="empty-state"><div class="es-icon">📊</div>差額確定済みのデータがありません</div>';return;}
   const tbl={}, isImp={}; farms.forEach(f=>{tbl[f]={};isImp[f]={};});
-  // 先に取込データを入れ、カルテ側があれば上書きする（カルテ優先）
-  impFarms.forEach(f=>Object.keys(IMPORTED_STATS[f]).forEach(m=>{
-    if(months.includes(m)){ tbl[f][m]=IMPORTED_STATS[f][m]; isImp[f][m]=true; } }));
+  // カルテ側を先に集計する
   closed.forEach(k=>{if(months.includes(k.month)&&farms.includes(k.farm)){
-    if(isImp[k.farm][k.month]){ tbl[k.farm][k.month]=0; isImp[k.farm][k.month]=false; }
     tbl[k.farm][k.month]=(tbl[k.farm][k.month]||0)+k.diff; }});
+  // 取込データの扱い: 既定はカルテ優先（カルテに無い月だけ補う）。
+  // IMPORT_PRIORITY が有効なら、取込データがある月は取込側を採用する
+  // （カルテの確定が一部しか復元できていない期間で正しい合計を出すため）
+  impFarms.forEach(f=>Object.keys(IMPORTED_STATS[f]).forEach(m=>{
+    if(!months.includes(m)) return;
+    const hasKarte = tbl[f][m]!==undefined;
+    if(!hasKarte || IMPORT_PRIORITY){ tbl[f][m]=IMPORTED_STATS[f][m]; isImp[f][m]=true; }
+  }));
   const ths=months.map(m=>{const[y,mo]=m.split('-');return`<th>${y}年${parseInt(mo)}月</th>`;}).join('');
   const fmtCell=(v,extra='')=>{const cls=v>0?'diff-pos':v<0?'diff-neg':'';return`<td class="${cls} ${extra}">${(v>=0?'+':'')+fmtAmt(v)}</td>`;};
   const rows=farms.map(f=>{
@@ -4451,7 +4469,8 @@ function renderStats() {
   el.innerHTML=`<table class="stats-table"><thead><tr><th>農場名</th>${ths}<th class="total-col">合計</th></tr></thead><tbody>${rows}${totalRow}</tbody></table>`;
   const info=document.getElementById('importedStatsInfo');
   if(info){ const n=impFarms.reduce((s,f)=>s+Object.keys(IMPORTED_STATS[f]).length,0);
-    info.textContent = n ? `取込済み: ${impFarms.length}農場・${n}件（表内に「（取込）」と表示されます）` : '取込データはありません'; }
+    info.textContent = n ? `取込済み: ${impFarms.length}農場・${n}件（表内に「（取込）」と表示されます）${IMPORT_PRIORITY?' ／ 取込データを優先中':''}` : '取込データはありません'; }
+  const pri=document.getElementById('importPriority'); if(pri) pri.checked=IMPORT_PRIORITY;
 }
 function monthOffset(n){const d=new Date();d.setMonth(d.getMonth()+n);return d.toISOString().slice(0,7);}
 function exportCSV() {
