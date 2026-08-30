@@ -356,7 +356,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v11.7</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v11.8</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -4477,8 +4477,6 @@ let ADJUSTMENTS = {};
 // 現在のカルテ合計と取込額の差を調整額として確定する
 function applyImportAsAdjustment() {
   const impFarms=Object.keys(IMPORTED_STATS);
-  const adjFarms=Object.keys(ADJUSTMENTS);
-  const adjMonths=new Set(); adjFarms.forEach(f=>Object.keys(ADJUSTMENTS[f]).forEach(m=>adjMonths.add(m)));
   if(!impFarms.length) return toast('取込データがありません','error');
   // 現在のカルテ側の合計を農場・月ごとに集計（調整前の実データ）
   const cur={};
@@ -4654,6 +4652,8 @@ function renderStats() {
   // 照合は絞り込みに関わらず常に行うため、農場一覧は常に取込側も含める
   const impFarms=Object.keys(IMPORTED_STATS);
   const impMonths=new Set(); impFarms.forEach(f=>Object.keys(IMPORTED_STATS[f]).forEach(m=>impMonths.add(m)));
+  const adjFarms=Object.keys(ADJUSTMENTS);
+  const adjMonths=new Set(); adjFarms.forEach(f=>Object.keys(ADJUSTMENTS[f]).forEach(m=>adjMonths.add(m)));
   let months=[...new Set([...closed.map(k=>k.month), ...impMonths, ...adjMonths])].filter(Boolean).sort();
   if(rangeN>0){const cutoff=monthOffset(-rangeN);months=months.filter(m=>m>=cutoff);}
   const farms=[...new Set([...closed.map(k=>k.farm), ...impFarms, ...adjFarms])].sort((a,b)=>a.localeCompare(b,'ja'));
