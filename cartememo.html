@@ -356,7 +356,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v11.8</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v11.9</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -1677,6 +1677,77 @@ function normItemName(s) {
     .replace(/[\s・･,、．。\-‐－_/／]/g, '')              // 空白・区切り記号を除去
     .replace(/[ｰー]/g, '');                              // 長音を無視
 }
+// 漢数字まじりの数量を数値にする（例: 二十5→25、十5→15、五→5）
+function parseQtyToken(s) {
+  let t=String(s||'').normalize('NFKC').trim();
+  if(t==='') return null;
+  if(/^\d+(\.\d+)?$/.test(t)) return parseFloat(t);       // 純粋な数字
+  const K={'〇':0,'零':0,'一':1,'二':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9};
+  // 「二十5」「十5」「三十2」「二百5」などを解釈する
+  const m=t.match(/^([一二三四五六七八九]?)([十百])(\d+|[一二三四五六七八九])?$/);
+  if(m){
+    const base=m[2]==='十'?10:100;
+    const head=m[1]===''?1:K[m[1]];
+    let tail=0;
+    if(m[3]!==undefined) tail = /^\d+$/.test(m[3]) ? parseInt(m[3]) : K[m[3]];
+    return head*base+tail;
+  }
+  if(/^[〇零一二三四五六七八九]+$/.test(t)){                 // 漢数字のみ
+    let n=0; for(const ch of t) n=n*10+K[ch];
+    return n;
+  }
+  const num=t.match(/\d+(\.\d+)?/);                        // 単位混じり（5ml など）
+  return num?parseFloat(num[0]):null;
+}
+// メモ本文から「品目名→数量」を直接読み取る。
+// AIが数量を取り違える（隣の品目の数量とずれる）ことがあるため、本文を根拠に補正する
+function extractQtyFromText(text) {
+  const src=String(text||'').normalize('NFKC');
+  // マスター品目を長い名前から順に探す（「ウルソ粉」を「ウルソ」と誤認しないため）
+  const names=MASTER.map(m=>m.name).sort((a,b)=>b.length-a.length);
+  const found=[]; const used=new Array(src.length).fill(false);
+  names.forEach(name=>{
+    const n=normItemName(name);
+    if(n.length<2) return;
+    // 正規化した本文上で位置を探すため、元の文字位置を保ちながら走査する
+    let i=0;
+    while(i<src.length){
+      const idx=src.toLowerCase().indexOf(name.toLowerCase(), i);
+      if(idx<0) break;
+      const end=idx+name.length;
+      // 直前が数字の場合は数量の単位（「10ml」等）なので品目として扱わない
+      const prevCh = idx>0 ? src[idx-1] : '';
+      if(!used.slice(idx,end).some(Boolean) && !/[0-9.]/.test(prevCh)){
+        for(let j=idx;j<end;j++) used[j]=true;
+        // 直後に続く数量を読む（記号や空白は読み飛ばす）
+        const rest=src.slice(end);
+        const qm=rest.match(/^[\s:：=＝]*([0-9０-９一二三四五六七八九十百.．]+)/);
+        const qty=qm?parseQtyToken(qm[1]):null;
+        found.push({name, pos:idx, qty});
+      }
+      i=idx+1;
+    }
+  });
+  found.sort((a,b)=>a.pos-b.pos);
+  return found;
+}
+// AIが返した品目リストの数量を、本文から読み取った数量で補正する
+function fixQtyByText(items, text) {
+  const fromText=extractQtyFromText(text);
+  if(!fromText.length) return {items, fixed:0};
+  // 同じ品目が複数回出る場合は合計する
+  const map=new Map();
+  fromText.forEach(x=>{ if(x.qty==null) return;
+    map.set(x.name, (map.get(x.name)||0)+x.qty); });
+  let fixed=0;
+  const out=items.map(it=>{
+    if(!map.has(it.name)) return it;
+    const q=map.get(it.name);
+    if(q!==it.qty){ fixed++; return {...it, qty:q}; }
+    return it;
+  });
+  return {items:out, fixed};
+}
 // AIが返した品目名をマスターの品目に対応づける。見つからなければ null
 function matchMasterItem(name) {
   const raw = String(name||'').trim();
@@ -1758,11 +1829,15 @@ ${memo.text}
   let text = (data.candidates[0].content.parts||[]).map(b=>b.text||'').join('');
   text = text.replace(/```json\s*/g,'').replace(/```\s*/g,'').trim();
   const parsed = JSON.parse(text);
-  const items = (parsed.items||[]).map(p=>{
+  let items = (parsed.items||[]).map(p=>{
     // 完全一致しない場合も表記ゆれを吸収してマスターに寄せる
     const m = matchMasterItem(p.name);
     return {name:m?m.name:p.name,qty:parseFloat(p.qty)||1,unit:p.unit||'',price:m?m.price:0,unknown:!m};
   });
+  // 数量がずれることがあるため、メモ本文から読み取った数量で補正する
+  const fix = fixQtyByText(items, memo.text);
+  items = fix.items;
+  if(fix.fixed) console.info(`数量をメモ本文から補正: ${fix.fixed}件`);
   const masterNameSet = new Set(MASTER.map(m=>m.name));
   const ownerName = masterNameSet.has(parsed.ownerName) ? '' : (parsed.ownerName||'');
   return {patientNo:parsed.patientNo||'',ownerName,temp:parsed.temp||'',symptom:parsed.symptom||'',items};
