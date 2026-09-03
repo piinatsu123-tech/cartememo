@@ -356,7 +356,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v11.9</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v12.0</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -416,8 +416,10 @@ input[type=checkbox]{width:auto;margin:0}
     <textarea id="newMemoText" placeholder="iPhoneで音声入力→URLでインポート、またはここに直接貼り付け"></textarea>
     <div style="display:flex;gap:8px;margin-top:10px">
       <button class="btn btn-ghost btn-sm" onclick="pasteFromClipboard()" style="white-space:nowrap;flex-shrink:0">📋 貼り付け</button>
+      <button class="btn btn-ghost btn-sm" onclick="checkQtyReading()" style="white-space:nowrap;flex-shrink:0" title="このメモから品目と数量がどう読み取られるか確認">🔍 数量確認</button>
       <button class="btn btn-primary btn-full" onclick="addMemo()">＋ メモを保存</button>
     </div>
+    <div id="qtyCheckResult" style="display:none;margin-top:8px;font-size:13px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px"></div>
   </div>
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
     <div style="font-size:13px;font-weight:700;color:#111">保存済みメモ <span id="queueCount" style="font-size:12px;font-weight:400;color:var(--text3)">0件</span></div>
@@ -1703,33 +1705,36 @@ function parseQtyToken(s) {
 // AIが数量を取り違える（隣の品目の数量とずれる）ことがあるため、本文を根拠に補正する
 function extractQtyFromText(text) {
   const src=String(text||'').normalize('NFKC');
+  // ひらがな表記でも照合できるよう、文字数を保ったまま正規化した本文を作る
+  const cmpSrc=src.toLowerCase().replace(/[ぁ-ゖ]/g, ch=>String.fromCharCode(ch.charCodeAt(0)+0x60));
   // マスター品目を長い名前から順に探す（「ウルソ粉」を「ウルソ」と誤認しないため）
   const names=MASTER.map(m=>m.name).sort((a,b)=>b.length-a.length);
   const found=[]; const used=new Array(src.length).fill(false);
   names.forEach(name=>{
     const n=normItemName(name);
     if(n.length<2) return;
-    // 正規化した本文上で位置を探すため、元の文字位置を保ちながら走査する
+    const key=name.toLowerCase().replace(/[ぁ-ゖ]/g, ch=>String.fromCharCode(ch.charCodeAt(0)+0x60));
     let i=0;
     while(i<src.length){
-      const idx=src.toLowerCase().indexOf(name.toLowerCase(), i);
+      const idx=cmpSrc.indexOf(key, i);
       if(idx<0) break;
-      const end=idx+name.length;
+      const end=idx+key.length;
       // 直前が数字の場合は数量の単位（「10ml」等）なので品目として扱わない
       const prevCh = idx>0 ? src[idx-1] : '';
       if(!used.slice(idx,end).some(Boolean) && !/[0-9.]/.test(prevCh)){
         for(let j=idx;j<end;j++) used[j]=true;
         // 直後に続く数量を読む（記号や空白は読み飛ばす）
         const rest=src.slice(end);
-        const qm=rest.match(/^[\s:：=＝]*([0-9０-９一二三四五六七八九十百.．]+)/);
+        // 「を5」「×5」「は5」など、間に助詞や記号が入っても数量を読む
+        const qm=rest.match(/^[\s:：=＝・,、×✕xX*＊をはが]*([0-9０-９一二三四五六七八九十百.．]+)/);
         const qty=qm?parseQtyToken(qm[1]):null;
         found.push({name, pos:idx, qty});
       }
       i=idx+1;
     }
   });
-  found.sort((a,b)=>a.pos-b.pos);
-  return found;
+  // 数量を読み取れなかったものは単位などの誤検出なので除く
+  return found.filter(x=>x.qty!=null).sort((a,b)=>a.pos-b.pos);
 }
 // AIが返した品目リストの数量を、本文から読み取った数量で補正する
 function fixQtyByText(items, text) {
@@ -1747,6 +1752,25 @@ function fixQtyByText(items, text) {
     return it;
   });
   return {items:out, fixed};
+}
+// メモから品目と数量がどう読み取られるかを画面で確認する
+function checkQtyReading() {
+  const text=document.getElementById('newMemoText').value.trim();
+  const el=document.getElementById('qtyCheckResult');
+  if(!text){ el.style.display='none'; return toast('メモを入力してください','error'); }
+  const found=extractQtyFromText(text);
+  el.style.display='';
+  if(!found.length){
+    el.innerHTML=`<div style="color:#c00;font-weight:700">品目を読み取れませんでした</div>
+      <div style="color:var(--text2);margin-top:4px">マスターに登録された品目名が本文に見つかりません。品目名の表記をご確認ください。</div>`;
+    return;
+  }
+  el.innerHTML=`<div style="font-weight:700;margin-bottom:6px">本文からの読み取り結果（${found.length}件）</div>`+
+    found.map(x=>`<div style="display:flex;gap:8px;padding:3px 0;border-bottom:1px solid var(--border)">
+      <span style="flex:1;font-weight:600">${esc(x.name)}</span>
+      <span style="font-family:'JetBrains Mono',monospace;color:${x.qty==null?'#c00':'#1a8a4a'};font-weight:700">${x.qty==null?'数量なし→1':x.qty}</span>
+    </div>`).join('')+
+    `<div style="color:var(--text3);font-size:11px;margin-top:6px">この数量でAIの結果を補正します。違う場合は本文の書き方を教えてください。</div>`;
 }
 // AIが返した品目名をマスターの品目に対応づける。見つからなければ null
 function matchMasterItem(name) {
