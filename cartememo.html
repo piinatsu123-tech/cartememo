@@ -356,7 +356,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v12.2</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v12.3</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -1707,32 +1707,46 @@ function parseQtyToken(s) {
 }
 // メモ本文から「品目名→数量」を直接読み取る。
 // AIが数量を取り違える（隣の品目の数量とずれる）ことがあるため、本文を根拠に補正する
+// 本文を normItemName と同じ規則で正規化しつつ、元の文字位置の対応表を作る。
+// これで「点滴 4000」のように途中に空白が入っていても「点滴4000」と照合できる
+function buildNormIndex(src) {
+  const s=String(src||'');
+  let norm=''; const map=[];
+  for(let i=0;i<s.length;i++){
+    const t=s[i].normalize('NFKC').toLowerCase()
+      .replace(/[ぁ-ゖ]/g, ch=>String.fromCharCode(ch.charCodeAt(0)+0x60))
+      .replace(/[\s・･,、．。\-‐－_/／ｰー]/g, '');
+    for(const ch of t){ norm+=ch; map.push(i); }
+  }
+  return {norm, map};
+}
 function extractQtyFromText(text) {
-  const src=String(text||'').normalize('NFKC');
-  // ひらがな表記でも照合できるよう、文字数を保ったまま正規化した本文を作る
-  const cmpSrc=src.toLowerCase().replace(/[ぁ-ゖ]/g, ch=>String.fromCharCode(ch.charCodeAt(0)+0x60));
+  const src=String(text||'');
+  const {norm, map}=buildNormIndex(src);
   // マスター品目を長い名前から順に探す（「ウルソ粉」を「ウルソ」と誤認しないため）
-  const names=MASTER.map(m=>m.name).sort((a,b)=>b.length-a.length);
-  const found=[]; const used=new Array(src.length).fill(false);
+  const names=MASTER.map(m=>m.name).sort((a,b)=>normItemName(b).length-normItemName(a).length);
+  const found=[]; const used=new Array(norm.length).fill(false);
   names.forEach(name=>{
-    const n=normItemName(name);
-    if(n.length<2) return;
-    const key=name.toLowerCase().replace(/[ぁ-ゖ]/g, ch=>String.fromCharCode(ch.charCodeAt(0)+0x60));
+    const key=normItemName(name);
+    if(key.length<2) return;
     let i=0;
-    while(i<src.length){
-      const idx=cmpSrc.indexOf(key, i);
+    while(i<norm.length){
+      const idx=norm.indexOf(key, i);
       if(idx<0) break;
       const end=idx+key.length;
-      // 直前が数字の場合は数量の単位（「10ml」等）なので品目として扱わない
-      const prevCh = idx>0 ? src[idx-1] : '';
-      if(!used.slice(idx,end).some(Boolean) && !/[0-9.]/.test(prevCh)){
+      // 「品目 数量品目 数量…」と続けて書かれるため、直前の数字は前の品目の数量とみなす。
+      // ただし「20ml」のように数字で始まる品目名は、長い数字の一部を切り出しただけの
+      // 誤検出になりうるので、直前が数字なら採らない
+      const prevN = idx>0 ? norm[idx-1] : '';
+      const sliced = /^[0-9]/.test(key) && /[0-9.]/.test(prevN);
+      if(!used.slice(idx,end).some(Boolean) && !sliced){
         for(let j=idx;j<end;j++) used[j]=true;
         // 直後に続く数量を読む（記号や空白は読み飛ばす）
-        const rest=src.slice(end);
+        const rest=src.slice(end<map.length?map[end]:src.length).normalize('NFKC');
         // 「を5」「×5」「は5」など、間に助詞や記号が入っても数量を読む
         const qm=rest.match(/^[\s:：=＝・,、×✕xX*＊をはが]*([0-9０-９一二三四五六七八九十百.．]+)/);
         const qty=qm?parseQtyToken(qm[1]):null;
-        found.push({name, pos:idx, qty});
+        found.push({name, pos:map[idx], qty});
       }
       i=idx+1;
     }
@@ -1772,9 +1786,24 @@ function showQtyReading(memoId) {
     `【メモ本文】\n${m.text}\n\n`+
     `【本文からの読み取り】\n${read}\n\n`+
     `【現在の計算内容】\n${cur}\n\n`+
-    (diff.length ? `⚠️ 食い違い:\n${diff.join('\n')}\n\n「🔄 再解析」で修正できます。`
+    (diff.length ? `⚠️ 食い違い:\n${diff.join('\n')}\n\n下の「本文の数量に直す」で修正できます。`
                  : (found.length ? '一致しています。' : '本文から品目を読み取れないため補正が効きません。\nこのメモの書き方をお知らせください。'));
-  showReport('🔍 数量の読み取り確認', report);
+  const actions = diff.length
+    ? [{label:`✏️ 本文の数量に直す（${diff.length}件）`, fn:()=>applyQtyFromText(memoId)}]
+    : [];
+  showReport('🔍 数量の読み取り確認', report, actions);
+}
+// 本文から読み取った数量をメモの計算内容に反映する
+function applyQtyFromText(memoId) {
+  const m = memos.find(x=>x.id===memoId);
+  if(!m) return toast('メモが見つかりません','error');
+  const fix = fixQtyByText(m.items||[], m.text);
+  if(!fix.fixed) return toast('直すところはありません','success');
+  m.items = fix.items;
+  saveToStorage();
+  logSave('memo', `数量を本文から補正（${m.ownerName||'農場名なし'} ${fix.fixed}件）`);
+  renderMemoQueue(); renderResultsList();
+  toast(`${fix.fixed}件の数量を直しました`,'success');
 }
 // 問い合わせ用に状況をまとめてコピーできるようにする
 function copyDiagnostics() {
@@ -1798,12 +1827,13 @@ function copyDiagnostics() {
   showReport('📋 診断情報', lines.join('\n'));
 }
 // 内容をコピーできる形で表示する（alertではコピーできないため）
-function showReport(title, text) {
+function showReport(title, text, actions) {
   const ov=document.createElement('div');
   ov.className='dk-fallback-overlay';
   ov.innerHTML=`<div class="dk-fallback-box">
     <div style="font-weight:700;font-size:15px">${esc(title)}</div>
     <textarea readonly style="min-height:220px"></textarea>
+    ${(actions||[]).map((a,i)=>`<button class="btn btn-primary" style="min-height:44px;font-size:15px" data-rp-act="${i}">${esc(a.label)}</button>`).join('')}
     <div style="display:flex;gap:8px">
       <button class="btn btn-primary" style="flex:1;min-height:44px;font-size:15px" id="rpCopyBtn">📋 コピー</button>
       <button class="btn btn-ghost" style="min-height:44px;font-size:15px" onclick="this.closest('.dk-fallback-overlay').remove()">閉じる</button>
@@ -1814,6 +1844,9 @@ function showReport(title, text) {
   document.body.appendChild(ov);
   const ta=ov.querySelector('textarea');
   ta.value=text;
+  ov.querySelectorAll('[data-rp-act]').forEach(b=>{
+    b.onclick=()=>{ ov.remove(); actions[+b.dataset.rpAct].fn(); };
+  });
   ov.querySelector('#rpCopyBtn').onclick=async()=>{
     const ok=await copyToClipboard(text);
     if(ok) toast('コピーしました','success');
