@@ -356,7 +356,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v12.0</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v12.1</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -1654,6 +1654,7 @@ function renderMemoQueue() {
       ${(m.patientNo||m.ownerName)?`<div class="mc-patient">🐮 ${m.patientNo?'['+m.patientNo+'] ':''}${m.ownerName||''}</div>`:''}
       <div class="mc-text">${m.text}</div>
       <div class="mc-actions">
+        <button class="btn btn-ghost btn-xs" onclick="showQtyReading('${m.id}')" title="このメモから数量がどう読み取られるか確認">🔍 数量確認</button>
         <button class="btn btn-ghost btn-xs" onclick="deleteMemo('${m.id}')">削除</button>
         ${m.status==='pending'?`<button class="btn btn-primary btn-xs" onclick="processSingle('${m.id}')">この1件を解析</button>`:''}
         ${m.status==='done'?`<button class="btn btn-ghost btn-xs" onclick="switchTab('calc')">結果を見る →</button>`:''}
@@ -1752,6 +1753,25 @@ function fixQtyByText(items, text) {
     return it;
   });
   return {items:out, fixed};
+}
+// 保存済みのメモから読み取り結果を確認する（解析後でも確認できる）
+function showQtyReading(memoId) {
+  const m = memos.find(x=>x.id===memoId);
+  if(!m) return toast('メモが見つかりません','error');
+  const found = extractQtyFromText(m.text);
+  const cur = (m.items||[]).map(it=>`${it.name}=${it.qty}`).join(', ') || '(品目なし)';
+  const read = found.length ? found.map(x=>`${x.name}=${x.qty}`).join(', ') : '(読み取れませんでした)';
+  // 食い違いがあれば示す
+  const map = new Map(); found.forEach(x=>map.set(x.name,(map.get(x.name)||0)+x.qty));
+  const diff = (m.items||[]).filter(it=>map.has(it.name)&&map.get(it.name)!==it.qty)
+    .map(it=>`  ${it.name}: 現在${it.qty} → 本文では${map.get(it.name)}`);
+  alert(
+    `【メモ本文】\n${m.text}\n\n`+
+    `【本文からの読み取り】\n${read}\n\n`+
+    `【現在の計算内容】\n${cur}\n\n`+
+    (diff.length ? `⚠️ 食い違い:\n${diff.join('\n')}\n\n「🔄 再解析」で修正できます。`
+                 : (found.length ? '一致しています。' : '本文から品目を読み取れないため補正が効きません。\nこのメモの書き方をお知らせください。'))
+  );
 }
 // メモから品目と数量がどう読み取られるかを画面で確認する
 function checkQtyReading() {
@@ -1988,6 +2008,7 @@ function renderResultsList() {
           <button class="btn btn-ghost btn-sm" onclick="toggleRcMenu('${m.id}',event)">⋯</button>
           <div class="rc-menu" id="rc-menu-${m.id}">
             <button onclick="closeAllRcMenus();openTemplateForMemo('${m.id}')">💊 定型パターンに保存</button>
+            <button onclick="closeAllRcMenus();showQtyReading('${m.id}')">🔍 数量の読み取りを確認</button>
             <button onclick="closeAllRcMenus();reparse('${m.id}')">🔄 再解析</button>
           </div>
         </div>
