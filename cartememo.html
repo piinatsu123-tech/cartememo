@@ -356,7 +356,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v12.1</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v12.2</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -596,7 +596,10 @@ input[type=checkbox]{width:auto;margin:0}
       <div id="cloudError" style="display:none;margin-top:8px;background:#fff4f4;border:1px solid #c00;border-radius:6px;padding:10px">
         <div style="font-size:12px;font-weight:700;color:#c00;margin-bottom:4px">⚠️ 最後の同期エラー</div>
         <div id="cloudErrorMsg" style="font-size:12px;color:var(--text2);word-break:break-all;font-family:'JetBrains Mono',monospace"></div>
-        <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="cloudSyncNow()">↻ 今すぐ再送信</button>
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="cloudSyncNow()">↻ 今すぐ再送信</button>
+          <button class="btn btn-ghost btn-sm" onclick="copyDiagnostics()">📋 エラー内容をコピー</button>
+        </div>
       </div>
       <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
         <div id="cloudSizeInfo"></div>
@@ -1765,13 +1768,57 @@ function showQtyReading(memoId) {
   const map = new Map(); found.forEach(x=>map.set(x.name,(map.get(x.name)||0)+x.qty));
   const diff = (m.items||[]).filter(it=>map.has(it.name)&&map.get(it.name)!==it.qty)
     .map(it=>`  ${it.name}: 現在${it.qty} → 本文では${map.get(it.name)}`);
-  alert(
+  const report =
     `【メモ本文】\n${m.text}\n\n`+
     `【本文からの読み取り】\n${read}\n\n`+
     `【現在の計算内容】\n${cur}\n\n`+
     (diff.length ? `⚠️ 食い違い:\n${diff.join('\n')}\n\n「🔄 再解析」で修正できます。`
-                 : (found.length ? '一致しています。' : '本文から品目を読み取れないため補正が効きません。\nこのメモの書き方をお知らせください。'))
-  );
+                 : (found.length ? '一致しています。' : '本文から品目を読み取れないため補正が効きません。\nこのメモの書き方をお知らせください。'));
+  showReport('🔍 数量の読み取り確認', report);
+}
+// 問い合わせ用に状況をまとめてコピーできるようにする
+function copyDiagnostics() {
+  let size=0; try { size=cloudPayloadSize(); } catch(e){}
+  const lines=[
+    `CarteMemo 診断情報`,
+    `日時: ${new Date().toLocaleString('ja-JP')}`,
+    `バージョン: ${(document.querySelector('header span')||{}).textContent||''}`,
+    ``,
+    `カルテ: ${KARTES.length}件（確定済 ${KARTES.filter(k=>k.closed).length}件）`,
+    `メモ: ${memos.length}件`,
+    `薬価: ${MASTER.length}件`,
+    `送信サイズ: ${fmtBytes(size)}`,
+    `メモ用Bin: ${memoBinId()?'設定あり':'未設定'}${MEMO_BIN_STATUS?' / '+MEMO_BIN_STATUS:''}`,
+    `メモのみ同期: ${MEMO_ONLY_SYNC?'オン':'オフ'}`,
+    `同期状態: ${_syncState}${PENDING_CHANGES?` / 未保存${PENDING_CHANGES}件`:''}`,
+    ``,
+    `最後の同期エラー:`,
+    _syncErrMsg || '(なし)',
+  ];
+  showReport('📋 診断情報', lines.join('\n'));
+}
+// 内容をコピーできる形で表示する（alertではコピーできないため）
+function showReport(title, text) {
+  const ov=document.createElement('div');
+  ov.className='dk-fallback-overlay';
+  ov.innerHTML=`<div class="dk-fallback-box">
+    <div style="font-weight:700;font-size:15px">${esc(title)}</div>
+    <textarea readonly style="min-height:220px"></textarea>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" style="flex:1;min-height:44px;font-size:15px" id="rpCopyBtn">📋 コピー</button>
+      <button class="btn btn-ghost" style="min-height:44px;font-size:15px" onclick="this.closest('.dk-fallback-overlay').remove()">閉じる</button>
+    </div>
+    <div style="font-size:11px;color:var(--text3)">コピーできない場合は、上の枠内を長押し／ドラッグで選択してコピーしてください。</div>
+  </div>`;
+  ov.addEventListener('click', e=>{ if(e.target===ov) ov.remove(); });
+  document.body.appendChild(ov);
+  const ta=ov.querySelector('textarea');
+  ta.value=text;
+  ov.querySelector('#rpCopyBtn').onclick=async()=>{
+    const ok=await copyToClipboard(text);
+    if(ok) toast('コピーしました','success');
+    else { ta.focus(); ta.select(); toast('枠内を選択してコピーしてください','error'); }
+  };
 }
 // メモから品目と数量がどう読み取られるかを画面で確認する
 function checkQtyReading() {
@@ -2669,10 +2716,10 @@ async function testMemoBin() {
     const ok=await saveMemoBin(key);
     MEMO_BIN_STATUS=`確認OK ${new Date().toLocaleTimeString('ja-JP')}／クラウドに${n}件`;
     renderCloudSize();
-    alert(`メモ用Binに接続できました。\n\nBin ID: ${id}\nクラウド上のメモ: ${n}件\nこの端末のメモ: ${memos.length}件\n書き込み: ${ok?'成功':'失敗'}\n\n他の端末にも同じBin IDが設定されているか確認してください。`);
+    showReport('✅ メモ用Binの接続確認', `メモ用Binに接続できました。\n\nBin ID: ${id}\nクラウド上のメモ: ${n}件\nこの端末のメモ: ${memos.length}件\n書き込み: ${ok?'成功':'失敗'}\n\n他の端末にも同じBin IDが設定されているか確認してください。`);
   } catch(e){
     MEMO_BIN_STATUS='接続失敗: '+e.message; renderCloudSize();
-    alert(`メモ用Binに接続できませんでした。\n\nBin ID: ${id}\nエラー: ${e.message}\n\nIDが正しいか、APIキーが同じアカウントのものかを確認してください。`);
+    showReport('⚠️ メモ用Binの接続確認', `メモ用Binに接続できませんでした。\n\nBin ID: ${id}\nエラー: ${e.message}\n\nIDが正しいか、APIキーが同じアカウントのものかを確認してください。`);
   }
 }
 // IDを設定・変更したら、まず読み込む（先に保存すると他端末のメモを上書きしてしまうため）
