@@ -356,7 +356,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v12.3</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v12.4</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -1238,6 +1238,10 @@ function saveToStorage() {
     localStorage.setItem('cm_templates', JSON.stringify(TEMPLATES));
     localStorage.setItem('cm_watch', JSON.stringify(WATCH_ITEMS));
     localStorage.setItem('cm_deleted', JSON.stringify(DELETED));
+    ledgerSyncFromKartes();                 // 確定した差額を台帳に反映してから保存する
+    localStorage.setItem('cm_ledger', JSON.stringify(LEDGER));
+    localStorage.setItem('cm_adjust', JSON.stringify(ADJUSTMENTS));
+    localStorage.setItem('cm_adjustat', String(ADJUST_AT||0));
   } catch(e){}
   saveMasterMeta();
   if(!_suppressAutoSave) { PENDING_CHANGES++; updateSyncPill(); scheduleCloudAutoSave(); }
@@ -1260,6 +1264,9 @@ function loadFromStorage() {
     const ist = localStorage.getItem('cm_impstats'); if(ist) IMPORTED_STATS = JSON.parse(ist);
     IMPORT_PRIORITY = localStorage.getItem('cm_imppri')==='1';
     const adj = localStorage.getItem('cm_adjust'); if(adj) ADJUSTMENTS = JSON.parse(adj);
+    ADJUST_AT = Number(localStorage.getItem('cm_adjustat'))||0;
+    const lg = localStorage.getItem('cm_ledger'); if(lg) LEDGER = JSON.parse(lg);
+    ledgerSyncFromKartes();
     STATS_SCOPE = localStorage.getItem('cm_statsscope')||'all';
     STATS_SINCE = localStorage.getItem('cm_statssince')||'';
     RESTORE_MODE = localStorage.getItem('cm_restoremode')==='1';
@@ -1816,6 +1823,7 @@ function copyDiagnostics() {
     `カルテ: ${KARTES.length}件（確定済 ${KARTES.filter(k=>k.closed).length}件）`,
     `メモ: ${memos.length}件`,
     `薬価: ${MASTER.length}件`,
+    `集計台帳: ${Object.keys(LEDGER).filter(id=>LEDGER[id].d!=null).length}件（${fmtBytes(JSON.stringify(_slimLedger()).length)}）`,
     `送信サイズ: ${fmtBytes(size)}`,
     `メモ用Bin: ${memoBinId()?'設定あり':'未設定'}${MEMO_BIN_STATUS?' / '+MEMO_BIN_STATUS:''}`,
     `メモのみ同期: ${MEMO_ONLY_SYNC?'オン':'オフ'}`,
@@ -2315,7 +2323,7 @@ function _buildPayload(memoLimit, karteMonths, stripSavedText) {
       // 読み込み時に省略フィールドが復元されているため、送信時は圧縮し直す
       kartes: _cloudKartesSnapshot.map(_slimKarte),
       farms:FARMS, master:MASTER, farmDist:FARM_DIST, templates:TEMPLATES, watch:WATCH_ITEMS,
-      deleted:DELETED
+      deleted:DELETED, ledger:_slimLedger(), adjust:{v:ADJUSTMENTS, at:ADJUST_AT}
     };
   }
   if(karteMonths === 0) ks = KARTES;
@@ -2338,7 +2346,9 @@ function _buildPayload(memoLimit, karteMonths, stripSavedText) {
     dictWords:DICT_WORDS, convPairs,
     kartes: ks.map(_slimKarte),
     farms:FARMS, master:MASTER, farmDist:FARM_DIST, templates:TEMPLATES, watch:WATCH_ITEMS,
-    deleted:DELETED
+    deleted:DELETED,
+    // 台帳と調整額は絞り込みの対象外。カルテを同期から外しても集計は全端末で揃う
+    ledger:_slimLedger(), adjust:{v:ADJUSTMENTS, at:ADJUST_AT}
   };
 }
 function _payloadSize(p){ try { return new Blob([JSON.stringify(p)]).size; } catch(e){ return JSON.stringify(p).length; } }
@@ -2659,6 +2669,12 @@ async function cloudAutoLoad() {
       TEMPLATES = [...ct2, ...localOnlyTpl];
     }
     if(Array.isArray(data.watch)) WATCH_ITEMS = [...new Set([...data.watch, ...WATCH_ITEMS])].filter(n=>!isDeleted('watch', n));
+    // 差額集計の台帳を取り込む（他端末で確定した金額をここで受け取る）
+    if(data.ledger) mergeLedger(_normLedger(data.ledger));
+    // 調整額は端末ごとに分かれると合計が食い違うため、後から変更された方に揃える
+    if(data.adjust && data.adjust.v && (Number(data.adjust.at)||0) > ADJUST_AT) {
+      ADJUSTMENTS = data.adjust.v; ADJUST_AT = Number(data.adjust.at)||0;
+    }
     _suppressAutoSave = true;
     saveToStorage(); // ローカルにも反映（クラウド再送信はしない）
     _suppressAutoSave = false;
@@ -2666,6 +2682,7 @@ async function cloudAutoLoad() {
     reconcileFarms();
     renderMemoQueue(); renderResultsList(); renderDict(); updateBadge();
     updateFarmDatalist(); updateKarteFarmFilter(); renderKarteList();
+    try { renderStats(); } catch(e){}   // 他端末の確定を受け取った直後に集計へ反映する
     refreshMasterUI();
     await loadMemoBin(key);
     renderMemoQueue(); renderResultsList(); updateBadge();
@@ -3073,7 +3090,8 @@ function updateBackupBtn() {
   btn.title=`最終バックアップ: ${new Date(last).toLocaleString('ja-JP')}\n押すとJSONを保存します`;
 }
 function exportData() {
-  const data={version:2,exportedAt:new Date().toISOString(),memos,dictWords:DICT_WORDS,convPairs,kartes:KARTES,farms:FARMS,master:MASTER,farmDist:FARM_DIST,templates:TEMPLATES,watch:WATCH_ITEMS};
+  ledgerSyncFromKartes();
+  const data={version:2,exportedAt:new Date().toISOString(),memos,dictWords:DICT_WORDS,convPairs,kartes:KARTES,farms:FARMS,master:MASTER,farmDist:FARM_DIST,templates:TEMPLATES,watch:WATCH_ITEMS,ledger:LEDGER,adjust:{v:ADJUSTMENTS,at:ADJUST_AT}};
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
   a.download=`cartememo_${new Date().toISOString().slice(0,10)}.json`;a.click();
@@ -3120,9 +3138,15 @@ function importData(input) {
       if(data.farmDist&&typeof data.farmDist==='object'){Object.keys(data.farmDist).forEach(f=>{if(FARM_DIST[f]==null)FARM_DIST[f]=data.farmDist[f];});}
       if(Array.isArray(data.templates)){const ids=new Set(TEMPLATES.map(t=>t.id));_dropDeleted('templates', data.templates, t=>t.id).forEach(t=>{if(!ids.has(t.id))TEMPLATES.push(t);});}
       if(Array.isArray(data.watch)) WATCH_ITEMS = [...new Set([...WATCH_ITEMS, ...data.watch])];
+      // 差額集計の台帳と調整額も復元する
+      if(data.ledger) mergeLedger(data.ledger.e ? _normLedger(data.ledger) : data.ledger);
+      if(data.adjust && data.adjust.v && (Number(data.adjust.at)||0) > ADJUST_AT) {
+        ADJUSTMENTS = data.adjust.v; ADJUST_AT = Number(data.adjust.at)||0;
+      }
       reconcileFarms();
       saveToStorage();renderMemoQueue();renderResultsList();renderDict();updateBadge();
       updateFarmDatalist();updateKarteFarmFilter();renderKarteList();
+      try { renderStats(); } catch(e){}
       if(restoredElec) logSave('elec', `バックアップから確定（電子カルテ金額）${restoredElec}件を復元`);
       toast(`メモ${newMemos.length}件・カルテ${newKartes}件を追加${restoredElec?`／確定${restoredElec}件を復元`:''}しました`,'success');
     } catch(err){toast('読み込みエラー: '+err.message,'error');}
@@ -4250,6 +4274,93 @@ function _dropDeleted(kind, arr, keyFn) {
   return (arr||[]).filter(x=>!isDeleted(kind, keyFn(x)));
 }
 
+// ==================== 差額集計の台帳 ====================
+// カルテ本体は容量対策で同期対象から外れることがあり（古い確定済みを除外する等）、
+// そうすると確定した金額は確定した端末にしか残らず、集計が端末ごとに分かれてしまう。
+// 確定した差額だけを小さな台帳にして必ず同期し、集計はこの台帳を正とする。
+// { カルテID: {f:農場, m:'YYYY-MM', d:差額, t:確定日時, k:確定種別, u:更新日時} }
+let LEDGER = {};
+// 手元のカルテの確定状態を台帳に反映する。
+// 他端末で後から確定されたものを古い値で上書きしないよう、更新時刻で判定する
+function ledgerSyncFromKartes() {
+  let changed = false;
+  KARTES.forEach(kt=>{
+    const cur = LEDGER[kt.id];
+    const e = {
+      f: kt.farm||'', m: kt.month||'',
+      d: (kt.closed && kt.diff!=null) ? kt.diff : null,
+      t: Number(kt.closedAt)||0, k: kt.confirmKind||'',
+      u: Number(kt.updatedAt)||Date.now()
+    };
+    if(e.d===null) return;             // 未確定は載せない。確定の取り消しは ledgerClear で明示的に行う
+    if(cur && (Number(cur.u)||0) > e.u) return;           // 他端末の新しい確定を残す
+    if(cur && cur.f===e.f && cur.m===e.m && cur.d===e.d && cur.t===e.t && cur.k===e.k) return;
+    LEDGER[kt.id] = e; changed = true;
+  });
+  Object.keys(LEDGER).forEach(id=>{                       // 削除されたカルテは台帳からも消す
+    if(isDeleted('kartes', id)) { delete LEDGER[id]; changed = true; }
+  });
+  return changed;
+}
+// 確定を取り消したことを台帳に記録する（同期で他の端末にも伝わる）。
+// 同期のマージでうっかり金額が消えないよう、取り消しは明示操作のときだけ行う
+function ledgerClear(id) {
+  if(!LEDGER[id]) return;
+  LEDGER[id] = {...LEDGER[id], d:null, t:0, k:'', u:Date.now()};
+}
+// 送信用に縮める（農場名は使い回し、日時は秒単位、月は数値）
+function _slimLedger() {
+  const farms = []; const fi = n => { let i = farms.indexOf(n); if(i<0){ i = farms.length; farms.push(n); } return i; };
+  const e = [];
+  Object.keys(LEDGER).forEach(id=>{
+    if(isDeleted('kartes', id)) return;
+    const x = LEDGER[id];
+    e.push([id, fi(x.f||''), Number(String(x.m||'').replace('-',''))||0,
+            x.d==null?null:x.d, Math.round((Number(x.t)||0)/1000),
+            x.k==='restore'?1:(x.k==='new'?0:-1), Math.round((Number(x.u)||0)/1000)]);
+  });
+  return {f:farms, e};
+}
+function _normLedger(sl) {
+  const out = {};
+  if(!sl || !Array.isArray(sl.e)) return out;
+  const farms = sl.f||[];
+  sl.e.forEach(a=>{
+    const ym = String(a[2]||'');
+    out[a[0]] = {
+      f: farms[a[1]]||'', m: ym.length===6 ? ym.slice(0,4)+'-'+ym.slice(4) : '',
+      d: a[3]==null?null:a[3], t: (Number(a[4])||0)*1000,
+      k: a[5]===1?'restore':(a[5]===0?'new':''), u: (Number(a[6])||0)*1000
+    };
+  });
+  return out;
+}
+// 台帳をマージする（カルテIDごとに、後から更新された方を採用）
+function mergeLedger(remote) {
+  let n = 0;
+  Object.keys(remote||{}).forEach(id=>{
+    if(isDeleted('kartes', id)) return;
+    const r = remote[id], l = LEDGER[id];
+    if(!l || (Number(r.u)||0) > (Number(l.u)||0)) { LEDGER[id] = r; n++; }
+  });
+  return n;
+}
+// 集計の対象行。台帳を正とし、台帳に無いものだけ手元のカルテから補う
+function statsRows() {
+  const rows = [], seen = new Set();
+  Object.keys(LEDGER).forEach(id=>{
+    const x = LEDGER[id];
+    if(x.d==null || !x.m || isDeleted('kartes', id)) return;
+    seen.add(id);
+    rows.push({id, farm:x.f, month:x.m, diff:x.d, closedAt:x.t, confirmKind:x.k});
+  });
+  KARTES.forEach(k=>{
+    if(seen.has(k.id) || !k.closed || k.diff==null) return;
+    rows.push({id:k.id, farm:k.farm, month:k.month, diff:k.diff, closedAt:k.closedAt, confirmKind:k.confirmKind});
+  });
+  return rows;
+}
+
 // ===== 保存状態の可視化 =====
 let PENDING_CHANGES = 0;   // クラウド未送信の変更件数
 let LAST_SYNC_AT = null;   // 最終同期時刻
@@ -4577,7 +4688,8 @@ function setElectronicAmount(id, val) {
   if(val===null) {
     if(k.electronic_amount===null) return false;
     k.electronic_amount=null; k.diff=null; k.closed=false; touchKarte(k);
-    saveToStorage(); renderKarteList();
+    ledgerClear(id);
+    saveToStorage(); renderKarteList(); try { renderStats(); } catch(e){}
     toast('電子カルテ金額をクリアしました');
     return true;
   }
@@ -4590,6 +4702,7 @@ function setElectronicAmount(id, val) {
   saveToStorage();
   logSave('elec', `【${k.farm} / ${k.cow}】電子 ¥${val.toLocaleString()}（差額 ${k.diff>=0?'+':''}${fmtAmt(k.diff)}）`);
   renderKarteList();
+  try { renderStats(); } catch(e){}
   setTimeout(()=>flashSaved(document.getElementById('elec-'+id)), 0);
   toast(`差額: ${k.diff>=0?'+':''}${fmtAmt(k.diff)}`, k.diff<0?'error':'success');
   return true;
@@ -4674,13 +4787,14 @@ let IMPORT_PRIORITY = false; // 取込データをカルテより優先するか
 // 消えたカルテの分を固定の調整額として保持する {農場:{YYYY-MM:金額}}
 // 表示は「カルテ合計 + 調整額」となるため、以降に確定した分は正しく加算される
 let ADJUSTMENTS = {};
+let ADJUST_AT = 0;   // 調整額を最後に変更した時刻（同期で新しい方に揃えるため）
 // 現在のカルテ合計と取込額の差を調整額として確定する
 function applyImportAsAdjustment() {
   const impFarms=Object.keys(IMPORTED_STATS);
   if(!impFarms.length) return toast('取込データがありません','error');
   // 現在のカルテ側の合計を農場・月ごとに集計（調整前の実データ）
   const cur={};
-  KARTES.filter(k=>k.closed&&k.diff!==null).forEach(k=>{
+  statsRows().forEach(k=>{
     if(!k.farm||!k.month) return;
     if(!cur[k.farm]) cur[k.farm]={};
     cur[k.farm][k.month]=(cur[k.farm][k.month]||0)+k.diff;
@@ -4699,7 +4813,9 @@ function applyImportAsAdjustment() {
   if(!confirm(`消えたカルテの分を調整額として確定します。\n\n${plan.length}件の農場・月が対象:\n${list}${plan.length>10?`\n…ほか${plan.length-10}件`:''}\n\n確定後、集計は取込額と一致します。\n以降に新しく確定した分は正しく加算されます。\n\nよろしいですか？`)) return;
   plan.forEach(x=>{ if(!ADJUSTMENTS[x.farm]) ADJUSTMENTS[x.farm]={};
     ADJUSTMENTS[x.farm][x.month]=(ADJUSTMENTS[x.farm][x.month]||0)+x.adj; });
-  try { localStorage.setItem('cm_adjust', JSON.stringify(ADJUSTMENTS)); } catch(e){}
+  ADJUST_AT = Date.now();
+  try { localStorage.setItem('cm_adjust', JSON.stringify(ADJUSTMENTS)); localStorage.setItem('cm_adjustat', String(ADJUST_AT)); } catch(e){}
+  saveToStorage();   // 調整額を他の端末にも同期する
   // 調整を確定したので取込データと優先設定は不要になる
   IMPORTED_STATS={}; IMPORT_PRIORITY=false;
   try { localStorage.setItem('cm_impstats','{}'); localStorage.setItem('cm_imppri','0'); } catch(e){}
@@ -4710,8 +4826,9 @@ function applyImportAsAdjustment() {
 function clearAdjustments() {
   if(!Object.keys(ADJUSTMENTS).length) return toast('調整額はありません');
   if(!confirm('調整額をすべて取り消しますか？（カルテには影響しません）')) return;
-  ADJUSTMENTS={};
-  try { localStorage.setItem('cm_adjust','{}'); } catch(e){}
+  ADJUSTMENTS={}; ADJUST_AT = Date.now();
+  try { localStorage.setItem('cm_adjust','{}'); localStorage.setItem('cm_adjustat', String(ADJUST_AT)); } catch(e){}
+  saveToStorage();   // 取り消しも他の端末に反映する
   renderStats(); toast('調整額を取り消しました');
 }
 function setImportPriority(on){
@@ -4844,7 +4961,8 @@ function markOriginallyUnconfirmed(input){
 }
 function renderStats() {
   const rangeN = parseInt(document.getElementById('stats-range').value);
-  const closed = KARTES.filter(k=>k.closed&&k.diff!==null&&_inStatsScope(k));
+  // 台帳を正とする（他端末で確定した分も、カルテ本体が手元に無くても集計に入る）
+  const closed = statsRows().filter(_inStatsScope);
   const el=document.getElementById('statsContainer');
   // 取り込んだ集計（カルテが失われた期間の補完）も対象に含める
   // 表に取込データを合成するかどうか（新規/種別の絞り込み時は合成しない）
@@ -4953,7 +5071,7 @@ function renderStats() {
 function monthOffset(n){const d=new Date();d.setMonth(d.getMonth()+n);return d.toISOString().slice(0,7);}
 function exportCSV() {
   const rangeN=parseInt(document.getElementById('stats-range').value);
-  const closed=KARTES.filter(k=>k.closed&&k.diff!==null);
+  const closed=statsRows();
   let months=[...new Set(closed.map(k=>k.month))].sort();
   if(rangeN>0){const cutoff=monthOffset(-rangeN);months=months.filter(m=>m>=cutoff);}
   const farms=[...new Set(closed.map(k=>k.farm))].sort((a,b)=>a.localeCompare(b,'ja'));
