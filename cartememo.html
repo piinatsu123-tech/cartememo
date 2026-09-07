@@ -323,6 +323,9 @@ input[type=checkbox]{width:auto;margin:0}
 .dkb-tool-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .dkb-tool-label{font-size:12px;font-weight:700;color:var(--text2);width:56px;flex-shrink:0}
 .dkb-tool-row input{padding:7px 8px;font-size:14px;border:1px solid var(--border2);border-radius:5px}
+.dkb-range{background:var(--surface);border:1px solid var(--border2);border-radius:6px;padding:8px}
+.dkb-target{font-size:11px;font-weight:700;margin:6px 0 0 62px}
+.dkb-hit{outline:2px solid #e07800;outline-offset:-2px}
 .dkb-save{display:flex;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
 .dk-edit{flex-shrink:0;background:none;border:none;cursor:pointer;font-size:14px;padding:2px 4px;color:var(--text3)}
 .dk-edit:hover{color:#111}
@@ -356,7 +359,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v12.4</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v12.5</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -989,19 +992,29 @@ input[type=checkbox]{width:auto;margin:0}
     <details class="dkb-tools">
       <summary>🔧 まとめて置き換え</summary>
       <div class="dkb-tools-body">
+        <div class="dkb-range">
+          <div class="dkb-tool-row">
+            <span class="dkb-tool-label">対象日</span>
+            <input type="date" id="dkb-from" onchange="dkbUpdateCount()" style="flex:1;min-width:105px">
+            <span style="color:var(--text3);font-size:12px">〜</span>
+            <input type="date" id="dkb-to" onchange="dkbUpdateCount()" style="flex:1;min-width:105px">
+            <button type="button" class="btn btn-ghost btn-xs" onclick="dkbClearRange()">全期間</button>
+          </div>
+          <div id="dkb-targetcount" class="dkb-target"></div>
+        </div>
         <div class="dkb-tool-row">
           <span class="dkb-tool-label">日付</span>
-          <button type="button" class="btn btn-ghost btn-xs" onclick="dkbShiftDates(-1)">全て −1日</button>
-          <button type="button" class="btn btn-ghost btn-xs" onclick="dkbShiftDates(1)">全て ＋1日</button>
+          <button type="button" class="btn btn-ghost btn-xs" onclick="dkbShiftDates(-1)">−1日</button>
+          <button type="button" class="btn btn-ghost btn-xs" onclick="dkbShiftDates(1)">＋1日</button>
         </div>
         <div class="dkb-tool-row">
           <span class="dkb-tool-label">開始日</span>
           <input type="date" id="dkb-startdate" style="flex:1;min-width:110px">
-          <button type="button" class="btn btn-ghost btn-xs" onclick="dkbSetStartDate()">1行目をこの日にしてずらす</button>
+          <button type="button" class="btn btn-ghost btn-xs" onclick="dkbSetStartDate()">対象の1行目をこの日にしてずらす</button>
         </div>
         <div class="dkb-tool-row">
           <span class="dkb-tool-label">往診先</span>
-          <input type="text" id="dkb-bulk-dest" placeholder="全行の往診先" style="flex:1;min-width:100px">
+          <input type="text" id="dkb-bulk-dest" placeholder="往診先" style="flex:1;min-width:100px">
           <button type="button" class="btn btn-ghost btn-xs" onclick="dkbSetField(2,document.getElementById('dkb-bulk-dest').value)">適用</button>
         </div>
         <div class="dkb-tool-row">
@@ -1011,12 +1024,12 @@ input[type=checkbox]{width:auto;margin:0}
         </div>
         <div class="dkb-tool-row">
           <span class="dkb-tool-label">症状</span>
-          <input type="text" id="dkb-bulk-symptom" placeholder="全行の症状" style="flex:1;min-width:100px">
+          <input type="text" id="dkb-bulk-symptom" placeholder="症状" style="flex:1;min-width:100px">
           <button type="button" class="btn btn-ghost btn-xs" onclick="dkbSetField(5,document.getElementById('dkb-bulk-symptom').value)">適用</button>
         </div>
         <div class="dkb-tool-row">
           <span class="dkb-tool-label">診療内容</span>
-          <input type="text" id="dkb-bulk-content" placeholder="全行の診療内容" style="flex:1;min-width:100px">
+          <input type="text" id="dkb-bulk-content" placeholder="診療内容" style="flex:1;min-width:100px">
           <button type="button" class="btn btn-ghost btn-xs" onclick="openTemplateForDkb()">定型</button>
           <button type="button" class="btn btn-ghost btn-xs" onclick="dkbSetField(6,document.getElementById('dkb-bulk-content').value)">適用</button>
         </div>
@@ -3313,9 +3326,44 @@ function _dkbSplit(line){
   while(f.length < 7) f.push('');
   return f.slice(0,7);
 }
+// まとめて置き換える対象の日付範囲（空欄なら制限なし）。値は YYYYMMDD
+function _dkbRange(){
+  const g = id => ((document.getElementById(id)||{}).value||'').replace(/-/g,'');
+  return { from:g('dkb-from'), to:g('dkb-to') };
+}
+// 置き換えの対象となる行番号。範囲を指定すると、その範囲の日付の行だけになる
+function _dkbTargets(lines){
+  const {from,to} = _dkbRange();
+  if(!from && !to) return lines.map((l,i)=>i);
+  const out = [];
+  lines.forEach((l,i)=>{
+    const d = _dkbSplit(l)[0].replace(/\D/g,'');
+    if(d.length!==8) return;                 // 日付が読めない行は範囲指定中は対象外
+    if(from && d < from) return;
+    if(to && d > to) return;
+    out.push(i);
+  });
+  return out;
+}
+function dkbClearRange(){
+  const f=document.getElementById('dkb-from'), t=document.getElementById('dkb-to');
+  if(f) f.value=''; if(t) t.value='';
+  dkbUpdateCount();
+}
 function dkbUpdateCount(){
+  const lines = _dkbLines();
   const el = document.getElementById('dkb-linecount');
-  if(el) el.textContent = _dkbLines().length;
+  if(el) el.textContent = lines.length;
+  const tc = document.getElementById('dkb-targetcount');
+  if(tc){
+    const {from,to} = _dkbRange();
+    const n = _dkbTargets(lines).length;
+    if(!from && !to){ tc.textContent = `全 ${lines.length} 行がまとめて置き換えの対象`; tc.style.color='var(--text2)'; }
+    else if(!n)     { tc.textContent = 'この範囲に該当する行がありません'; tc.style.color='#c00'; }
+    else            { tc.textContent = `この範囲の ${n} 行だけを置き換えます（全 ${lines.length} 行中）`; tc.style.color='#8a4b00'; }
+  }
+  const box = document.querySelector('.dkb-range');
+  if(box){ const {from,to}=_dkbRange(); box.classList.toggle('dkb-hit', !!(from||to)); }
 }
 function openDkBuilder(karteId, recIdx) {
   const k = KARTES.find(x=>x.id===karteId); if(!k) return;
@@ -3334,31 +3382,42 @@ function openDkBuilder(karteId, recIdx) {
     });
     lines = sorted.map(i=>toKarteLine(k, k.records[i]));
   }
-  _dkbSetLines(lines);
   document.getElementById('dkb-tplname').value = '';
   document.getElementById('dkb-startdate').value = '';
+  document.getElementById('dkb-from').value = '';
+  document.getElementById('dkb-to').value = '';
   ['dkb-bulk-dest','dkb-bulk-dist','dkb-bulk-symptom','dkb-bulk-content'].forEach(id=>document.getElementById(id).value='');
+  _dkbSetLines(lines);   // 行数と対象件数の表示は範囲を空にしてから更新する
   dkbRefreshTemplateList();
   document.getElementById('dkBuilderModal').style.display = 'flex';
 }
 function closeDkBuilder(){ document.getElementById('dkBuilderModal').style.display='none'; }
 document.getElementById('dkBuilderModal').addEventListener('click', e => { if(e.target===document.getElementById('dkBuilderModal')) closeDkBuilder(); });
 
-// 全行の指定フィールドを一括で置き換え（idx: 0日付 1時間 2往診先 3距離 4体温 5症状 6診療内容）
+// 対象行の指定フィールドを置き換え（idx: 0日付 1時間 2往診先 3距離 4体温 5症状 6診療内容）
+// 日付範囲を指定していれば、その範囲の行だけが対象になる
 function dkbSetField(idx, value) {
   // フィールド内のパイプは区切りを壊すため除去する
   const v = String(value==null?'':value).replace(/[|｜]/g, '').trim();
   const lines = _dkbLines();
   if(!lines.length) return toast('出力内容がありません','error');
-  _dkbSetLines(lines.map(l=>{ const f=_dkbSplit(l); f[idx]=v; return f.join(DKB_P); }));
-  toast(`${lines.length}行に適用しました`,'success');
+  const tg = new Set(_dkbTargets(lines));
+  if(!tg.size) return toast('選んだ日付範囲に該当する行がありません','error');
+  _dkbSetLines(lines.map((l,i)=>{
+    if(!tg.has(i)) return l;
+    const f=_dkbSplit(l); f[idx]=v; return f.join(DKB_P);
+  }));
+  toast(`${tg.size}行に適用しました（全${lines.length}行中）`,'success');
 }
-// 全行の日付を delta 日ずらす
+// 対象行の日付を delta 日ずらす
 function dkbShiftDates(delta) {
   const lines = _dkbLines();
   if(!lines.length) return toast('出力内容がありません','error');
+  const tg = new Set(_dkbTargets(lines));
+  if(!tg.size) return toast('選んだ日付範囲に該当する行がありません','error');
   let n = 0;
-  _dkbSetLines(lines.map(l=>{
+  _dkbSetLines(lines.map((l,i)=>{
+    if(!tg.has(i)) return l;
     const f = _dkbSplit(l);
     const m = f[0].match(/^(\d{4})(\d{2})(\d{2})$/);
     if(!m) return l;
@@ -3369,14 +3428,16 @@ function dkbShiftDates(delta) {
   }));
   toast(`${n}行の日付を${delta>0?'＋':'−'}${Math.abs(delta)}日しました`,'success');
 }
-// 1行目を指定日にして、行間の日数差を保ったまま全体をずらす
+// 対象の1行目を指定日にして、行間の日数差を保ったまま対象行をずらす
 function dkbSetStartDate() {
   const sd = document.getElementById('dkb-startdate').value;
   if(!sd) return toast('開始日を選んでください','error');
   const lines = _dkbLines();
   if(!lines.length) return toast('出力内容がありません','error');
-  const first = _dkbSplit(lines[0])[0].match(/^(\d{4})(\d{2})(\d{2})$/);
-  if(!first) return toast('1行目の日付を読み取れませんでした','error');
+  const tg = _dkbTargets(lines);
+  if(!tg.length) return toast('選んだ日付範囲に該当する行がありません','error');
+  const first = _dkbSplit(lines[tg[0]])[0].match(/^(\d{4})(\d{2})(\d{2})$/);
+  if(!first) return toast('対象の1行目の日付を読み取れませんでした','error');
   const from = new Date(`${first[1]}-${first[2]}-${first[3]}T00:00:00`);
   const to = new Date(sd+'T00:00:00');
   const delta = Math.round((to - from) / 86400000);
