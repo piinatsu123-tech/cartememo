@@ -359,7 +359,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v12.5</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v12.6</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -1839,6 +1839,14 @@ function copyDiagnostics() {
     `集計台帳: ${Object.keys(LEDGER).filter(id=>LEDGER[id].d!=null).length}件（${fmtBytes(JSON.stringify(_slimLedger()).length)}）`,
     `送信サイズ: ${fmtBytes(size)}`,
     `メモ用Bin: ${memoBinId()?'設定あり':'未設定'}${MEMO_BIN_STATUS?' / '+MEMO_BIN_STATUS:''}`,
+    // 設定欄と保存値がずれていると、経路によって成否が変わるため必ず出す
+    (()=>{
+      const fld = id => { const e=document.getElementById(id); return e ? String(e.value||'') : ''; };
+      const sto = k => String(localStorage.getItem(k)||'');
+      const cmp = (a,b) => a.trim()===b.trim() ? (a===b ? '一致' : '一致（空白の違いあり）') : '⚠️ 食い違い';
+      return `APIキー: 設定欄${fld('jsonbinKey').trim().length}文字 / 保存値${sto('cm_jbk').trim().length}文字 → ${cmp(fld('jsonbinKey'), sto('cm_jbk'))}\n`
+           + `Bin ID: ${cmp(fld('jsonbinId'), sto('cm_jbid'))}`;
+    })(),
     `メモのみ同期: ${MEMO_ONLY_SYNC?'オン':'オフ'}`,
     `同期状態: ${_syncState}${PENDING_CHANGES?` / 未保存${PENDING_CHANGES}件`:''}`,
     ``,
@@ -2510,9 +2518,23 @@ function renderCloudSize() {
     ${LAST_TRIM_NOTE?`<div style="font-size:11px;color:#8a4b00;background:#fff8e8;border:1px solid #e07800;border-radius:5px;padding:6px 8px;margin-top:6px">⚠️ ${esc(LAST_TRIM_NOTE)}<br>古いデータは端末に残っています。長期保存は「JSONをダウンロード」を推奨します。</div>`:''}`;
 }
 
+// 認証情報の取り出し口を1つにする。
+// 設定欄と保存値がずれると、設定タブの「クラウドに保存」は成功するのに
+// 自動保存や再送信だけが失敗する、という食い違いが起きるため
+function syncCreds() {
+  const fld = id => { const e=document.getElementById(id); return e ? String(e.value||'').trim() : ''; };
+  const sto = k => String(localStorage.getItem(k)||'').trim();
+  // 画面に入力されている値を優先する（利用者が見ているのはこちらのため）
+  const key = fld('jsonbinKey') || sto('cm_jbk');
+  const binId = fld('jsonbinId') || sto('cm_jbid');
+  try {  // 取り出した値で保存値も揃えておく（前後の空白も取り除かれる）
+    if(key && key !== localStorage.getItem('cm_jbk')) localStorage.setItem('cm_jbk', key);
+    if(binId && binId !== localStorage.getItem('cm_jbid')) localStorage.setItem('cm_jbid', binId);
+  } catch(e){}
+  return {key, binId};
+}
 function scheduleCloudAutoSave() {
-  const key = localStorage.getItem('cm_jbk') || '';
-  const binId = localStorage.getItem('cm_jbid') || '';
+  const {key, binId} = syncCreds();
   if(!key || !binId) return;
   clearTimeout(_autoSaveTimer);
   _autoSaveTimer = setTimeout(() => cloudAutoSave(key, binId), 5000);
@@ -2529,9 +2551,13 @@ function renderCloudError() {
   } else box.style.display = 'none';
 }
 function cloudSyncNow() {
-  const key = localStorage.getItem('cm_jbk') || '';
-  const binId = localStorage.getItem('cm_jbid') || '';
-  if(!key || !binId) return Promise.resolve(false);
+  const {key, binId} = syncCreds();
+  if(!key || !binId) {
+    // 黙って何もしないと「押しても直らない」ように見えるため理由を出す
+    _syncErrMsg = 'クラウドが未設定です（設定タブで APIキーと Bin ID を確認してください）';
+    renderCloudError(); setSyncStatus('error');
+    return Promise.resolve(false);
+  }
   clearTimeout(_autoSaveTimer); // 予約済みの遅延送信は取り消す
   return cloudAutoSave(key, binId);
 }
@@ -2542,8 +2568,9 @@ async function cloudAutoSave(key, binId, attempt) {
   const body = JSON.stringify(data);
   const bodySize = new Blob([body]).size;
   // メモ用Binはメイン側の成否に関わらず先に保存する（メイン失敗でメモまで
-  // 同期されなくなるのを防ぐ）
-  const memoSaved = await saveMemoBin(key);
+  // 同期されなくなるのを防ぐ）。再試行のたびに送り直すと通信回数が無駄に
+  // 増えるため、1回目だけにする
+  const memoSaved = attempt===1 ? await saveMemoBin(key) : true;
   try {
     const resp = await fetch(`https://api.jsonbin.io/v3/b/${binId}`, {
       method:'PUT',
@@ -2581,8 +2608,7 @@ async function cloudAutoSave(key, binId, attempt) {
 let _sizeWarned = false;
 
 async function cloudAutoLoad() {
-  const key = localStorage.getItem('cm_jbk') || '';
-  const binId = localStorage.getItem('cm_jbid') || '';
+  const {key, binId} = syncCreds();
   if(!key || !binId) return;
   setSyncStatus('loading');
   try {
@@ -2709,6 +2735,14 @@ async function cloudAutoLoad() {
   }
 }
 
+// 同期表示をタップしたときの再送信。結果を必ず知らせる
+async function pillSyncNow() {
+  if(_syncState==='saving' || _syncState==='loading') return toast('送信中です…');
+  toast('再送信します…');
+  const ok = await cloudSyncNow();
+  if(ok) toast('同期しました','success');
+  else if(_syncErrMsg) toast('同期に失敗しました: '+_syncErrMsg, 'error');
+}
 let _syncState = 'idle';
 function setSyncStatus(state) {
   _syncState = state;
@@ -2725,14 +2759,18 @@ function updateSyncPill() {
   const dot = document.getElementById('syncDot');
   const st = document.getElementById('syncStatus');
   if(!pill) return;
-  const configured = !!(localStorage.getItem('cm_jbk') && localStorage.getItem('cm_jbid'));
+  const configured = !!((localStorage.getItem('cm_jbk')||'').trim() && (localStorage.getItem('cm_jbid')||'').trim());
   if(!configured) { // クラウド未設定なら端末保存のみである旨を表示
     pill.style.display='flex'; pill.className='hdr-pill';
     dot.style.background='#999'; st.textContent='端末に保存';
     return;
   }
   pill.style.display = 'flex';
-  pill.onclick = null; pill.title = ''; pill.style.cursor = '';
+  // どの状態でもタップで再送信できるようにする。
+  // 以前は失敗中しか反応せず、送信中や未保存のときは押しても何も起きなかった
+  pill.style.cursor = 'pointer';
+  pill.onclick = pillSyncNow;
+  pill.title = 'タップで再送信';
   const hhmm = LAST_SYNC_AT ? new Date(LAST_SYNC_AT).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}) : '';
   if(_syncState==='loading')     { pill.className='hdr-pill'; dot.style.background='#999'; st.textContent='読込中…'; }
   else if(_syncState==='saving') { pill.className='hdr-pill'; dot.style.background='#999'; st.textContent='保存中…'; }
@@ -2740,8 +2778,6 @@ function updateSyncPill() {
     pill.className='hdr-pill pill-error'; dot.style.background='#c00';
     st.textContent = PENDING_CHANGES>0 ? `同期失敗 未保存${PENDING_CHANGES}件` : '同期失敗';
     pill.title = _syncErrMsg ? '原因: '+_syncErrMsg+'（タップで再試行）' : 'タップで再試行';
-    pill.style.cursor = 'pointer';
-    pill.onclick = () => { toast('再送信します…'); cloudSyncNow(); };
     return;
   }
   else if(PENDING_CHANGES > 0)   { pill.className='hdr-pill pill-pending'; dot.style.background='#e07800'; st.textContent=`未保存 ${PENDING_CHANGES}件`; }
@@ -3036,10 +3072,11 @@ function copyAllSettings() {
   navigator.clipboard.writeText(text).then(()=>toast('APIキー＋Bin IDをコピーしました','success'));
 }
 async function cloudSave() {
-  const key=document.getElementById('jsonbinKey').value.trim();
+  const {key, binId} = syncCreds();   // 自動保存・再送信と同じ値を使う
   if(!key) return toast('jsonbin.io APIキーを入力してください','error');
+  saveJsonbinSettings();              // 送信前に設定を保存し、経路による食い違いをなくす
   const data=buildCloudPayload();
-  const binId=document.getElementById('jsonbinId').value.trim();
+  setSyncStatus('saving');
   try {
     let resp;
     if(binId) { resp=await fetch(`https://api.jsonbin.io/v3/b/${binId}`,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':key},body:JSON.stringify(data)}); }
@@ -3050,8 +3087,15 @@ async function cloudSave() {
     saveJsonbinSettings();
     if(memoBinId()) await saveMemoBin(key); // メモ用Binにも保存する
     document.getElementById('cloudInfo').textContent=`最終保存: ${new Date().toLocaleString('ja-JP')}（メモ${memos.length}件・カルテ${KARTES.length}件）`;
+    // 手動保存でも同期状態を更新する。更新しないと保存できているのに
+    // 上の表示は「同期失敗」「未保存」のまま残ってしまう
+    _syncErrMsg=''; renderCloudError(); setSyncStatus('saved'); renderCloudSize();
     toast('クラウドに保存しました','success');
-  } catch(e) { toast('保存エラー: '+e.message,'error'); }
+  } catch(e) {
+    _syncErrMsg=`${e.message}（手動保存 / ${new Date().toLocaleTimeString('ja-JP')}）`;
+    renderCloudError(); setSyncStatus('error');
+    toast('保存エラー: '+e.message,'error');
+  }
 }
 async function cloudLoad() {
   const key=document.getElementById('jsonbinKey').value.trim(), binId=document.getElementById('jsonbinId').value.trim();
@@ -4794,7 +4838,7 @@ function flashSaved(el) {
 window.addEventListener('beforeunload', flushPendingElec);
 // クラウド未送信の変更が残ったまま閉じようとしたら警告する（B）
 window.addEventListener('beforeunload', e => {
-  const configured = !!(localStorage.getItem('cm_jbk') && localStorage.getItem('cm_jbid'));
+  const configured = !!((localStorage.getItem('cm_jbk')||'').trim() && (localStorage.getItem('cm_jbid')||'').trim());
   if(configured && PENDING_CHANGES > 0) { e.preventDefault(); e.returnValue = ''; return ''; }
 });
 document.addEventListener('visibilitychange', () => { if(document.visibilityState==='hidden') flushPendingElec(); });
