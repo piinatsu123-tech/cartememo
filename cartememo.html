@@ -359,7 +359,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v12.6</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v12.7</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -1104,6 +1104,9 @@ let showHidden = false;
 document.addEventListener('DOMContentLoaded', async () => {
   loadKeys();
   loadJsonbinSettings();
+  // 前回実測した圧縮率を引き継ぐ（最初の送信でも正しい大きさで判定するため）
+  try { const zr = parseFloat(localStorage.getItem('cm_zratio'));
+        if(_zSupported && zr > 0 && zr <= 1) _zRatio = zr; } catch(e){}
   loadFromStorage();
   renderDict();
   renderMasterList();
@@ -1118,6 +1121,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadPresets();
   loadOjiFee();
   await cloudAutoLoad(); // 起動時にクラウドから自動読み込み（URLインポートより先に完了させる）
+  learnZRatio();         // 読み込んだ実データで圧縮率を測る
   // クラウドから復元された結果を踏まえて再判定してから警告を出す
   detectMasterReset(!!localStorage.getItem('cm_master'));
   renderMasterAlert();
@@ -1837,7 +1841,8 @@ function copyDiagnostics() {
     `メモ: ${memos.length}件`,
     `薬価: ${MASTER.length}件`,
     `集計台帳: ${Object.keys(LEDGER).filter(id=>LEDGER[id].d!=null).length}件（${fmtBytes(JSON.stringify(_slimLedger()).length)}）`,
-    `送信サイズ: ${fmtBytes(size)}`,
+    `送信サイズ: ${fmtBytes(Math.round(size*_zRatio))}（圧縮前 ${fmtBytes(size)}）`,
+    `圧縮: ${_zSupported?`対応・${(1/_zRatio).toFixed(1)}分の1`:'非対応（ブラウザが古い可能性）'}${CLOUD_READ_BLOCKED?' / ⚠️ 送信停止中':''}`,
     `メモ用Bin: ${memoBinId()?'設定あり':'未設定'}${MEMO_BIN_STATUS?' / '+MEMO_BIN_STATUS:''}`,
     // 設定欄と保存値がずれていると、経路によって成否が変わるため必ず出す
     (()=>{
@@ -2326,6 +2331,64 @@ function _syncTargetKartes() {
 }
 const CLOUD_SIZE_LIMIT = 95*1024; // 安全マージンを見た送信上限
 let LAST_TRIM_NOTE = '';          // 自動で除外した内容の説明
+
+// ==================== 送信データの圧縮 ====================
+// カルテが増えると素のJSONでは上限に収まらなくなるため、送信直前に
+// gzip して文字列化する。{v:3, z:"..."} の形で保存し、読み込み時に戻す。
+// 圧縮できない端末では従来どおり素のJSONを送る（読み書きは両対応）
+let _zRatio = 1;                  // 圧縮後 ÷ 圧縮前。実測して更新する
+let _zSupported = (typeof CompressionStream !== 'undefined' && typeof DecompressionStream !== 'undefined');
+// 圧縮データを読めなかった端末が、古い内容で上書きしてしまうのを防ぐ
+let CLOUD_READ_BLOCKED = '';
+async function _gzipB64(str) {
+  if(!_zSupported) return null;
+  try {
+    const cs = new Blob([str]).stream().pipeThrough(new CompressionStream('gzip'));
+    const bytes = new Uint8Array(await new Response(cs).arrayBuffer());
+    let bin = '';
+    const CH = 0x8000;            // 一度に渡しすぎるとスタックが溢れるため分割する
+    for(let i=0;i<bytes.length;i+=CH) bin += String.fromCharCode.apply(null, bytes.subarray(i,i+CH));
+    return btoa(bin);
+  } catch(e) { console.warn('compress failed:', e.message); return null; }
+}
+async function _ungzipB64(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+  const ds = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return await new Response(ds).text();
+}
+// 送信する本文を作る。圧縮できたときだけ圧縮形式にする
+async function _wireBody(data) {
+  const json = JSON.stringify(data);
+  const z = await _gzipB64(json);
+  if(!z) { _zRatio = 1; return json; }
+  const wrapped = JSON.stringify({v:3, z});
+  // 日本語はJSON上で1文字が複数バイトになるため、比率はバイト数で測る
+  const wb = new Blob([wrapped]).size, jb = new Blob([json]).size;
+  _zRatio = wb / jb;
+  try { localStorage.setItem('cm_zratio', String(_zRatio)); } catch(e){}
+  return wb < jb ? wrapped : json;
+}
+// クラウドから受け取った内容を元に戻す
+async function _unwireRecord(rec) {
+  if(!rec || typeof rec.z !== 'string') return rec || {};
+  if(!_zSupported) throw new Error('この端末は圧縮データを展開できません（ブラウザを更新してください）');
+  return JSON.parse(await _ungzipB64(rec.z));
+}
+// 実際に圧縮して圧縮率を測る。絞り込みの判定に使う
+async function learnZRatio() {
+  if(!_zSupported) { _zRatio = 1; renderCloudSize(); return; }
+  try {
+    const json = JSON.stringify(_buildPayload(0, 0, false));
+    const z = await _gzipB64(json);
+    if(z) {
+      _zRatio = new Blob([JSON.stringify({v:3, z})]).size / new Blob([json]).size;
+      try { localStorage.setItem('cm_zratio', String(_zRatio)); } catch(e){}
+    }
+  } catch(e){}
+  renderCloudSize();
+}
 // 「メモのみ同期」モード用: 最後にクラウドから受け取ったカルテをそのまま保持し、
 // 送信時に手を加えず返す。これにより、この端末がクラウドのカルテを壊さない
 let MEMO_ONLY_SYNC = false;
@@ -2400,7 +2463,8 @@ function buildCloudPayload() {
     // memoLimit は 0 = 全件、NO_MEMOS = 1件も送らない
     const p = _buildPayload(ml===NO_MEMOS ? 0 : ml, km, strip);
     if(ml===NO_MEMOS) p.memos = [];
-    if(_payloadSize(p) <= CLOUD_SIZE_LIMIT || i===steps.length-1) {
+    // 圧縮して送るため、判定も実測した圧縮率を掛けた大きさで行う
+    if(_payloadSize(p) * _zRatio <= CLOUD_SIZE_LIMIT || i===steps.length-1) {
       payload = p;
       if(i>0) {
         const dropM = memos.length - p.memos.length;
@@ -2482,6 +2546,7 @@ function loadSyncMemoLimit() {
     SYNC_OLD_MONTHS = parseInt(localStorage.getItem('cm_syncoldm')||'0')||0;
     MEMO_ONLY_SYNC = localStorage.getItem('cm_memoonly')==='1';
   } catch(e){}
+  learnZRatio();   // 設定画面を開いたら実データで測り直す
   const sel = document.getElementById('syncMemoLimit');
   if(sel) sel.value = String(SYNC_MEMO_LIMIT);
   const sel3 = document.getElementById('syncOldMonths');
@@ -2497,7 +2562,8 @@ function cloudPayloadSize() {
 function fmtBytes(n) { return n<1024 ? n+' B' : n<1024*1024 ? (n/1024).toFixed(1)+' KB' : (n/1024/1024).toFixed(2)+' MB'; }
 function renderCloudSize() {
   const el = document.getElementById('cloudSizeInfo'); if(!el) return;
-  const size = cloudPayloadSize();
+  const rawSize = cloudPayloadSize();
+  const size = Math.round(rawSize * _zRatio);   // 実際に送るのは圧縮後の大きさ
   const raw = new Blob([JSON.stringify({memos,kartes:KARTES,master:MASTER,templates:TEMPLATES,farms:FARMS,farmDist:FARM_DIST,dictWords:DICT_WORDS,convPairs})]).size;
   const LIMIT = 100*1024; // jsonbin.io 無料プランの目安（1binあたり約100KB）
   const pct = Math.min(100, Math.round(size/LIMIT*100));
@@ -2509,8 +2575,10 @@ function renderCloudSize() {
   const syncedMemos = mp ? mp.memos.length : p.memos.length;
   const excluded = (KARTES.length - syncedKartes) + (memos.length - syncedMemos);
   const color = pct>=90 ? '#c00' : pct>=70 ? '#e07800' : 'var(--text2)';
-  const mSize = mp ? _payloadSize(mp) : 0;
-  el.innerHTML = `<div style="font-size:12px;color:${color};font-weight:600">送信サイズ: ${fmtBytes(size)} / 目安上限 100 KB（${pct}%）${mb?`　＋ メモ用Bin ${fmtBytes(mSize)}`:''}</div>
+  const mSize = mp ? Math.round(_payloadSize(mp) * _zRatio) : 0;
+  const zNote = !_zSupported ? '<div style="font-size:11px;color:#c00;margin-top:4px;font-weight:600">⚠️ この端末は圧縮に対応していません（ブラウザを更新すると送信量を大きく減らせます）</div>'
+    : _zRatio < 0.95 ? `<div style="font-size:11px;color:#1a8a4a;margin-top:4px;font-weight:600">🗜 圧縮して送信中（${Math.round(1/_zRatio)}分の1・圧縮前 ${fmtBytes(rawSize)}）</div>` : '';
+  el.innerHTML = `<div style="font-size:12px;color:${color};font-weight:600">送信サイズ: ${fmtBytes(size)} / 目安上限 100 KB（${pct}%）${mb?`　＋ メモ用Bin ${fmtBytes(mSize)}`:''}</div>${zNote}
     ${mb?`<div style="font-size:11px;margin-top:4px;padding:5px 8px;border-radius:5px;background:${MEMO_BIN_STATUS.includes('失敗')?'#fff4f4':'#f2fbf5'};color:${MEMO_BIN_STATUS.includes('失敗')?'#c00':'#1a8a4a'};font-weight:600">メモ用Bin: ${esc(MEMO_BIN_STATUS||'まだ通信していません（メモを追加するか再読み込みしてください）')}</div>`:''}
     <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:4px"><div style="height:100%;width:${pct}%;background:${pct>=90?'#c00':pct>=70?'#e07800':'#111'}"></div></div>
     <div style="font-size:11px;color:var(--text3);margin-top:4px">圧縮前 ${fmtBytes(raw)} → 圧縮後 ${fmtBytes(size)}</div>
@@ -2563,9 +2631,15 @@ function cloudSyncNow() {
 }
 async function cloudAutoSave(key, binId, attempt) {
   attempt = attempt || 1;
+  // 圧縮データを読めていない端末は送信しない。古い内容でクラウドを
+  // 上書きしてしまうのを防ぐ
+  if(CLOUD_READ_BLOCKED) {
+    _syncErrMsg = CLOUD_READ_BLOCKED; renderCloudError(); setSyncStatus('error');
+    return false;
+  }
   setSyncStatus('saving');
   const data = buildCloudPayload();
-  const body = JSON.stringify(data);
+  const body = await _wireBody(data);
   const bodySize = new Blob([body]).size;
   // メモ用Binはメイン側の成否に関わらず先に保存する（メイン失敗でメモまで
   // 同期されなくなるのを防ぐ）。再試行のたびに送り直すと通信回数が無駄に
@@ -2575,13 +2649,13 @@ async function cloudAutoSave(key, binId, attempt) {
     const resp = await fetch(`https://api.jsonbin.io/v3/b/${binId}`, {
       method:'PUT',
       headers:{'Content-Type':'application/json','X-Master-Key':key},
-      body:JSON.stringify(data)
+      body
       // 注: keepalive はボディ64KBまでの制限があり、超えると必ず失敗するため使わない
     });
     if(!resp.ok) { let m='HTTP '+resp.status; try{const r=await resp.json();m=r.message||m;}catch(e){} throw new Error(m); }
     _syncErrMsg = ''; renderCloudError();
     setSyncStatus('saved');
-    const sz = new Blob([JSON.stringify(data)]).size;
+    const sz = bodySize;
     document.getElementById('cloudInfo').textContent = `最終自動保存: ${new Date().toLocaleString('ja-JP')}（メモ${memos.length}件・カルテ${KARTES.length}件・${fmtBytes(sz)}）`;
     renderCloudSize();
     if(sz > 90*1024 && !_sizeWarned) { _sizeWarned = true; toast('クラウド容量が上限に近づいています（設定タブで確認）','error'); }
@@ -2615,8 +2689,9 @@ async function cloudAutoLoad() {
     const resp = await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`, {headers:{'X-Master-Key':key}});
     const result = await resp.json();
     if(!resp.ok) throw new Error(result.message||'HTTP '+resp.status);
-    const data = result.record;
+    const data = await _unwireRecord(result.record);
     if(!Array.isArray(data.memos)) throw new Error('invalid data');
+    CLOUD_READ_BLOCKED = '';   // 読めたので送信を止める必要はない
     // 省略されたフィールドを既定値で復元
     (data.memos||[]).forEach(_normMemo);
     (data.kartes||[]).forEach(_normKarte);
@@ -2728,10 +2803,16 @@ async function cloudAutoLoad() {
     setSyncStatus('synced');
     document.getElementById('cloudInfo').textContent = `起動時読み込み: ${new Date().toLocaleString('ja-JP')}（メモ${memos.length}件・カルテ${KARTES.length}件）`;
   } catch(e) {
-    _syncErrMsg = '読み込み失敗: ' + (e && e.message ? e.message : '通信エラー');
+    const m = e && e.message ? e.message : '通信エラー';
+    // 圧縮データを展開できなかった場合は、この端末からの送信も止める
+    if(/展開できません/.test(m)) {
+      CLOUD_READ_BLOCKED = m + ' — 上書きを防ぐためこの端末からの送信を止めています';
+      toast('クラウドのデータを読めませんでした。この端末からの送信を止めています','error');
+    }
+    _syncErrMsg = '読み込み失敗: ' + m;
     renderCloudError();
     setSyncStatus('error');
-    console.warn('Auto cloud load failed:', e.message);
+    console.warn('Auto cloud load failed:', m);
   }
 }
 
@@ -2811,7 +2892,8 @@ async function testMemoBin() {
     const resp=await fetch(`https://api.jsonbin.io/v3/b/${id}/latest`,{headers:{'X-Master-Key':key}});
     const r=await resp.json();
     if(!resp.ok) throw new Error(r.message||'HTTP '+resp.status);
-    const n=Array.isArray((r.record||{}).memos)?r.record.memos.length:0;
+    const rec=await _unwireRecord(r.record);
+    const n=Array.isArray(rec.memos)?rec.memos.length:0;
     const ok=await saveMemoBin(key);
     MEMO_BIN_STATUS=`確認OK ${new Date().toLocaleTimeString('ja-JP')}／クラウドに${n}件`;
     renderCloudSize();
@@ -2857,11 +2939,11 @@ function buildMemoPayload() {
   let ms = memos;
   if(SYNC_MEMO_LIMIT > 0 && memos.length > SYNC_MEMO_LIMIT) ms = memos.slice(-SYNC_MEMO_LIMIT);
   let p = { version:2, savedAt:new Date().toISOString(), memos: ms.map(m=>_slimMemo(m,false)), deleted:DELETED };
-  // 上限を超える場合は保存済みメモの原文→古いメモの順に減らす
-  if(_payloadSize(p) > CLOUD_SIZE_LIMIT) {
+  // 上限を超える場合は保存済みメモの原文→古いメモの順に減らす（圧縮後の大きさで判定）
+  if(_payloadSize(p) * _zRatio > CLOUD_SIZE_LIMIT) {
     p.memos = ms.map(m=>_slimMemo(m,true));
     for(const lim of [200,100,50,20]) {
-      if(_payloadSize(p) <= CLOUD_SIZE_LIMIT) break;
+      if(_payloadSize(p) * _zRatio <= CLOUD_SIZE_LIMIT) break;
       p.memos = memos.slice(-lim).map(m=>_slimMemo(m,true));
     }
   }
@@ -2869,11 +2951,13 @@ function buildMemoPayload() {
 }
 async function saveMemoBin(key) {
   const id = memoBinId(); if(!id) return true;
+  if(CLOUD_READ_BLOCKED) return false;
   try {
+    const mp = buildMemoPayload();
     const resp=await fetch(`https://api.jsonbin.io/v3/b/${id}`,{method:'PUT',
-      headers:{'Content-Type':'application/json','X-Master-Key':key},body:JSON.stringify(buildMemoPayload())});
+      headers:{'Content-Type':'application/json','X-Master-Key':key},body:await _wireBody(mp)});
     if(!resp.ok){let m='HTTP '+resp.status;try{const r=await resp.json();m=r.message||m;}catch(e){}throw new Error(m);}
-    MEMO_BIN_STATUS=`最終保存 ${new Date().toLocaleTimeString('ja-JP')}／${buildMemoPayload().memos.length}件を送信`;
+    MEMO_BIN_STATUS=`最終保存 ${new Date().toLocaleTimeString('ja-JP')}／${mp.memos.length}件を送信`;
     renderCloudSize();
     return true;
   } catch(e){ console.warn('Memo bin save failed:', e.message);
@@ -2886,7 +2970,7 @@ async function loadMemoBin(key) {
     const resp=await fetch(`https://api.jsonbin.io/v3/b/${id}/latest`,{headers:{'X-Master-Key':key}});
     const r=await resp.json();
     if(!resp.ok) throw new Error(r.message||'HTTP '+resp.status);
-    const d=r.record||{};
+    const d=await _unwireRecord(r.record);
     if(d.deleted&&typeof d.deleted==='object'){
       Object.keys(d.deleted).forEach(kind=>{ if(!DELETED[kind])DELETED[kind]={};
         Object.keys(d.deleted[kind]||{}).forEach(k2=>{DELETED[kind][k2]=Math.max(DELETED[kind][k2]||0,d.deleted[kind][k2]||0);}); });
@@ -2919,7 +3003,7 @@ async function _fetchBinVersion(key, binId, v) {
   const resp = await fetch(`https://api.jsonbin.io/v3/b/${binId}/${v}`, {headers:{'X-Master-Key':key}});
   if(!resp.ok) { let m='HTTP '+resp.status; try{const r=await resp.json();m=r.message||m;}catch(e){} throw new Error(m); }
   const r = await resp.json();
-  return r.record || {};
+  return await _unwireRecord(r.record);
 }
 function _summarizeRecord(d) {
   const ks = Array.isArray(d.kartes)?d.kartes:[];
@@ -3035,7 +3119,7 @@ async function restoreMasterFromCloud() {
     const resp=await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`,{headers:{'X-Master-Key':key}});
     const r=await resp.json();
     if(!resp.ok) throw new Error(r.message||'HTTP '+resp.status);
-    const cloudMaster=(r.record||{}).master;
+    const cloudMaster=(await _unwireRecord(r.record)).master;
     if(!Array.isArray(cloudMaster)||!cloudMaster.length) { setSyncStatus('synced'); return toast('クラウドに薬価データがありません','error'); }
     DELETED.master = {};                       // 薬価の削除記録を取り消す
     const names=new Set(MASTER.map(m=>m.name));
@@ -3074,13 +3158,15 @@ function copyAllSettings() {
 async function cloudSave() {
   const {key, binId} = syncCreds();   // 自動保存・再送信と同じ値を使う
   if(!key) return toast('jsonbin.io APIキーを入力してください','error');
+  if(CLOUD_READ_BLOCKED) return toast(CLOUD_READ_BLOCKED,'error');
   saveJsonbinSettings();              // 送信前に設定を保存し、経路による食い違いをなくす
   const data=buildCloudPayload();
   setSyncStatus('saving');
   try {
     let resp;
-    if(binId) { resp=await fetch(`https://api.jsonbin.io/v3/b/${binId}`,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':key},body:JSON.stringify(data)}); }
-    else { resp=await fetch('https://api.jsonbin.io/v3/b',{method:'POST',headers:{'Content-Type':'application/json','X-Master-Key':key,'X-Bin-Name':'CarteMemo','X-Bin-Private':'true'},body:JSON.stringify(data)}); }
+    const body = await _wireBody(data);   // 自動保存と同じく圧縮して送る
+    if(binId) { resp=await fetch(`https://api.jsonbin.io/v3/b/${binId}`,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':key},body}); }
+    else { resp=await fetch('https://api.jsonbin.io/v3/b',{method:'POST',headers:{'Content-Type':'application/json','X-Master-Key':key,'X-Bin-Name':'CarteMemo','X-Bin-Private':'true'},body}); }
     const result=await resp.json();
     if(!resp.ok) throw new Error(result.message||'HTTP '+resp.status);
     if(!binId) { const newId=result.metadata.id; document.getElementById('jsonbinId').value=newId; localStorage.setItem('cm_jbid',newId); }
@@ -3105,7 +3191,7 @@ async function cloudLoad() {
     const resp=await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`,{headers:{'X-Master-Key':key}});
     const result=await resp.json();
     if(!resp.ok) throw new Error(result.message||'HTTP '+resp.status);
-    const data=result.record;
+    const data=await _unwireRecord(result.record);
     if(!Array.isArray(data.memos)) throw new Error('メモデータが見つかりません');
     (data.memos||[]).forEach(_normMemo); (data.kartes||[]).forEach(_normKarte);
     const existingIds=new Set(memos.map(m=>m.id));
