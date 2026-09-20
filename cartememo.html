@@ -183,6 +183,15 @@ input[type=checkbox]{width:auto;margin:0}
 .diff-neg{color:#c00;font-weight:700}
 .elec-input-wrap{display:flex;gap:6px;align-items:center}
 .elec-input-wrap input{width:130px;text-align:right;padding:5px 8px;font-size:13px;font-family:'JetBrains Mono',monospace}
+/* 1枚のカルテに複数の電子カルテを書いたときの内訳 */
+.elec-parts{background:var(--surface);border:1px solid var(--border2);border-radius:6px;padding:7px 8px;margin:2px 0 6px}
+.elec-part{display:flex;gap:6px;align-items:center;margin-bottom:4px}
+.elec-part-no{font-size:11px;font-weight:700;color:var(--text3);width:2.6em;flex-shrink:0}
+.elec-part input{flex:1;min-width:0;text-align:right;padding:5px 8px;font-size:13px;font-family:'JetBrains Mono',monospace;border:1px solid var(--border2);border-radius:5px}
+.elec-part-del{border:none;background:none;color:#c00;font-size:16px;line-height:1;padding:2px 6px;cursor:pointer;flex-shrink:0}
+.elec-part-sum{font-size:11px;font-weight:700;color:var(--text2);text-align:right;padding-top:4px;border-top:1px solid var(--border)}
+.elec-add{display:flex;gap:6px;align-items:center;margin:2px 0 6px}
+.elec-add input{flex:1;min-width:0;text-align:right;padding:5px 8px;font-size:13px;font-family:'JetBrains Mono',monospace;border:1px solid var(--border2);border-radius:5px}
 .karte-summary{font-size:13px;color:var(--text2);margin-bottom:4px;line-height:1.7}
 .rec-edit-rows{margin-bottom:12px}
 .rec-edit-hdr{display:grid;grid-template-columns:112px 1fr 88px 26px;gap:5px;font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--text3);text-transform:uppercase;padding:0 0 5px;border-bottom:1px solid var(--border)}
@@ -359,7 +368,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">CarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v12.7</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v12.8</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -4183,8 +4192,9 @@ function buildKarteCard(k, isDetail) {
     const n = k.records.length;
     const dates = k.records.map(r=>r.date).filter(Boolean).sort();
     const dateRange = dates.length===0?'':dates.length===1?fmtDate(dates[0]):fmtDate(dates[0])+'〜'+fmtDate(dates[dates.length-1]);
+    const nParts = Array.isArray(k.elec_parts) ? k.elec_parts.length : 0;
     const elecPart = k.electronic_amount!==null
-      ? ` &nbsp;|&nbsp; 電子 ¥${k.electronic_amount.toLocaleString()}`
+      ? ` &nbsp;|&nbsp; 電子 ¥${k.electronic_amount.toLocaleString()}${nParts>1?`<span style="color:var(--text3);font-size:11px">（${nParts}枚）</span>`:''}`
       : ` &nbsp;|&nbsp; <span style="color:var(--text3)">電子 未入力</span>`;
     const diffPart = k.diff!==null?` &nbsp;<span class="${diffClass}" style="font-weight:600">差額 ${(k.diff>=0?'+':'')+fmtAmt(k.diff)}</span>`:'';
     const stage = k.closed ? 2 : k.finished ? 1 : 0;
@@ -4253,7 +4263,22 @@ function buildKarteCard(k, isDetail) {
       <button class="rec-del-btn" onclick="event.stopPropagation();deleteRecord('${k.id}',${i})" title="削除">×</button>
     </div>`;
   }).join('');
-  const elecRow = `<div class="total-row elec-row"><span style="color:var(--text2)">電子カルテ</span><div class="elec-input-wrap"><input type="number" id="elec-${k.id}" min="0" step="100" value="${k.electronic_amount!==null?k.electronic_amount:''}" placeholder="金額を入力" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter')this.blur()" onblur="autoSaveElectronic('${k.id}')"></div></div>`;
+  // 1枚の紙カルテに対して電子カルテを複数枚書くことがあるため、内訳を持てるようにする
+  const parts = elecParts(k);
+  const partRows = parts.length > 1 ? `<div class="elec-parts" onclick="event.stopPropagation()">
+      ${parts.map((v,pi)=>`<div class="elec-part">
+        <span class="elec-part-no">${pi+1}枚目</span>
+        <input type="number" min="0" step="100" value="${v}" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter')this.blur()" onblur="updateElecPart('${k.id}',${pi},this.value)">
+        <button type="button" class="elec-part-del" onclick="event.stopPropagation();removeElecPart('${k.id}',${pi})" title="この1枚を取り消す">×</button>
+      </div>`).join('')}
+      <div class="elec-part-sum">${parts.length}枚の合計 ¥${_sumAmts(parts).toLocaleString()}</div>
+    </div>` : '';
+  const elecRow = `<div class="total-row elec-row"><span style="color:var(--text2)">電子カルテ${parts.length>1?`<span style="font-size:11px;color:var(--text3)">（${parts.length}枚の合計）</span>`:''}</span><div class="elec-input-wrap"><input type="number" id="elec-${k.id}" min="0" step="100" value="${k.electronic_amount!==null?k.electronic_amount:''}" placeholder="金額を入力" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter')this.blur()" onblur="autoSaveElectronic('${k.id}')"></div></div>
+    ${partRows}
+    <div class="elec-add" onclick="event.stopPropagation()">
+      <input type="number" id="elec-add-${k.id}" min="0" step="100" placeholder="別の電子カルテの金額" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter'){event.preventDefault();addElecPart('${k.id}')}">
+      <button type="button" class="btn btn-ghost btn-xs" style="flex-shrink:0" onclick="event.stopPropagation();addElecPart('${k.id}')">＋ 合算</button>
+    </div>`;
   return `<div class="karte-card" id="card-${k.id}">
     <div class="karte-hdr">
       <span class="karte-title" style="display:inline-flex;align-items:center;gap:4px">【<input type="text" class="karte-title-edit" value="${esc(k.farm)}" onclick="event.stopPropagation()" onblur="updateKarteField('${k.id}','farm',this.value)" onkeydown="if(event.key==='Enter')this.blur()" title="農場名" style="width:8em"> / <input type="text" class="karte-title-edit" value="${esc(k.cow)}" onclick="event.stopPropagation()" onblur="updateKarteField('${k.id}','cow',this.value)" onkeydown="if(event.key==='Enter')this.blur()" title="牛番号" style="width:5em">】</span>
@@ -4871,27 +4896,89 @@ function deselectKarte() {
   renderKarteList();
 }
 
+// ===== 電子カルテ金額の内訳 =====
+// 1枚の紙カルテに対して電子カルテを複数枚書くことがあるため、
+// 内訳（elec_parts）を持ち、その合計を電子カルテ金額とする
+function _sumAmts(a){ return (a||[]).reduce((s,v)=>s+(Number(v)||0),0); }
+function elecParts(k) {
+  if(Array.isArray(k.elec_parts) && k.elec_parts.length) return k.elec_parts.slice();
+  return k.electronic_amount!=null ? [k.electronic_amount] : [];
+}
+// 内訳をまとめて設定する。合計が電子カルテ金額になる
+function setElecParts(id, parts) {
+  const k = KARTES.find(x=>x.id===id);
+  if(!k) { toast('カルテが見つかりませんでした','error'); return false; }
+  const list = (parts||[]).map(v=>Math.round(Number(v))).filter(v=>!isNaN(v) && v>=0);
+  if(!list.length) return setElectronicAmount(id, null);
+  const total = _sumAmts(list);
+  if(k.electronic_amount===total && JSON.stringify(elecParts(k))===JSON.stringify(list)) return false;
+  if(list.length > 1) k.elec_parts = list; else delete k.elec_parts;
+  return setElectronicAmount(id, total, true);
+}
+// 入力欄の金額を内訳に足す（2枚目以降の電子カルテ）
+function addElecPart(id) {
+  const inp = document.getElementById('elec-add-'+id); if(!inp) return;
+  const raw = inp.value.trim();
+  if(raw===''){ inp.focus(); return toast('合算する金額を入力してください','error'); }
+  const v = Math.round(Number(raw));
+  if(isNaN(v)||v<0) return toast('金額を確認してください','error');
+  const k = KARTES.find(x=>x.id===id); if(!k) return;
+  let list = elecParts(k);
+  // 上の欄に入力したまま確定していない金額も取り込む（消えてしまうのを防ぐ）
+  const main = document.getElementById('elec-'+id);
+  if(main && list.length <= 1) {
+    const mv = main.value.trim();
+    list = mv==='' ? [] : [Math.round(Number(mv))].filter(x=>!isNaN(x)&&x>=0);
+  }
+  list.push(v);
+  inp.value = '';
+  setElecParts(id, list);
+}
+function updateElecPart(id, idx, val) {
+  const k = KARTES.find(x=>x.id===id); if(!k) return;
+  const list = elecParts(k);
+  if(idx<0 || idx>=list.length) return;
+  const raw = String(val==null?'':val).trim();
+  if(raw==='') return removeElecPart(id, idx);
+  const v = Math.round(Number(raw));
+  if(isNaN(v)||v<0) return toast('金額を確認してください','error');
+  list[idx] = v;
+  setElecParts(id, list);
+}
+function removeElecPart(id, idx) {
+  const k = KARTES.find(x=>x.id===id); if(!k) return;
+  const list = elecParts(k);
+  if(idx<0 || idx>=list.length) return;
+  list.splice(idx, 1);
+  setElecParts(id, list);
+}
+
 // 電子カルテ金額をデータに直接保存する（画面に入力欄が無くても確実に保存される）
 // val に null を渡すとクリア。保存したら true を返す
-function setElectronicAmount(id, val) {
+// keepParts: 内訳から呼ばれた場合は内訳を消さない
+function setElectronicAmount(id, val, keepParts) {
   const k = KARTES.find(x=>x.id===id);
   if(!k) { toast('カルテが見つかりませんでした','error'); return false; }
   if(val===null) {
-    if(k.electronic_amount===null) return false;
-    k.electronic_amount=null; k.diff=null; k.closed=false; touchKarte(k);
+    if(k.electronic_amount===null && !k.elec_parts) return false;
+    k.electronic_amount=null; k.diff=null; k.closed=false; delete k.elec_parts; touchKarte(k);
     ledgerClear(id);
     saveToStorage(); renderKarteList(); try { renderStats(); } catch(e){}
     toast('電子カルテ金額をクリアしました');
     return true;
   }
   if(isNaN(val)||val<0) return false;
-  if(k.electronic_amount===val) return false;
+  if(!keepParts) {
+    if(k.electronic_amount===val && !k.elec_parts) return false;
+    delete k.elec_parts;   // 合計欄に直接入れた金額は、内訳を置き換える
+  }
   k.electronic_amount=val; k.diff=val-k.paper_total; k.closed=true;
   k.closedAt = Date.now();                       // 確定した日時
   k.confirmKind = RESTORE_MODE ? 'restore' : 'new'; // 復元による確定か、新規の確定か
   touchKarte(k);
   saveToStorage();
-  logSave('elec', `【${k.farm} / ${k.cow}】電子 ¥${val.toLocaleString()}（差額 ${k.diff>=0?'+':''}${fmtAmt(k.diff)}）`);
+  const _pn = Array.isArray(k.elec_parts)&&k.elec_parts.length>1 ? `（${k.elec_parts.length}枚 ${k.elec_parts.map(v=>'¥'+v.toLocaleString()).join('＋')}）` : '';
+  logSave('elec', `【${k.farm} / ${k.cow}】電子 ¥${val.toLocaleString()}${_pn}（差額 ${k.diff>=0?'+':''}${fmtAmt(k.diff)}）`);
   renderKarteList();
   try { renderStats(); } catch(e){}
   setTimeout(()=>flashSaved(document.getElementById('elec-'+id)), 0);
@@ -4901,6 +4988,9 @@ function setElectronicAmount(id, val) {
 function autoSaveElectronic(id) {
   const input=document.getElementById('elec-'+id);if(!input)return;
   const raw=input.value.trim();
+  const k=KARTES.find(x=>x.id===id);
+  // 合計が表示されたまま欄を離れただけのときは、内訳を壊さない
+  if(k && raw!=='' && parseInt(raw)===k.electronic_amount) return;
   setElectronicAmount(id, raw==='' ? null : parseInt(raw));
 }
 // 入力中（未確定）の電子カルテ金額を保存する。
@@ -4957,6 +5047,7 @@ function duplicateKarte(id){
   copy.closed = false;
   copy.finished = false;
   copy.electronic_amount = null;
+  delete copy.elec_parts;   // 電子カルテの内訳も引き継がない
   copy.diff = null;
   copy.records.forEach(r=>{ delete r.karteExported; delete r.karteExportedAt; });
   touchKarte(copy);
@@ -5290,6 +5381,16 @@ function exportCSV() {
 
 // ==================== ELECTRONIC AMOUNT SELECTION ====================
 function fillElectAmt(karteId, amt) {
+  const kt = KARTES.find(x=>x.id===karteId);
+  // 内訳（複数枚）があるカルテを黙って上書きしない。足すか置き換えるかを確認する
+  if(kt && Array.isArray(kt.elec_parts) && kt.elec_parts.length>1) {
+    const cur = _sumAmts(kt.elec_parts);
+    const add = confirm(`このカルテには電子カルテ${kt.elec_parts.length}枚の内訳（合計 ¥${cur.toLocaleString()}）があります。\n\n`
+      + `［OK］ ¥${amt.toLocaleString()} を${kt.elec_parts.length+1}枚目として合算する（合計 ¥${(cur+amt).toLocaleString()}）\n`
+      + `［キャンセル］ 内訳を消して ¥${amt.toLocaleString()} だけにする`);
+    if(add) { setElecParts(karteId, kt.elec_parts.concat([amt])); cloudSyncNow();
+              if(activeKarteId!==karteId) selectKarte(karteId); return; }
+  }
   // 入力欄の有無に関わらずデータに直接保存する（一覧表示中でも確実に保存される）
   const saved = setElectronicAmount(karteId, amt);
   // 直後に電子カルテ画面へ戻っても失われないよう、5秒待たず即座に同期する
