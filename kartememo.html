@@ -368,7 +368,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v13.6</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v13.7</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -2514,11 +2514,18 @@ async function ghCreateGist(){
     localStorage.setItem('cm_ghgist', g.id);
     const el = document.getElementById('ghGistId'); if(el) el.value = g.id;
     setStorage('github');
+    // 作っただけでは空なので、続けてこの端末のデータを上げる
+    let pushed = false, pushErr = '';
+    try { pushed = await ghPut(await _wireBody(buildCloudPayload())); }
+    catch(e) { pushErr = e.message; }
+    if(pushed) { _lastSentMain = _fingerprint(buildCloudPayload()); setSyncStatus('saved'); renderCloudSize(); }
     showReport('✅ 非公開Gistを作成しました',
       `Gist ID: ${g.id}\n\n`+
-      `この端末はGitHubに保存する設定になりました。\n\n`+
-      `他の端末にも、同じトークンと同じGist IDを設定してください。\n`+
-      `（設定タブの「📋 APIキー＋Bin IDをまとめてコピー」で写せます）\n\n`+
+      (pushed
+        ? `この端末のデータを上げました。\n  カルテ ${KARTES.length}件 ／ メモ ${memos.length}件\n\n`
+        : `⚠️ データの送信に失敗しました: ${pushErr}\n設定タブの「↑ クラウドに保存」で送り直してください。\n\n`)+
+      `次に、他の端末にも同じトークンと同じGist IDを設定してください。\n`+
+      `（設定タブの「📋 設定をまとめてコピー」で写せます）\n\n`+
       `Gistの場所: ${g.html_url}`);
   } catch(e) { toast('作成できませんでした: '+e.message,'error'); }
 }
@@ -2531,13 +2538,25 @@ async function testGitHub(){
   try {
     const {text, history} = await ghGet();
     let d = {}; try { d = await _unwireRecord(JSON.parse(text)); } catch(e){ throw new Error('中身をJSONとして読めません'); }
+    const gk = (d.kartes||[]).length, gm = (d.memos||[]).length;
+    let advice;
+    if(gk===0 && gm===0 && (KARTES.length || memos.length))
+      advice = `⚠️ Gistはまだ空です。\n\n`
+             + `「↑ クラウドに保存」を1回押して、この端末のデータを上げてください。\n`
+             + `そのあともう一度この確認を押すと、件数が入ります。\n\n`
+             + `他の端末を設定するのは、Gistに件数が入ったあとにしてください。`;
+    else if(gk < KARTES.length)
+      advice = `この端末のほうがカルテが ${KARTES.length-gk}件 多いです。\n`
+             + `「↑ クラウドに保存」で上げれば揃います。`;
+    else
+      advice = `同期できています。\n他の端末にも同じトークンとGist IDを設定してください。`;
     showReport('✅ GitHubに接続できました',
       `Gist ID: ${ghGistId()}\n`+
       `版の履歴: ${history.length}件\n\n`+
-      `Gist上のカルテ: ${(d.kartes||[]).length}件\n`+
-      `Gist上のメモ: ${(d.memos||[]).length}件\n`+
+      `Gist上のカルテ: ${gk}件\n`+
+      `Gist上のメモ: ${gm}件\n`+
       `この端末のカルテ: ${KARTES.length}件／メモ: ${memos.length}件\n\n`+
-      `他の端末にも同じトークンとGist IDを設定してください。`);
+      advice);
   } catch(e) { showReport('⚠️ GitHubに接続できませんでした', `${e.message}\n\nGist ID: ${ghGistId()}\nトークン: ${ghToken()?ghToken().length+'文字':'未設定'}\n\n`+
       `確認する点:\n・トークンに gist 権限があるか（classic token の gist にチェック）\n・Gist IDが正しいか\n・トークンの有効期限が切れていないか`); }
 }
