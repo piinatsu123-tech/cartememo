@@ -368,7 +368,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v12.9</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v13.0</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -1784,8 +1784,61 @@ function extractQtyFromText(text) {
       i=idx+1;
     }
   });
+  // 2周目: 「語＋数量」の並びとして読み直し、略記（「ベルパ」→「ベルパリン」）を拾う。
+  // マスター名そのままの表記しか探せないため、1周目では略記が丸ごと抜け落ちる
+  collectAbbrevQty(src, found, used, map);
   // 数量を読み取れなかったものは単位などの誤検出なので除く
   return found.filter(x=>x.qty!=null).sort((a,b)=>a.pos-b.pos);
+}
+// 本文の語をマスター品目に対応づける。
+// 誤って別の品目の数量を書き換えてしまわないよう、控えめに判定する
+function matchAbbrevToMaster(token) {
+  const n = normItemName(token);
+  if(n.length < 2) return null;
+  const exact = MASTER.find(x=>normItemName(x.name)===n);
+  if(exact) return exact.name;
+  if(n.length < 3) return null;   // 2文字以下の略記は当てにならない
+  // 語がマスター名の先頭（略記）か、マスター名が語の先頭（助詞付きなど）
+  const cands = MASTER.filter(x=>{
+    const xn = normItemName(x.name);
+    return xn.length >= 3 && (xn.startsWith(n) || n.startsWith(xn));
+  });
+  // 候補が絞れないときは決めずに見送る（「点滴」など）
+  const uniq = [...new Set(cands.map(x=>x.name))];
+  return uniq.length === 1 ? uniq[0] : null;
+}
+// 「語 数量語 数量…」と続く本文を区切って、まだ拾えていない品目の数量を読む
+function collectAbbrevQty(src, found, used, map) {
+  // NFKC すると文字数が変わりうるため、位置対応を保つよう元の本文のまま走査する
+  const s = String(src||'');
+  const have = new Set(found.map(x=>x.name));
+  // 数字（全角・漢数字を含む）の手前までを語、続く数字を数量として切り出す
+  const NUM = '0-9０-９一二三四五六七八九十百';
+  const re = new RegExp(`([^${NUM}]+?)[\\s:：=＝・,、×✕xX*＊をはが]*([${NUM}]+(?:[.．][0-9０-９]+)?)`, 'g');
+  // 元の文字位置 → 正規化後の位置（1周目で使った範囲との重なりを見るため）
+  const normPos = new Array(s.length).fill(-1);
+  map.forEach((orig, ni)=>{ if(normPos[orig] < 0) normPos[orig] = ni; });
+  let m;
+  while((m = re.exec(s)) !== null) {
+    const rawToken = m[1];
+    const qty = parseQtyToken(m[2]);
+    if(qty == null) continue;
+    const tokenStart = m.index;
+    // 語の末尾側だけでも照合する（「ファー GL U」のように前に雑音が付くため）
+    const trimmed = rawToken.trim();
+    const tail = trimmed.split(/[\s・,、×✕*＊]+/).filter(Boolean).pop() || '';
+    const name = matchAbbrevToMaster(trimmed) || matchAbbrevToMaster(tail);
+    if(!name || have.has(name)) continue;
+    // 1周目が読み取った範囲と重なるなら、そちらの読みを優先する
+    let overlaps = false;
+    for(let i=tokenStart; i<tokenStart+rawToken.length && i<s.length; i++) {
+      const ni = normPos[i];
+      if(ni >= 0 && used[ni]) { overlaps = true; break; }
+    }
+    if(overlaps) continue;
+    have.add(name);
+    found.push({name, pos:tokenStart, qty});
+  }
 }
 // AIが返した品目リストの数量を、本文から読み取った数量で補正する
 function fixQtyByText(items, text) {
