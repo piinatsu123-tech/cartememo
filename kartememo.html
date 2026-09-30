@@ -368,7 +368,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v13.0</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v13.1</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -1113,6 +1113,7 @@ let showHidden = false;
 document.addEventListener('DOMContentLoaded', async () => {
   loadKeys();
   loadJsonbinSettings();
+  loadReqCount();
   // 前回実測した圧縮率を引き継ぐ（最初の送信でも正しい大きさで判定するため）
   try { const zr = parseFloat(localStorage.getItem('cm_zratio'));
         if(_zSupported && zr > 0 && zr <= 1) _zRatio = zr; } catch(e){}
@@ -1905,6 +1906,7 @@ function copyDiagnostics() {
     `集計台帳: ${Object.keys(LEDGER).filter(id=>LEDGER[id].d!=null).length}件（${fmtBytes(JSON.stringify(_slimLedger()).length)}）`,
     `送信サイズ: ${fmtBytes(Math.round(size*_zRatio))}（圧縮前 ${fmtBytes(size)}）`,
     `圧縮: ${_zSupported?`対応・${(1/_zRatio).toFixed(1)}分の1`:'非対応（ブラウザが古い可能性）'}${CLOUD_READ_BLOCKED?' / ⚠️ 送信停止中':''}`,
+    `通信回数（この端末・${REQ_COUNT.ym||'—'}）: ${REQ_COUNT.n}回 / 無料枠は月10,000回${syncPausedNote()?' / ⏸ 自動送信を一時停止中':''}`,
     `メモ用Bin: ${memoBinId()?'設定あり':'未設定'}${MEMO_BIN_STATUS?' / '+MEMO_BIN_STATUS:''}`,
     // 設定欄と保存値がずれていると、経路によって成否が変わるため必ず出す
     (()=>{
@@ -2638,9 +2640,14 @@ function renderCloudSize() {
   const excluded = (KARTES.length - syncedKartes) + (memos.length - syncedMemos);
   const color = pct>=90 ? '#c00' : pct>=70 ? '#e07800' : 'var(--text2)';
   const mSize = mp ? Math.round(_payloadSize(mp) * _zRatio) : 0;
+  // 無料枠は容量だけでなく月あたりの通信回数にも上限がある
+  const rq = REQ_COUNT.ym===new Date().toISOString().slice(0,7) ? REQ_COUNT.n : 0;
+  const rqColor = rq>=8000 ? '#c00' : rq>=5000 ? '#e07800' : 'var(--text3)';
+  const reqNote = `<div style="font-size:11px;color:${rqColor};margin-top:4px;font-weight:600">通信回数（この端末・${new Date().getMonth()+1}月）: ${rq.toLocaleString()} 回 / 無料枠は月10,000回まで${rq>=5000?'　※他の端末の分も合算されます':''}</div>`
+    + (syncPausedNote() ? `<div style="font-size:11px;color:#8a4b00;background:#fff8e8;border:1px solid #e07800;border-radius:5px;padding:6px 8px;margin-top:6px">⏸ ${esc(syncPausedNote())}</div>` : '');
   const zNote = !_zSupported ? '<div style="font-size:11px;color:#c00;margin-top:4px;font-weight:600">⚠️ この端末は圧縮に対応していません（ブラウザを更新すると送信量を大きく減らせます）</div>'
     : _zRatio < 0.95 ? `<div style="font-size:11px;color:#1a8a4a;margin-top:4px;font-weight:600">🗜 圧縮して送信中（${Math.round(1/_zRatio)}分の1・圧縮前 ${fmtBytes(rawSize)}）</div>` : '';
-  el.innerHTML = `<div style="font-size:12px;color:${color};font-weight:600">送信サイズ: ${fmtBytes(size)} / 目安上限 100 KB（${pct}%）${mb?`　＋ メモ用Bin ${fmtBytes(mSize)}`:''}</div>${zNote}
+  el.innerHTML = `<div style="font-size:12px;color:${color};font-weight:600">送信サイズ: ${fmtBytes(size)} / 目安上限 100 KB（${pct}%）${mb?`　＋ メモ用Bin ${fmtBytes(mSize)}`:''}</div>${reqNote}${zNote}
     ${mb?`<div style="font-size:11px;margin-top:4px;padding:5px 8px;border-radius:5px;background:${MEMO_BIN_STATUS.includes('失敗')?'#fff4f4':'#f2fbf5'};color:${MEMO_BIN_STATUS.includes('失敗')?'#c00':'#1a8a4a'};font-weight:600">メモ用Bin: ${esc(MEMO_BIN_STATUS||'まだ通信していません（メモを追加するか再読み込みしてください）')}</div>`:''}
     <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:4px"><div style="height:100%;width:${pct}%;background:${pct>=90?'#c00':pct>=70?'#e07800':'#111'}"></div></div>
     <div style="font-size:11px;color:var(--text3);margin-top:4px">圧縮前 ${fmtBytes(raw)} → 圧縮後 ${fmtBytes(size)}</div>
@@ -2663,11 +2670,46 @@ function syncCreds() {
   } catch(e){}
   return {key, binId};
 }
+// ==================== 通信回数の節約 ====================
+// jsonbin.io の無料枠は容量ではなく「月あたりの通信回数」にも上限がある
+// （Requests exhausted）。同じ内容を送り直さない・回数上限では繰り返さない
+let _lastSentMain = '';   // 直近に送信できた内容の指紋
+let _lastSentMemo = '';
+let SYNC_PAUSED_UNTIL = 0; // 回数上限に当たったあと自動送信を止める期限
+// 送信のたびに変わる savedAt を除いて内容を比べる
+function _fingerprint(p) {
+  try { const o = Object.assign({}, p); delete o.savedAt; return JSON.stringify(o); }
+  catch(e) { return 'x'+Math.random(); }
+}
+// 繰り返しても直らないエラー（回数上限・容量超過・認証）を見分ける
+function _isFatalSyncError(msg) {
+  return /exhausted|quota|limit exceeded|too many request|429|401|403|unauthor|forbidden|invalid.*key/i.test(String(msg||''));
+}
+// この端末からの通信回数を数える（無料枠の目安を把握するため）
+let REQ_COUNT = {ym:'', n:0};
+function loadReqCount() {
+  try { const r = JSON.parse(localStorage.getItem('cm_reqcount')||'{}');
+        if(r && r.ym) REQ_COUNT = {ym:r.ym, n:Number(r.n)||0}; } catch(e){}
+}
+function countRequest(n) {
+  const ym = new Date().toISOString().slice(0,7);
+  if(REQ_COUNT.ym !== ym) REQ_COUNT = {ym, n:0};   // 月が変われば数え直す
+  REQ_COUNT.n += (n==null?1:n);
+  try { localStorage.setItem('cm_reqcount', JSON.stringify(REQ_COUNT)); } catch(e){}
+}
+function syncPausedNote() {
+  if(Date.now() >= SYNC_PAUSED_UNTIL) return '';
+  return `自動送信を一時停止中（${new Date(SYNC_PAUSED_UNTIL).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}まで）。`
+       + '内容は端末に保存されています。右上の表示をタップすると今すぐ送信できます。';
+}
+const AUTO_SAVE_WAIT = 15000;  // まとめて送るための待ち時間（通信回数を減らす）
 function scheduleCloudAutoSave() {
   const {key, binId} = syncCreds();
   if(!key || !binId) return;
+  // 回数上限に当たった直後は自動送信しない（数えられた回数を無駄にしない）
+  if(Date.now() < SYNC_PAUSED_UNTIL) { updateSyncPill(); return; }
   clearTimeout(_autoSaveTimer);
-  _autoSaveTimer = setTimeout(() => cloudAutoSave(key, binId), 5000);
+  _autoSaveTimer = setTimeout(() => cloudAutoSave(key, binId), AUTO_SAVE_WAIT);
 }
 
 // 5秒待たずに即座にクラウドへ送信する（ブックマークレットなど、直後に
@@ -2689,6 +2731,7 @@ function cloudSyncNow() {
     return Promise.resolve(false);
   }
   clearTimeout(_autoSaveTimer); // 予約済みの遅延送信は取り消す
+  SYNC_PAUSED_UNTIL = 0;        // 手動の再送信は一時停止を解除する
   return cloudAutoSave(key, binId);
 }
 async function cloudAutoSave(key, binId, attempt) {
@@ -2701,13 +2744,21 @@ async function cloudAutoSave(key, binId, attempt) {
   }
   setSyncStatus('saving');
   const data = buildCloudPayload();
-  const body = await _wireBody(data);
-  const bodySize = new Blob([body]).size;
+  const fp = _fingerprint(data);
   // メモ用Binはメイン側の成否に関わらず先に保存する（メイン失敗でメモまで
   // 同期されなくなるのを防ぐ）。再試行のたびに送り直すと通信回数が無駄に
   // 増えるため、1回目だけにする
   const memoSaved = attempt===1 ? await saveMemoBin(key) : true;
+  // 内容が前回送ったものと同じなら送らない（無料枠の通信回数を使い切らないため）
+  if(fp === _lastSentMain) {
+    _syncErrMsg = ''; renderCloudError();
+    setSyncStatus('saved'); renderCloudSize();
+    return true;
+  }
+  const body = await _wireBody(data);
+  const bodySize = new Blob([body]).size;
   try {
+    countRequest();
     const resp = await fetch(`https://api.jsonbin.io/v3/b/${binId}`, {
       method:'PUT',
       headers:{'Content-Type':'application/json','X-Master-Key':key},
@@ -2715,6 +2766,7 @@ async function cloudAutoSave(key, binId, attempt) {
       // 注: keepalive はボディ64KBまでの制限があり、超えると必ず失敗するため使わない
     });
     if(!resp.ok) { let m='HTTP '+resp.status; try{const r=await resp.json();m=r.message||m;}catch(e){} throw new Error(m); }
+    _lastSentMain = fp;
     _syncErrMsg = ''; renderCloudError();
     setSyncStatus('saved');
     const sz = bodySize;
@@ -2725,17 +2777,24 @@ async function cloudAutoSave(key, binId, attempt) {
   } catch(e) {
     const msg = e && e.message ? e.message : '通信エラー';
     console.warn('Auto cloud save failed:', msg);
-    // 一時的な通信エラーは自動で再試行する（最大3回）
-    if(attempt < 3) {
+    const fatal = _isFatalSyncError(msg);
+    // 一時的な通信エラーだけ自動で再試行する（最大3回）。
+    // 回数上限や容量超過は繰り返しても直らず、通信回数を無駄に減らすだけ
+    if(attempt < 3 && !fatal) {
       await new Promise(r=>setTimeout(r, attempt*1500));
       return cloudAutoSave(key, binId, attempt+1);
     }
+    // 回数上限に当たったら、しばらく自動送信を止める
+    if(/exhausted|quota|too many request|429/i.test(msg)) SYNC_PAUSED_UNTIL = Date.now() + 30*60*1000;
     // 原因の切り分けができるよう、送信サイズと発生時刻も記録する
-    const isSize = /size|large|limit|payload|413/i.test(msg);
+    const isSize = /size|large|payload|413/i.test(msg);
     _syncErrMsg = `${msg}（送信サイズ ${fmtBytes(bodySize)} / ${new Date().toLocaleTimeString('ja-JP')}）`;
+    const pn = syncPausedNote(); if(pn) _syncErrMsg += '\n' + pn;
     renderCloudError();
     setSyncStatus('error');
-    if(isSize || bodySize > 100*1024)
+    if(/exhausted|quota|too many request|429/i.test(msg))
+      toast('通信回数の上限に達しました。内容は端末に保存されています（設定タブを確認してください）','error');
+    else if(isSize || bodySize > 100*1024)
       toast(`クラウド保存失敗: 容量超過の可能性（${fmtBytes(bodySize)}）。設定タブで同期範囲を減らせます`,'error');
     else toast('クラウド保存に失敗しました: '+msg, 'error');
     return false;
@@ -2748,6 +2807,7 @@ async function cloudAutoLoad() {
   if(!key || !binId) return;
   setSyncStatus('loading');
   try {
+    countRequest();
     const resp = await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`, {headers:{'X-Master-Key':key}});
     const result = await resp.json();
     if(!resp.ok) throw new Error(result.message||'HTTP '+resp.status);
@@ -2951,6 +3011,7 @@ async function testMemoBin() {
   if(!id) return toast('メモ用Bin IDが未設定です','error');
   toast('確認中…');
   try {
+    countRequest();
     const resp=await fetch(`https://api.jsonbin.io/v3/b/${id}/latest`,{headers:{'X-Master-Key':key}});
     const r=await resp.json();
     if(!resp.ok) throw new Error(r.message||'HTTP '+resp.status);
@@ -2984,6 +3045,7 @@ async function createMemoBin() {
   if(!key) return toast('先にAPIキーを設定してください','error');
   if(memoBinId() && !confirm('すでにメモ用Binが設定されています。新しく作り直しますか？')) return;
   try {
+    countRequest();
     const resp=await fetch('https://api.jsonbin.io/v3/b',{method:'POST',
       headers:{'Content-Type':'application/json','X-Master-Key':key,'X-Bin-Name':'KarteMemo-Memos','X-Bin-Private':'true'},
       body:JSON.stringify(buildMemoPayload())});
@@ -3014,21 +3076,28 @@ function buildMemoPayload() {
 async function saveMemoBin(key) {
   const id = memoBinId(); if(!id) return true;
   if(CLOUD_READ_BLOCKED) return false;
+  const mp = buildMemoPayload();
+  const fp = _fingerprint(mp);
+  // メモが変わっていないのに送ると、カルテを直すたびに通信回数を2倍使ってしまう
+  if(fp === _lastSentMemo) return true;
   try {
-    const mp = buildMemoPayload();
+    countRequest();
     const resp=await fetch(`https://api.jsonbin.io/v3/b/${id}`,{method:'PUT',
       headers:{'Content-Type':'application/json','X-Master-Key':key},body:await _wireBody(mp)});
     if(!resp.ok){let m='HTTP '+resp.status;try{const r=await resp.json();m=r.message||m;}catch(e){}throw new Error(m);}
+    _lastSentMemo = fp;
     MEMO_BIN_STATUS=`最終保存 ${new Date().toLocaleTimeString('ja-JP')}／${mp.memos.length}件を送信`;
     renderCloudSize();
     return true;
   } catch(e){ console.warn('Memo bin save failed:', e.message);
+    if(/exhausted|quota|too many request|429/i.test(e.message||'')) SYNC_PAUSED_UNTIL = Date.now() + 30*60*1000;
     MEMO_BIN_STATUS='保存失敗: '+(e.message||'通信エラー');
     _syncErrMsg='メモ用Binの保存失敗: '+e.message; renderCloudError(); renderCloudSize(); return false; }
 }
 async function loadMemoBin(key) {
   const id = memoBinId(); if(!id) return;
   try {
+    countRequest();
     const resp=await fetch(`https://api.jsonbin.io/v3/b/${id}/latest`,{headers:{'X-Master-Key':key}});
     const r=await resp.json();
     if(!resp.ok) throw new Error(r.message||'HTTP '+resp.status);
@@ -3062,6 +3131,7 @@ async function loadMemoBin(key) {
 // 取り戻せる場合がある
 let _verCache = [];
 async function _fetchBinVersion(key, binId, v) {
+  countRequest();
   const resp = await fetch(`https://api.jsonbin.io/v3/b/${binId}/${v}`, {headers:{'X-Master-Key':key}});
   if(!resp.ok) { let m='HTTP '+resp.status; try{const r=await resp.json();m=r.message||m;}catch(e){} throw new Error(m); }
   const r = await resp.json();
@@ -3086,6 +3156,7 @@ async function browseCloudVersions() {
   let verNums=null, listErr='';
   // まず版の一覧を取得する（これが使えれば確実）
   try {
+    countRequest();
     const resp=await fetch(`https://api.jsonbin.io/v3/b/${binId}/versions`,{headers:{'X-Master-Key':key}});
     const r=await resp.json();
     if(!resp.ok) throw new Error(r.message||'HTTP '+resp.status);
@@ -3095,6 +3166,7 @@ async function browseCloudVersions() {
   // 一覧が使えない場合は最新版の番号から遡る
   if(!verNums) {
     try {
+      countRequest();
       const resp=await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`,{headers:{'X-Master-Key':key}});
       const r=await resp.json();
       if(!resp.ok) throw new Error(r.message||'HTTP '+resp.status);
@@ -3178,6 +3250,7 @@ async function restoreMasterFromCloud() {
   if(!confirm('クラウドにある薬価を取り戻します。\n（削除した品目も復活します。現在の単価は変更しません）')) return;
   try {
     setSyncStatus('loading');
+    countRequest();
     const resp=await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`,{headers:{'X-Master-Key':key}});
     const r=await resp.json();
     if(!resp.ok) throw new Error(r.message||'HTTP '+resp.status);
@@ -3223,16 +3296,20 @@ async function cloudSave() {
   if(CLOUD_READ_BLOCKED) return toast(CLOUD_READ_BLOCKED,'error');
   saveJsonbinSettings();              // 送信前に設定を保存し、経路による食い違いをなくす
   const data=buildCloudPayload();
+  const fp=_fingerprint(data);
+  SYNC_PAUSED_UNTIL = 0;   // 手動保存は一時停止を解除する
   setSyncStatus('saving');
   try {
     let resp;
     const body = await _wireBody(data);   // 自動保存と同じく圧縮して送る
+    countRequest();
     if(binId) { resp=await fetch(`https://api.jsonbin.io/v3/b/${binId}`,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':key},body}); }
     else { resp=await fetch('https://api.jsonbin.io/v3/b',{method:'POST',headers:{'Content-Type':'application/json','X-Master-Key':key,'X-Bin-Name':'KarteMemo','X-Bin-Private':'true'},body}); }
     const result=await resp.json();
     if(!resp.ok) throw new Error(result.message||'HTTP '+resp.status);
     if(!binId) { const newId=result.metadata.id; document.getElementById('jsonbinId').value=newId; localStorage.setItem('cm_jbid',newId); }
     saveJsonbinSettings();
+    _lastSentMain = fp;                     // 同じ内容を続けて送らないようにする
     if(memoBinId()) await saveMemoBin(key); // メモ用Binにも保存する
     document.getElementById('cloudInfo').textContent=`最終保存: ${new Date().toLocaleString('ja-JP')}（メモ${memos.length}件・カルテ${KARTES.length}件）`;
     // 手動保存でも同期状態を更新する。更新しないと保存できているのに
@@ -3250,6 +3327,7 @@ async function cloudLoad() {
   if(!key) return toast('jsonbin.io APIキーを入力してください','error');
   if(!binId) return toast('Bin IDを入力してください','error');
   try {
+    countRequest();
     const resp=await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`,{headers:{'X-Master-Key':key}});
     const result=await resp.json();
     if(!resp.ok) throw new Error(result.message||'HTTP '+resp.status);
