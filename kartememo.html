@@ -368,7 +368,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v13.5</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v13.6</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -2445,8 +2445,17 @@ let LAST_TRIM_NOTE = '';          // 自動で除外した内容の説明
 // Gistは容量に余裕があるため、絞り込みも圧縮もせず全データを素のJSONで置く
 let STORAGE = 'jsonbin';
 const GIST_FILE = 'kartememo.json';
-function ghToken(){ return (localStorage.getItem('cm_ghtoken')||'').trim(); }
-function ghGistId(){ return (localStorage.getItem('cm_ghgist')||'').trim(); }
+// 設定欄と保存値のどちらかにあれば使う。貼った直後（欄を離れる前）でも動くようにする
+function _ghVal(fieldId, storeKey){
+  const el = document.getElementById(fieldId);
+  const fld = el ? String(el.value||'').trim() : '';
+  const sto = String(localStorage.getItem(storeKey)||'').trim();
+  const v = fld || sto;
+  if(v && v !== localStorage.getItem(storeKey)) { try { localStorage.setItem(storeKey, v); } catch(e){} }
+  return v;
+}
+function ghToken(){ return _ghVal('ghToken','cm_ghtoken'); }
+function ghGistId(){ return _ghVal('ghGistId','cm_ghgist'); }
 function usingGitHub(){ return STORAGE==='github' && !!ghToken() && !!ghGistId(); }
 function ghHeaders(extra){
   return Object.assign({
@@ -3481,7 +3490,10 @@ function copyApiKey() {
   navigator.clipboard.writeText(key).then(()=>toast('APIキーをコピーしました','success'));
 }
 function toggleApiKeyVisibility(btn) {
-  const input=document.getElementById('jsonbinKey');
+  // 押されたボタンと同じ行の入力欄を切り替える（GitHubトークンの欄でも使うため）
+  const input = (btn.closest('div')||document).querySelector('input[type=password],input[type=text]')
+             || document.getElementById('jsonbinKey');
+  if(!input) return;
   input.type=input.type==='password'?'text':'password';
   btn.textContent=input.type==='password'?'👁':'🙈';
 }
