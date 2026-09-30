@@ -368,7 +368,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v13.7</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v13.8</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -656,6 +656,11 @@ input[type=checkbox]{width:auto;margin:0}
       </div>
       <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
         <div id="cloudSizeInfo"></div>
+        <div id="ghAllSyncNote" style="display:none;font-size:12px;font-weight:600;color:#1a8a4a;background:#f2fbf5;border:1px solid #1a8a4a;border-radius:6px;padding:8px 10px;margin-top:8px">
+          ✓ 全データを同期しています（カルテ・メモの絞り込みはありません）。<br>
+          <span style="font-weight:400;color:var(--text2)">そのため、どの端末も同じ件数になります。件数が違う場合は、少ない側で「↓ クラウドから読み込む」を押してください。</span>
+        </div>
+        <div id="trimSettings">
         <label style="margin-top:10px">同期するメモの上限</label>
         <select id="syncMemoLimit" onchange="setSyncMemoLimit(this.value)" style="width:100%">
           <option value="0">全件を同期</option>
@@ -688,6 +693,7 @@ input[type=checkbox]{width:auto;margin:0}
           <option value="-1">確定済は同期しない（診療中・電子未入力のみ）</option>
         </select>
         <p class="input-hint" style="margin-top:6px">容量が上限に近づいたら同期範囲を絞れます。どの設定でも<b>診療中・電子未入力のカルテは常に全件同期</b>され、除外されるのは確定済カルテだけです。<br>⚠️ 除外したデータは<b>今の端末のローカルには残ります</b>が、他の端末には共有されません。長期保存は「JSONをダウンロード」でバックアップしてください。</p>
+        </div>
       </div>
     </div>
   </div>
@@ -2570,7 +2576,16 @@ function setStorage(v){
   const jb = document.getElementById('jbSettings');
   if(jb) jb.style.display = STORAGE==='github' ? 'none' : '';
   const sel = document.getElementById('storagePick'); if(sel) sel.value = STORAGE;
+  applyStorageUI();
   renderCloudSize(); updateSyncPill();
+}
+// 容量対策の設定は GitHub では意味がないので隠す（件数の食い違いの元になる）
+function applyStorageUI() {
+  const gh = STORAGE==='github';
+  const trim = document.getElementById('trimSettings');
+  if(trim) trim.style.display = gh ? 'none' : '';
+  const note = document.getElementById('ghAllSyncNote');
+  if(note) note.style.display = gh ? '' : 'none';
 }
 function loadStorageSettings(){
   try { STORAGE = localStorage.getItem('cm_storage')==='github' ? 'github' : 'jsonbin'; } catch(e){}
@@ -2581,6 +2596,7 @@ function loadStorageSettings(){
   if(box) box.style.display = STORAGE==='github' ? '' : 'none';
   const jb = document.getElementById('jbSettings');
   if(jb) jb.style.display = STORAGE==='github' ? 'none' : '';
+  applyStorageUI();
 }
 
 // ==================== 送信データの圧縮 ====================
@@ -2671,8 +2687,10 @@ function _buildPayload(memoLimit, karteMonths, stripSavedText) {
     ks = KARTES.filter(k => !(k.closed && k.month && k.month < cutoff));
   }
   // 古いカルテは確定・未確定を問わず同期から外す（復旧作業中に未確定へ
-  // 戻ったカルテが容量を圧迫するのを防ぐ）
-  if(SYNC_OLD_MONTHS > 0) {
+  // 戻ったカルテが容量を圧迫するのを防ぐ）。
+  // GitHubは容量に余裕があるため、この除外は行わない（端末ごとに件数が
+  // 食い違う原因になる）
+  if(!usingGitHub() && SYNC_OLD_MONTHS > 0) {
     const d2 = new Date(); d2.setMonth(d2.getMonth() - SYNC_OLD_MONTHS);
     const cutoff2 = d2.toISOString().slice(0,7);
     ks = ks.filter(k => !(k.month && k.month < cutoff2));
