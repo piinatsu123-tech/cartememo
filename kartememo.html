@@ -368,7 +368,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v13.2</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v13.3</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -2671,11 +2671,12 @@ function syncCreds() {
   return {key, binId};
 }
 // ==================== 通信回数の節約 ====================
-// jsonbin.io の無料枠は容量ではなく「月あたりの通信回数」にも上限がある
-// （Requests exhausted）。同じ内容を送り直さない・回数上限では繰り返さない
+// jsonbin.io の無料枠は容量だけでなく通信回数にも上限がある（Requests exhausted）。
+// 同じ内容を送り直さない。回数を使い切ったら自動送信を止める。
+// 使い切った分は待っても戻らない説明のため、時間での自動再開はしない
 let _lastSentMain = '';   // 直近に送信できた内容の指紋
 let _lastSentMemo = '';
-let SYNC_PAUSED_UNTIL = 0; // 回数上限に当たったあと自動送信を止める期限
+let SYNC_PAUSED_UNTIL = 0; // 自動送信を止める期限。Infinity なら手動操作まで止める
 // 送信のたびに変わる savedAt を除いて内容を比べる
 function _fingerprint(p) {
   try { const o = Object.assign({}, p); delete o.savedAt; return JSON.stringify(o); }
@@ -2699,6 +2700,11 @@ function countRequest(n) {
 }
 function syncPausedNote() {
   if(Date.now() >= SYNC_PAUSED_UNTIL) return '';
+  if(SYNC_PAUSED_UNTIL === Infinity)
+    return '通信回数を使い切ったため自動送信を止めています。使い切った分は時間が経っても戻りません。'
+         + 'jsonbin.io でプランと残り回数を確認してください。'
+         + '内容は端末に保存されているので、💾 JSONバックアップで保存・受け渡しができます。'
+         + '回数を追加したら、右上の表示をタップして送信を再開してください。';
   return `自動送信を一時停止中（${new Date(SYNC_PAUSED_UNTIL).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}まで）。`
        + '内容は端末に保存されています。右上の表示をタップすると今すぐ送信できます。';
 }
@@ -2784,16 +2790,20 @@ async function cloudAutoSave(key, binId, attempt) {
       await new Promise(r=>setTimeout(r, attempt*1500));
       return cloudAutoSave(key, binId, attempt+1);
     }
-    // 回数上限に当たったら、しばらく自動送信を止める
-    if(/exhausted|quota|too many request|429/i.test(msg)) SYNC_PAUSED_UNTIL = Date.now() + 30*60*1000;
+    // 回数を使い切った場合は待っても戻らないため、手動操作まで自動送信を止める。
+    // 一時的な回数制限（429）は時間で解ける可能性があるので30分だけ止める
+    if(/exhausted|quota/i.test(msg)) SYNC_PAUSED_UNTIL = Infinity;
+    else if(/too many request|429/i.test(msg)) SYNC_PAUSED_UNTIL = Date.now() + 30*60*1000;
     // 原因の切り分けができるよう、送信サイズと発生時刻も記録する
     const isSize = /size|large|payload|413/i.test(msg);
     _syncErrMsg = `${msg}（送信サイズ ${fmtBytes(bodySize)} / ${new Date().toLocaleTimeString('ja-JP')}）`;
     const pn = syncPausedNote(); if(pn) _syncErrMsg += '\n' + pn;
     renderCloudError();
     setSyncStatus('error');
-    if(/exhausted|quota|too many request|429/i.test(msg))
-      toast('通信回数の上限に達しました。内容は端末に保存されています（設定タブを確認してください）','error');
+    if(/exhausted|quota/i.test(msg))
+      toast('通信回数を使い切りました。待っても戻りません。内容は端末に残っているので💾でJSON保存してください','error');
+    else if(/too many request|429/i.test(msg))
+      toast('一時的に通信が制限されました。しばらくしてから再送信してください','error');
     else if(isSize || bodySize > 100*1024)
       toast(`クラウド保存失敗: 容量超過の可能性（${fmtBytes(bodySize)}）。設定タブで同期範囲を減らせます`,'error');
     else toast('クラウド保存に失敗しました: '+msg, 'error');
@@ -3090,7 +3100,8 @@ async function saveMemoBin(key) {
     renderCloudSize();
     return true;
   } catch(e){ console.warn('Memo bin save failed:', e.message);
-    if(/exhausted|quota|too many request|429/i.test(e.message||'')) SYNC_PAUSED_UNTIL = Date.now() + 30*60*1000;
+    if(/exhausted|quota/i.test(e.message||'')) SYNC_PAUSED_UNTIL = Infinity;
+    else if(/too many request|429/i.test(e.message||'')) SYNC_PAUSED_UNTIL = Date.now() + 30*60*1000;
     MEMO_BIN_STATUS='保存失敗: '+(e.message||'通信エラー');
     _syncErrMsg='メモ用Binの保存失敗: '+e.message; renderCloudError(); renderCloudSize(); return false; }
 }
