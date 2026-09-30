@@ -368,7 +368,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v13.4</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v13.5</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -577,15 +577,19 @@ input[type=checkbox]{width:auto;margin:0}
 
       <div id="ghSettings" style="display:none;margin-top:12px;padding:10px;background:var(--surface);border:1px solid var(--border2);border-radius:6px">
         <p class="input-hint" style="margin-bottom:10px">
-          GitHubの<b>非公開Gist</b>にデータを保存します。無料で、通信回数の実質的な制限がなく、保存のたびに過去の版が残ります。<br><br>
-          <b>トークンの作り方</b><br>
-          ① GitHub → 右上のアイコン → Settings<br>
-          ② 左下の <b>Developer settings</b><br>
-          ③ <b>Personal access tokens</b> → <b>Tokens (classic)</b><br>
-          ④ Generate new token (classic)<br>
-          ⑤ 権限は <b>gist だけ</b>にチェック（リポジトリの権限は不要です）<br>
-          ⑥ 期限は「No expiration」にしておくと入れ直しが不要です<br>
-          ⑦ 作成後に表示される <code>ghp_…</code> をコピーして下に貼る
+          GitHubの<b>非公開Gist</b>にデータを保存します。無料で、通信回数の実質的な制限がなく、保存のたびに過去の版が残ります。
+        </p>
+        <a href="https://github.com/settings/tokens/new?scopes=gist&description=KarteMemo" target="_blank" rel="noopener"
+           class="btn btn-primary btn-sm" style="width:100%;justify-content:center;text-decoration:none;margin-bottom:8px">
+          🔑 GitHubでトークンを作る（gist権限つきで開きます）
+        </a>
+        <p class="input-hint" style="margin-bottom:10px">
+          上のボタンで、<b>gist</b> にチェックが入った作成画面が開きます。ページ下の <b>Generate token</b> を押すと
+          <code>ghp_…</code> が表示されるので、それを下に貼ってください。<br>
+          <b style="color:#b07000">このトークンは1回しか表示されません。</b>控えを残しておくと安心です。<br><br>
+          ボタンが開かない場合は <b>https://github.com/settings/tokens</b> を開き、
+          Generate new token → <b>Tokens (classic)</b> → 権限は <b>gist だけ</b>にチェック。<br>
+          期限は「No expiration」にしておくと入れ直しが不要です。
         </p>
         <label>GitHubトークン</label>
         <div style="display:flex;gap:6px">
