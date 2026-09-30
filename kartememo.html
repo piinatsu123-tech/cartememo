@@ -368,7 +368,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v13.1</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v13.2</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -3373,15 +3373,33 @@ function updateBackupBtn() {
   btn.title=`最終バックアップ: ${new Date(last).toLocaleString('ja-JP')}\n押すとJSONを保存します`;
 }
 function exportData() {
+  flushPendingElec();        // 入力途中の電子カルテ金額も取り込む
   ledgerSyncFromKartes();
-  const data={version:2,exportedAt:new Date().toISOString(),memos,dictWords:DICT_WORDS,convPairs,kartes:KARTES,farms:FARMS,master:MASTER,farmDist:FARM_DIST,templates:TEMPLATES,watch:WATCH_ITEMS,ledger:LEDGER,adjust:{v:ADJUSTMENTS,at:ADJUST_AT}};
+  // 書き出すのは端末のデータそのもの。クラウドを経由しないため、
+  // 同期できていない分も、同期対象から外している分もすべて含まれる
+  const data={version:2,exportedAt:new Date().toISOString(),memos,dictWords:DICT_WORDS,convPairs,kartes:KARTES,farms:FARMS,master:MASTER,farmDist:FARM_DIST,templates:TEMPLATES,watch:WATCH_ITEMS,ledger:LEDGER,adjust:{v:ADJUSTMENTS,at:ADJUST_AT},saveLog:SAVE_LOG,deleted:DELETED};
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
   a.download=`kartememo_${new Date().toISOString().slice(0,10)}.json`;a.click();
   try { localStorage.setItem('cm_lastbackup', String(Date.now())); } catch(e){}
   updateBackupBtn();
+  const confirmed = KARTES.filter(k=>k.closed).length;
   logSave('karte', `JSONバックアップを保存（カルテ${KARTES.length}件・メモ${memos.length}件）`);
-  toast('JSONをダウンロードしました','success');
+  showReport('💾 JSONバックアップを保存しました',
+    `ファイル: kartememo_${new Date().toISOString().slice(0,10)}.json\n\n`+
+    `カルテ: ${KARTES.length}件（確定済 ${confirmed}件）\n`+
+    `メモ: ${memos.length}件\n`+
+    `薬価: ${MASTER.length}件\n`+
+    `集計台帳: ${Object.keys(LEDGER).filter(id=>LEDGER[id].d!=null).length}件\n`+
+    `定型パターン: ${TEMPLATES.length}件\n`+
+    `保存履歴: ${SAVE_LOG.length}件\n\n`+
+    (PENDING_CHANGES>0
+      ? `⚠️ クラウドに未送信の変更が ${PENDING_CHANGES}件 ありますが、このファイルには含まれています。\n`
+      : '')+
+    `このファイルは端末のデータをそのまま書き出したものです。\n`+
+    `クラウドを経由しないため、同期できていない分も、同期対象から外している古いカルテも、すべて入っています。\n\n`+
+    `別の端末へ移すときは、その端末の設定タブで「JSONを読み込む」から\n`+
+    `このファイルを選んでください（通信は不要です）。`);
 }
 function importData(input) {
   const file=input.files[0];if(!file)return;
@@ -3421,17 +3439,32 @@ function importData(input) {
       if(data.farmDist&&typeof data.farmDist==='object'){Object.keys(data.farmDist).forEach(f=>{if(FARM_DIST[f]==null)FARM_DIST[f]=data.farmDist[f];});}
       if(Array.isArray(data.templates)){const ids=new Set(TEMPLATES.map(t=>t.id));_dropDeleted('templates', data.templates, t=>t.id).forEach(t=>{if(!ids.has(t.id))TEMPLATES.push(t);});}
       if(Array.isArray(data.watch)) WATCH_ITEMS = [...new Set([...WATCH_ITEMS, ...data.watch])];
+      // deleted（削除記録）は意図的に取り込まない。取り込むと、戻したいデータを
+      // その場で削除し直してしまう。ファイルには記録として入れてある
       // 差額集計の台帳と調整額も復元する
       if(data.ledger) mergeLedger(data.ledger.e ? _normLedger(data.ledger) : data.ledger);
       if(data.adjust && data.adjust.v && (Number(data.adjust.at)||0) > ADJUST_AT) {
         ADJUSTMENTS = data.adjust.v; ADJUST_AT = Number(data.adjust.at)||0;
+      }
+      // 保存履歴も復元する（時刻と内容が同じものは重複させない）
+      let newLogs = 0;
+      if(Array.isArray(data.saveLog)) {
+        const seen = new Set(SAVE_LOG.map(x=>x.t+'|'+x.text));
+        data.saveLog.forEach(x=>{
+          if(!x || seen.has(x.t+'|'+x.text)) return;
+          seen.add(x.t+'|'+x.text); SAVE_LOG.push(x); newLogs++;
+        });
+        SAVE_LOG.sort((a,b)=>(a.t||0)-(b.t||0));
+        if(SAVE_LOG.length > 200) SAVE_LOG = SAVE_LOG.slice(-200);
+        try { localStorage.setItem('cm_savelog', JSON.stringify(SAVE_LOG)); } catch(e){}
       }
       reconcileFarms();
       saveToStorage();renderMemoQueue();renderResultsList();renderDict();updateBadge();
       updateFarmDatalist();updateKarteFarmFilter();renderKarteList();
       try { renderStats(); } catch(e){}
       if(restoredElec) logSave('elec', `バックアップから確定（電子カルテ金額）${restoredElec}件を復元`);
-      toast(`メモ${newMemos.length}件・カルテ${newKartes}件を追加${restoredElec?`／確定${restoredElec}件を復元`:''}しました`,'success');
+      renderSaveLog();
+      toast(`メモ${newMemos.length}件・カルテ${newKartes}件を追加${restoredElec?`／確定${restoredElec}件を復元`:''}${newLogs?`／保存履歴${newLogs}件`:''}しました`,'success');
     } catch(err){toast('読み込みエラー: '+err.message,'error');}
     input.value='';
   };
