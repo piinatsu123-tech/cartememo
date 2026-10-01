@@ -368,7 +368,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v13.8</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v13.9</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -4888,8 +4888,10 @@ function toggleRecordPreset(karteId, recIdx, presetKey, checkbox) {
 }
 
 // カルテの金額は一の位を切り捨てて10円単位にする（例: 178 → 170）
+// 画面に出している合計は四捨五入した円単位なので、同じ値を基準に切り捨てる。
+// 小数のまま切り捨てると、合計1149.7円（表示¥1,150）が1140円になってしまう
 function floorAmt(v) {
-  const n = Math.floor(Number(v));
+  const n = Math.round(Number(v));
   if(isNaN(n) || n <= 0) return 0;
   return Math.floor(n/10)*10;
 }
