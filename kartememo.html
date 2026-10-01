@@ -368,7 +368,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v13.9</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v14.0</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -801,6 +801,24 @@ input[type=checkbox]{width:auto;margin:0}
   </div>
 
   <div class="panel">
+    <div class="panel-hdr"><h2>🔁 読み替え辞書（聞き間違いの置き換え）</h2></div>
+    <div class="panel-body">
+      <p class="input-hint" style="margin-bottom:10px">
+        音声入力で品目名が別の語になってしまうとき、その語を正しい品目名に置き換えます。<br>
+        （例: <b>生殖</b> → <b>生食</b>、<b>ミアリ</b> → <b>ミヤリサン</b>）<br>
+        解析でもAIへの指示でも使われるので、同じ聞き間違いが繰り返し計算に影響するのを防げます。
+      </p>
+      <div class="dict-tags" id="aliasTags"></div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <input type="text" id="aliasFrom" placeholder="聞こえた語（例: 生殖）" style="flex:1;min-width:110px;font-size:13px" onkeydown="if(event.key==='Enter')document.getElementById('aliasTo').focus()">
+        <span style="color:var(--text3)">→</span>
+        <input type="text" id="aliasTo" placeholder="正しい品目名（例: 生食）" list="masterNamesList" style="flex:1;min-width:110px;font-size:13px" onkeydown="if(event.key==='Enter')addAlias()">
+        <button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="addAlias()">追加</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
     <div class="panel-hdr"><h2>🔖 Bookmarklet（電子カルテ金額取得）</h2></div>
     <div class="panel-body">
       <p class="input-hint" style="margin-bottom:8px">電子カルテの診療記録画面でクリックすると「B点計 × 10」の金額をカルテ一覧に自動入力します。<br>お気に入りバーにドラッグ＆ドロップしてください。<br><span style="color:#555">取得先: <code style="font-family:'JetBrains Mono',monospace;background:#f0f0f0;padding:1px 5px;border-radius:3px">id="karte_record_3_7_1"</code> の次の要素の値 × 10</span></p>
@@ -1167,6 +1185,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if(_zSupported && zr > 0 && zr <= 1) _zRatio = zr; } catch(e){}
   loadFromStorage();
   renderDict();
+  renderAliases();
   renderMasterList();
   renderMasterEditor();
   renderMemoQueue();
@@ -1305,6 +1324,7 @@ function saveToStorage() {
   try {
     localStorage.setItem('cm_memos', JSON.stringify(memos));
     localStorage.setItem('cm_dict', JSON.stringify(DICT_WORDS));
+    localStorage.setItem('cm_alias', JSON.stringify(ALIASES));
     localStorage.setItem('cm_master', JSON.stringify(MASTER));
     localStorage.setItem('cm_convpairs', JSON.stringify(convPairs));
     localStorage.setItem('cm_kartes', JSON.stringify(KARTES));
@@ -1326,6 +1346,7 @@ function loadFromStorage() {
   try {
     const m = localStorage.getItem('cm_memos'); if(m) memos = JSON.parse(m);
     const d = localStorage.getItem('cm_dict'); if(d) DICT_WORDS = JSON.parse(d);
+    const al = localStorage.getItem('cm_alias'); if(al) { const a2=JSON.parse(al); if(Array.isArray(a2)) ALIASES = a2; }
     const ms = localStorage.getItem('cm_master'); if(ms) MASTER = JSON.parse(ms);
     const cp = localStorage.getItem('cm_convpairs'); if(cp) convPairs = JSON.parse(cp);
     const k = localStorage.getItem('cm_kartes'); if(k) KARTES = JSON.parse(k);
@@ -1479,6 +1500,57 @@ function removeDict(i) { DICT_WORDS.splice(i,1); renderDict(); saveToStorage(); 
 function getDictPrompt() {
   if(!DICT_WORDS.length) return '';
   return `\n\n【専門用語辞書（音声誤変換の補正に使用）】\n以下は正しい表記です。音声認識で似た読みの誤変換があった場合、この正式名称に置き換えてください：\n${DICT_WORDS.join('、')}`;
+}
+
+// ===== 読み替え辞書 =====
+// 音声入力で品目名が別の語になることがある（生殖→生食、ミアリ→ミヤリサン）。
+// 本文を解析する前に置き換えることで、同じ聞き間違いが繰り返し影響するのを防ぐ
+let ALIASES = [
+  {f:'生殖',       t:'生食'},
+  {f:'ミアリ',     t:'ミヤリサン'},
+  {f:'重奏',       t:'重曹'},
+  {f:'リ値',       t:'留置'},
+  {f:'直径',       t:'直検'},
+  {f:'アイスタット', t:'istat'}
+];
+function applyAliases(text) {
+  let t = String(text||'');
+  // 長い語から置き換える（短い語が長い語の一部を壊さないように）
+  [...ALIASES].sort((a,b)=>String(b.f||'').length-String(a.f||'').length)
+    .forEach(a=>{ if(a && a.f && a.t) t = t.split(a.f).join(a.t); });
+  return t;
+}
+function renderAliases() {
+  const el = document.getElementById('aliasTags'); if(!el) return;
+  el.innerHTML = !ALIASES.length
+    ? '<span style="font-size:12px;color:var(--text3)">登録なし</span>'
+    : ALIASES.map((a,i)=>`<div class="dict-tag"><span class="dt-word">${esc(a.f)} → ${esc(a.t)}</span><button class="dt-del" onclick="removeAlias(${i})">×</button></div>`).join('');
+}
+function addAlias() {
+  const fi = document.getElementById('aliasFrom'), ti = document.getElementById('aliasTo');
+  const f = (fi.value||'').trim(), t = (ti.value||'').trim();
+  if(!f || !t) return toast('聞こえた語と正しい品目名の両方を入れてください','error');
+  if(f === t) return toast('同じ語です','error');
+  if(ALIASES.some(a=>a.f===f)) return toast(`「${f}」はすでに登録されています`,'error');
+  if(!MASTER.some(m=>m.name===t)) {
+    if(!confirm(`「${t}」は薬価に登録がありません。\nこのまま読み替え辞書に追加しますか？`)) return;
+  }
+  ALIASES.push({f, t});
+  fi.value=''; ti.value='';
+  renderAliases(); saveToStorage();
+  logSave('master', `読み替えを追加（${f} → ${t}）`);
+  toast(`「${f}」を「${t}」として読むようにしました`,'success');
+}
+function removeAlias(i) {
+  const a = ALIASES[i]; if(!a) return;
+  ALIASES.splice(i,1);
+  renderAliases(); saveToStorage();
+  logSave('delete', `読み替えを削除（${a.f} → ${a.t}）`);
+}
+function getAliasPrompt() {
+  if(!ALIASES.length) return '';
+  return `\n\n【読み替え表（音声の聞き間違い）】\n左の語が出てきたら、必ず右の品目名として扱ってください：\n`
+       + ALIASES.map(a=>`${a.f} → ${a.t}`).join('、');
 }
 
 // ==================== MASTER ====================
@@ -1765,6 +1837,19 @@ function normItemName(s) {
     .replace(/[\s・･,、．。\-‐－_/／]/g, '')              // 空白・区切り記号を除去
     .replace(/[ｰー]/g, '');                              // 長音を無視
 }
+// 音声入力では数量が「サン」「酸」「線」のようにかなや同音の漢字になることがある。
+// 品目名の直後に限って読み替える（「に」は助詞と紛れるため入れない）
+// 1文字のかな（シ・ゴ・ク等）は品目名に続く語と紛れるため入れない
+const QTY_WORDS = [
+  ['ジュウ',10],['じゅう',10],['ヒャク',100],['ひゃく',100],['セン',1000],['せん',1000],['線',1000],['千',1000],
+  ['イチ',1],['いち',1],['サン',3],['さん',3],['酸',3],['ヨン',4],['よん',4],
+  ['ロク',6],['ろく',6],['ナナ',7],['なな',7],['シチ',7],
+  ['ハチ',8],['はち',8],['キュウ',9],['きゅう',9]
+].sort((a,b)=>b[0].length-a[0].length);   // 長い語から試す
+function matchQtyWord(rest) {
+  for(const [w,n] of QTY_WORDS) if(rest.startsWith(w)) return {n, len:w.length};
+  return null;
+}
 // 漢数字まじりの数量を数値にする（例: 二十5→25、十5→15、五→5）
 function parseQtyToken(s) {
   let t=String(s||'').normalize('NFKC').trim();
@@ -1803,7 +1888,7 @@ function buildNormIndex(src) {
   return {norm, map};
 }
 function extractQtyFromText(text) {
-  const src=String(text||'');
+  const src=applyAliases(text);   // 聞き間違いを先に置き換える
   const {norm, map}=buildNormIndex(src);
   // マスター品目を長い名前から順に探す（「ウルソ粉」を「ウルソ」と誤認しないため）
   const names=MASTER.map(m=>m.name).sort((a,b)=>normItemName(b).length-normItemName(a).length);
@@ -1826,8 +1911,12 @@ function extractQtyFromText(text) {
         // 直後に続く数量を読む（記号や空白は読み飛ばす）
         const rest=src.slice(end<map.length?map[end]:src.length).normalize('NFKC');
         // 「を5」「×5」「は5」など、間に助詞や記号が入っても数量を読む
-        const qm=rest.match(/^[\s:：=＝・,、×✕xX*＊をはが]*([0-9０-９一二三四五六七八九十百.．]+)/);
-        const qty=qm?parseQtyToken(qm[1]):null;
+        const lead=rest.match(/^[\s:：=＝・,、×✕xX*＊をはがにでへも]*/)[0];
+        const after=rest.slice(lead.length);
+        const qm=after.match(/^([0-9０-９一二三四五六七八九十百.．]+)/);
+        let qty = qm ? parseQtyToken(qm[1]) : null;
+        // 数字が無い場合だけ、かな・同音漢字の数量を読む（「メトクロサン」→3）
+        if(qty==null) { const w=matchQtyWord(after); if(w) qty=w.n; }
         found.push({name, pos:map[idx], qty});
       }
       i=idx+1;
@@ -2047,7 +2136,7 @@ async function parseMemo(memo) {
   const prompt = `あなたは獣医診療記録の解析AIです。以下の診療メモから情報を抽出し、JSONオブジェクトのみを返してください。他の文字は一切不要です。
 
 【マスター品目リスト（品目名はこれらと完全一致させる）】
-${masterNames}${getDictPrompt()}
+${masterNames}${getDictPrompt()}${getAliasPrompt()}
 
 【診療メモ】
 ${memo.text}
@@ -2672,7 +2761,7 @@ function _buildPayload(memoLimit, karteMonths, stripSavedText) {
     return {
       version:2, savedAt:new Date().toISOString(),
       memos: ms.map(m=>_slimMemo(m, stripSavedText)),
-      dictWords:DICT_WORDS, convPairs,
+      dictWords:DICT_WORDS, convPairs, aliases:ALIASES,
       // 読み込み時に省略フィールドが復元されているため、送信時は圧縮し直す
       kartes: _cloudKartesSnapshot.map(_slimKarte),
       farms:FARMS, master:MASTER, farmDist:FARM_DIST, templates:TEMPLATES, watch:WATCH_ITEMS,
@@ -2698,7 +2787,7 @@ function _buildPayload(memoLimit, karteMonths, stripSavedText) {
   return {
     version:2, savedAt:new Date().toISOString(),
     memos: ms.map(m=>_slimMemo(m, stripSavedText)),
-    dictWords:DICT_WORDS, convPairs,
+    dictWords:DICT_WORDS, convPairs, aliases:ALIASES,
     kartes: ks.map(_slimKarte),
     farms:FARMS, master:MASTER, farmDist:FARM_DIST, templates:TEMPLATES, watch:WATCH_ITEMS,
     deleted:DELETED,
@@ -3121,6 +3210,7 @@ async function cloudAutoLoad() {
 
     if(Array.isArray(data.dictWords)) DICT_WORDS = data.dictWords;
     if(Array.isArray(data.convPairs)) convPairs = data.convPairs;
+    if(Array.isArray(data.aliases)) ALIASES = data.aliases;
     if(Array.isArray(data.farms)) { FARMS = data.farms; FARMS.sort((a,b)=>a.localeCompare(b,'ja')); }
     if(data.farmDist && typeof data.farmDist==='object') FARM_DIST = {...FARM_DIST, ...data.farmDist};
     // master: クラウドを基準に、ローカルのみの品目を保持
@@ -3648,7 +3738,7 @@ function exportData() {
   ledgerSyncFromKartes();
   // 書き出すのは端末のデータそのもの。クラウドを経由しないため、
   // 同期できていない分も、同期対象から外している分もすべて含まれる
-  const data={version:2,exportedAt:new Date().toISOString(),memos,dictWords:DICT_WORDS,convPairs,kartes:KARTES,farms:FARMS,master:MASTER,farmDist:FARM_DIST,templates:TEMPLATES,watch:WATCH_ITEMS,ledger:LEDGER,adjust:{v:ADJUSTMENTS,at:ADJUST_AT},saveLog:SAVE_LOG,deleted:DELETED};
+  const data={version:2,exportedAt:new Date().toISOString(),memos,dictWords:DICT_WORDS,convPairs,aliases:ALIASES,kartes:KARTES,farms:FARMS,master:MASTER,farmDist:FARM_DIST,templates:TEMPLATES,watch:WATCH_ITEMS,ledger:LEDGER,adjust:{v:ADJUSTMENTS,at:ADJUST_AT},saveLog:SAVE_LOG,deleted:DELETED};
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
   a.download=`kartememo_${new Date().toISOString().slice(0,10)}.json`;a.click();
@@ -3684,6 +3774,7 @@ function importData(input) {
       sortMemosChrono();
       if(Array.isArray(data.dictWords))data.dictWords.forEach(w=>{if(!DICT_WORDS.includes(w))DICT_WORDS.push(w);});
       if(Array.isArray(data.convPairs)){const eIds2=new Set(convPairs.map(p=>p.id));data.convPairs.forEach(p=>{if(!eIds2.has(p.id))convPairs.push(p);});}
+      if(Array.isArray(data.aliases)){const have=new Set(ALIASES.map(a=>a.f));data.aliases.forEach(a=>{if(a&&a.f&&a.t&&!have.has(a.f))ALIASES.push(a);});renderAliases();}
       let newKartes=0;
       let restoredElec=0;
       if(Array.isArray(data.kartes)){
