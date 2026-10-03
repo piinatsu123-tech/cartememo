@@ -368,7 +368,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v14.1</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v14.2</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -3577,9 +3577,14 @@ async function browseCloudVersions() {
     verNums=[]; for(let v=cur; v>=Math.max(0,cur-29); v--) verNums.push(v);
   }
   }
-  verNums = verNums.slice(0,30);
+  // GitHubは版の履歴が残り続け、通信回数にも余裕があるため多めに調べる
+  const LOOK = usingGitHub() ? 60 : 30;
+  verNums = verNums.slice(0, LOOK);
   const rows=[]; let lastErr='';
-  for(const v of verNums) {
+  for(let n=0; n<verNums.length; n++) {
+    const v = verNums[n];
+    el.innerHTML = `<div class="tpl-empty">確認中… ${n+1}/${verNums.length}版`
+      + (rows.length ? `（カルテが最も多い版: ${Math.max(...rows.map(r=>r.s.kartes))}件）` : '') + '</div>';
     try {
       const d=await _fetchBinVersion(key,binId,v);
       const s=_summarizeRecord(d);
@@ -3595,7 +3600,17 @@ async function browseCloudVersions() {
       その場合はJSONバックアップからの復元をお試しください。</div>`;
     return;
   }
-  el.innerHTML = rows.map(({v,s})=>{
+  // 上書きで減ってしまった場合に迷わないよう、最も多い版を先に示す
+  const best = rows.reduce((a,b)=>(b.s.kartes>a.s.kartes || (b.s.kartes===a.s.kartes && b.s.confirmed>a.s.confirmed)) ? b : a, rows[0]);
+  const bestNote = (best && best.s.kartes > KARTES.length)
+    ? `<div style="font-size:12px;background:#fff8e8;border:1px solid #e07800;border-radius:6px;padding:8px 10px;margin-bottom:8px">
+         <b>カルテが最も多い版: ${best.s.kartes}件</b>（確定済 ${best.s.confirmed}件）<br>
+         <span style="color:var(--text2)">この端末は現在 ${KARTES.length}件 です。${best.s.kartes - KARTES.length}件 戻せます。</span>
+         <button class="btn btn-primary btn-sm" style="width:100%;justify-content:center;margin-top:6px"
+                 onclick="restoreFromVersion('${String(best.v).replace(/'/g,'')}')">⬆ この版から復元する（${best.s.kartes}件）</button>
+       </div>`
+    : '';
+  el.innerHTML = bestNote + rows.map(({v,s})=>{
     const when = s.savedAt ? new Date(s.savedAt).toLocaleString('ja-JP') : '(日時不明)';
     const hi = s.confirmed>0;
     return `<div class="tpl-item" style="${hi?'border-color:#1a8a4a;background:#f2fbf5':''}">
@@ -3603,14 +3618,16 @@ async function browseCloudVersions() {
         <div class="tpl-name">版 ${v}　<span style="font-weight:400;font-size:12px;color:var(--text3)">${esc(when)}</span></div>
         <div class="tpl-content">カルテ${s.kartes}件・<b style="color:${hi?'#1a8a4a':'#c00'}">確定済 ${s.confirmed}件</b>・メモ${s.memos}件・薬価${s.master}件${s.confirmed?`　差額計 ${s.diffSum>=0?'+':''}${fmtAmt(s.diffSum)}`:''}</div>
       </div>
-      <button class="tpl-insert" onclick="restoreFromVersion(${v})">この版から復元</button>
+      <button class="tpl-insert" onclick="restoreFromVersion('${String(v).replace(/'/g,'')}')">この版から復元</button>
     </div>`;
   }).join('');
   toast(`${rows.length}件の過去バージョンを取得しました`,'success');
 }
 // 選んだ版のカルテ内容を現在のデータに取り込む（不足分の追加と確定の復元）
 async function restoreFromVersion(v) {
-  const hit=_verCache.find(x=>x.v===v); if(!hit) return;
+  // 版の識別子は jsonbin では数値、GitHub ではSHA文字列
+  const hit=_verCache.find(x=>String(x.v)===String(v));
+  if(!hit) return toast('この版の内容が見つかりません。もう一度「過去バージョンを調べる」を押してください','error');
   const d=hit.d, s=hit.s;
   if(!confirm(`版 ${v} から復元します。\n\nカルテ${s.kartes}件・確定済${s.confirmed}件\n\n・この版にしか無いカルテを追加します\n・確定（電子カルテ金額）が失われているカルテに書き戻します\n・現在のカルテの診療記録は消しません\n\nよろしいですか？`)) return;
   const ks=Array.isArray(d.kartes)?d.kartes:[];
