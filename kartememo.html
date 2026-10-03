@@ -368,7 +368,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v14.0</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v14.1</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -652,6 +652,7 @@ input[type=checkbox]{width:auto;margin:0}
         <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
           <button class="btn btn-ghost btn-sm" onclick="cloudSyncNow()">↻ 今すぐ再送信</button>
           <button class="btn btn-ghost btn-sm" onclick="copyDiagnostics()">📋 エラー内容をコピー</button>
+          <button class="btn btn-ghost btn-sm" onclick="allowShrinkOnce()" title="この端末の内容が正しい場合だけ使ってください">⚠️ カルテが減る送信を許可</button>
         </div>
       </div>
       <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
@@ -2045,6 +2046,7 @@ function copyDiagnostics() {
     `圧縮: ${_zSupported?`対応・${(1/_zRatio).toFixed(1)}分の1`:'非対応（ブラウザが古い可能性）'}${CLOUD_READ_BLOCKED?' / ⚠️ 送信停止中':''}`,
     `通信回数（この端末・${REQ_COUNT.ym||'—'}）: ${REQ_COUNT.n}回 / 無料枠は月10,000回${syncPausedNote()?' / ⏸ 自動送信を一時停止中':''}`,
     `保存先: ${usingGitHub()?'GitHub（非公開Gist '+ghGistId()+'）':(STORAGE==='github'?'GitHub（設定が未完了）':'jsonbin.io')}`,
+    `保存先の読み込み: ${SYNC_LOADED_TARGET===syncTargetKey()?'済み':'⚠️ 未（送信は止まります）'} / 前回読み込み時のカルテ ${CLOUD_SEEN.kartes}件`,
     `メモ用Bin: ${usingGitHub()?'（GitHubでは不要）':(memoBinId()?'設定あり':'未設定')}${(!usingGitHub()&&MEMO_BIN_STATUS)?' / '+MEMO_BIN_STATUS:''}`,
     // 設定欄と保存値がずれていると、経路によって成否が変わるため必ず出す
     (()=>{
@@ -2656,10 +2658,15 @@ async function testGitHub(){
       `確認する点:\n・トークンに gist 権限があるか（classic token の gist にチェック）\n・Gist IDが正しいか\n・トークンの有効期限が切れていないか`); }
 }
 function setStorage(v){
+  const changed = STORAGE !== ((v==='github') ? 'github' : 'jsonbin');
   STORAGE = (v==='github') ? 'github' : 'jsonbin';
   try { localStorage.setItem('cm_storage', STORAGE); } catch(e){}
   _lastSentMain = ''; _lastSentMemo = '';   // 保存先が変わったので送り直す
   SYNC_PAUSED_UNTIL = 0;
+  // 保存先が変わったら、まだその保存先の内容を読んでいない。
+  // 読む前に送ると、保存先にある他の端末のデータを消してしまう
+  SYNC_LOADED_TARGET = '';
+  if(changed) setTimeout(()=>{ if(usingGitHub() || STORAGE==='jsonbin') cloudAutoLoad(); }, 0);
   const box = document.getElementById('ghSettings');
   if(box) box.style.display = STORAGE==='github' ? '' : 'none';
   const jb = document.getElementById('jbSettings');
@@ -2696,6 +2703,12 @@ let _zRatio = 1;                  // 圧縮後 ÷ 圧縮前。実測して更新
 let _zSupported = (typeof CompressionStream !== 'undefined' && typeof DecompressionStream !== 'undefined');
 // 圧縮データを読めなかった端末が、古い内容で上書きしてしまうのを防ぐ
 let CLOUD_READ_BLOCKED = '';
+// この保存先の内容を一度でも読み込んだか。読む前に送ると、保存先にある
+// 他の端末のデータを手元の（少ない）内容で上書きしてしまう
+let SYNC_LOADED_TARGET = '';
+// 直前に読み込んだ保存先の件数。大幅に減る送信を止める判断に使う
+let CLOUD_SEEN = {kartes:0, memos:0};
+function syncTargetKey(){ return usingGitHub() ? 'gist:'+ghGistId() : 'jsonbin:'+((localStorage.getItem('cm_jbid')||'').trim()); }
 async function _gzipB64(str) {
   if(!_zSupported) return null;
   try {
@@ -2794,6 +2807,29 @@ function _buildPayload(memoLimit, karteMonths, stripSavedText) {
     // 台帳と調整額は絞り込みの対象外。カルテを同期から外しても集計は全端末で揃う
     ledger:_slimLedger(), adjust:{v:ADJUSTMENTS, at:ADJUST_AT}
   };
+}
+// 送ろうとしている内容が、保存先にあったものより大幅に少なければ止める
+let SHRINK_OK_UNTIL = 0;   // 利用者が明示的に許可した場合だけ通す
+function _shrinkGuard(data) {
+  if(Date.now() < SHRINK_OK_UNTIL) return '';
+  const nk = (data.kartes||[]).length, seen = CLOUD_SEEN.kartes||0;
+  if(seen < 5) return '';                       // 比べる相手が無い
+  const lost = seen - nk;
+  if(lost < 10 && nk >= seen*0.8) return '';    // 多少の増減は通す
+  if(nk >= seen) return '';
+  return `送信を止めました: カルテが ${seen}件 → ${nk}件 と ${lost}件 減っています。`
+       + `この端末の内容で保存先を上書きすると、他の端末のカルテが失われます。`
+       + `\n・正しい端末から送る場合は、そちらで同期してください`
+       + `\n・この端末の内容が正しい場合は、設定タブの「カルテが減る送信を許可」を押してから送ってください`;
+}
+function allowShrinkOnce() {
+  if(!confirm('カルテが減る内容での送信を、これから10分間だけ許可します。\n\n'
+    + '保存先にある他の端末のカルテが失われる可能性があります。\n'
+    + '先に 💾 JSONバックアップを取ってください。\n\nよろしいですか？')) return;
+  SHRINK_OK_UNTIL = Date.now() + 10*60*1000;
+  _syncErrMsg = ''; renderCloudError();
+  logSave('karte', '⚠️ カルテが減る送信を10分間許可した');
+  toast('10分間だけ許可しました。右上の表示をタップして送信してください','success');
 }
 function _payloadSize(p){ try { return new Blob([JSON.stringify(p)]).size; } catch(e){ return JSON.stringify(p).length; } }
 // 上限に収まるまで段階的に絞り込む。
@@ -3050,9 +3086,28 @@ async function cloudAutoSave(key, binId, attempt) {
     _syncErrMsg = CLOUD_READ_BLOCKED; renderCloudError(); setSyncStatus('error');
     return false;
   }
+  // まだこの保存先を読んでいないなら、送る前に読む。
+  // 端末を追加した直後に、手元の少ないデータで上書きするのを防ぐ
+  if(SYNC_LOADED_TARGET !== syncTargetKey()) {
+    await cloudAutoLoad();
+    if(SYNC_LOADED_TARGET !== syncTargetKey()) {
+      _syncErrMsg = '保存先の内容をまだ読み込めていないため、送信を止めました'
+        + '（上書きを防ぐためです）。通信を確認してもう一度お試しください。';
+      renderCloudError(); setSyncStatus('error');
+      return false;
+    }
+  }
   setSyncStatus('saving');
   const data = buildCloudPayload();
   const fp = _fingerprint(data);
+  // 保存先にあるカルテより大幅に少ない内容は送らない。
+  // 端末の設定ミスや読み込み漏れで、他の端末のカルテを消してしまうのを防ぐ
+  const guard = _shrinkGuard(data);
+  if(guard) {
+    _syncErrMsg = guard; renderCloudError(); setSyncStatus('error');
+    toast('カルテが大幅に減るため送信を止めました（設定タブを確認してください）','error');
+    return false;
+  }
   // メモ用Binはメイン側の成否に関わらず先に保存する（メイン失敗でメモまで
   // 同期されなくなるのを防ぐ）。再試行のたびに送り直すと通信回数が無駄に
   // 増えるため、1回目だけにする
@@ -3136,6 +3191,8 @@ async function cloudAutoLoad() {
     const data = await _unwireRecord(record);
     if(!Array.isArray(data.memos)) throw new Error('invalid data');
     CLOUD_READ_BLOCKED = '';   // 読めたので送信を止める必要はない
+    SYNC_LOADED_TARGET = syncTargetKey();   // この保存先は読んだ
+    CLOUD_SEEN = { kartes:(data.kartes||[]).length, memos:(data.memos||[]).length };
     // 省略されたフィールドを既定値で復元
     (data.memos||[]).forEach(_normMemo);
     (data.kartes||[]).forEach(_normKarte);
