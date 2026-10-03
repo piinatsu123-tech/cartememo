@@ -368,7 +368,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v14.2</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v14.3</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -3522,6 +3522,19 @@ async function _fetchBinVersion(key, binId, v) {
   const r = await resp.json();
   return await _unwireRecord(r.record);
 }
+// 版の保存時刻を読みやすく表す（「10/3 14:05（約2時間前）」）
+function fmtVerTime(at) {
+  if(!at) return '(日時不明)';
+  const t = new Date(at);
+  if(isNaN(t.getTime())) return '(日時不明)';
+  const mins = Math.round((Date.now() - t.getTime())/60000);
+  let ago;
+  if(mins < 1) ago = 'たった今';
+  else if(mins < 60) ago = `約${mins}分前`;
+  else if(mins < 60*24) ago = `約${Math.round(mins/60)}時間前`;
+  else ago = `約${Math.round(mins/1440)}日前`;
+  return `${t.toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}（${ago}）`;
+}
 function _summarizeRecord(d) {
   const ks = Array.isArray(d.kartes)?d.kartes:[];
   const confirmed = ks.filter(k=>k && k.closed && k.electronic_amount!=null);
@@ -3539,11 +3552,13 @@ async function browseCloudVersions() {
   // 版番号は新しい方から順に遡って取得する（一覧APIが使えない場合に備える）
   let cur=null;
   let verNums=null, listErr='';
+  const verTime = {};   // 版 → 実際に保存された時刻
   // GitHub は Gist の版の履歴をそのまま使える
   if(usingGitHub()) {
     try {
       const {history} = await ghGet();
       verNums = history.map(h=>h.version).filter(Boolean);
+      history.forEach(h=>{ if(h.version && h.committed_at) verTime[h.version]=h.committed_at; });
       if(!verNums.length) { el.innerHTML='<div class="tpl-empty">まだ過去の版がありません</div>'; return; }
     } catch(e){ el.innerHTML=`<div class="tpl-empty" style="color:#c00">版の履歴を取得できませんでした: ${esc(e.message)}</div>`; return; }
   }
@@ -3588,8 +3603,10 @@ async function browseCloudVersions() {
     try {
       const d=await _fetchBinVersion(key,binId,v);
       const s=_summarizeRecord(d);
-      _verCache.push({v, d, s});
-      rows.push({v, s});
+      // 保存時刻は Gist の記録を優先する（送信した端末の時計に依存しないため）
+      const at = verTime[v] || s.savedAt || '';
+      _verCache.push({v, d, s, at});
+      rows.push({v, s, at});
     } catch(e){ if(!lastErr) lastErr=e.message; }
   }
   if(!rows.length) {
@@ -3605,17 +3622,20 @@ async function browseCloudVersions() {
   const bestNote = (best && best.s.kartes > KARTES.length)
     ? `<div style="font-size:12px;background:#fff8e8;border:1px solid #e07800;border-radius:6px;padding:8px 10px;margin-bottom:8px">
          <b>カルテが最も多い版: ${best.s.kartes}件</b>（確定済 ${best.s.confirmed}件）<br>
+         <span style="color:var(--text2)">保存時刻: <b>${esc(fmtVerTime(best.at))}</b></span><br>
          <span style="color:var(--text2)">この端末は現在 ${KARTES.length}件 です。${best.s.kartes - KARTES.length}件 戻せます。</span>
          <button class="btn btn-primary btn-sm" style="width:100%;justify-content:center;margin-top:6px"
-                 onclick="restoreFromVersion('${String(best.v).replace(/'/g,'')}')">⬆ この版から復元する（${best.s.kartes}件）</button>
+                 onclick="restoreFromVersion('${String(best.v).replace(/'/g,'')}')">⬆ この版から復元する（${esc(fmtVerTime(best.at))}・${best.s.kartes}件）</button>
        </div>`
     : '';
-  el.innerHTML = bestNote + rows.map(({v,s})=>{
-    const when = s.savedAt ? new Date(s.savedAt).toLocaleString('ja-JP') : '(日時不明)';
+  el.innerHTML = bestNote + rows.map(({v,s,at})=>{
+    const when = fmtVerTime(at);
     const hi = s.confirmed>0;
+    // GitHubの版はSHAなので先頭だけ出す
+    const label = String(v).length>12 ? String(v).slice(0,7) : '版 '+v;
     return `<div class="tpl-item" style="${hi?'border-color:#1a8a4a;background:#f2fbf5':''}">
       <div class="tpl-main">
-        <div class="tpl-name">版 ${v}　<span style="font-weight:400;font-size:12px;color:var(--text3)">${esc(when)}</span></div>
+        <div class="tpl-name">${esc(when)}　<span style="font-weight:400;font-size:11px;color:var(--text3)">${esc(label)}</span></div>
         <div class="tpl-content">カルテ${s.kartes}件・<b style="color:${hi?'#1a8a4a':'#c00'}">確定済 ${s.confirmed}件</b>・メモ${s.memos}件・薬価${s.master}件${s.confirmed?`　差額計 ${s.diffSum>=0?'+':''}${fmtAmt(s.diffSum)}`:''}</div>
       </div>
       <button class="tpl-insert" onclick="restoreFromVersion('${String(v).replace(/'/g,'')}')">この版から復元</button>
