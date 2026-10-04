@@ -192,6 +192,9 @@ input[type=checkbox]{width:auto;margin:0}
 .elec-part-sum{font-size:11px;font-weight:700;color:var(--text2);text-align:right;padding-top:4px;border-top:1px solid var(--border)}
 .elec-add{display:flex;gap:6px;align-items:center;margin:2px 0 6px}
 .elec-add input{flex:1;min-width:0;text-align:right;padding:5px 8px;font-size:13px;font-family:'JetBrains Mono',monospace;border:1px solid var(--border2);border-radius:5px}
+/* カルテ画面から往診距離を設定する欄 */
+.karte-dist{display:inline-flex;align-items:center;gap:3px;margin-left:8px;font-size:11px;font-weight:400;color:var(--text3)}
+.karte-dist input{width:4.2em;text-align:right;padding:2px 4px;font-size:12px;font-family:'JetBrains Mono',monospace;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:#111}
 .karte-summary{font-size:13px;color:var(--text2);margin-bottom:4px;line-height:1.7}
 .rec-edit-rows{margin-bottom:12px}
 .rec-edit-hdr{display:grid;grid-template-columns:112px 1fr 88px 26px;gap:5px;font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--text3);text-transform:uppercase;padding:0 0 5px;border-bottom:1px solid var(--border)}
@@ -368,7 +371,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v14.3</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v14.4</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -4619,11 +4622,31 @@ function renderFarmDistList() {
     </div>`;
   }).join('') + '</div>';
 }
+// カルテ画面から往診距離を設定する（農場ごとの設定なので同じ農場すべてに効く）
+function setFarmDistFromKarte(karteId, val) {
+  const k = KARTES.find(x=>x.id===karteId); if(!k) return;
+  if(!k.farm) return toast('先に農場名を入れてください','error');
+  const s = String(val==null?'':val).trim();
+  const before = (FARM_DIST[k.farm]!=null && FARM_DIST[k.farm]!=='') ? String(FARM_DIST[k.farm]) : '';
+  if(s === before) return;                       // 触っただけなら何もしない
+  if(!setFarmDist(k.farm, s)) {                  // 入力が不正なら元に戻す
+    const inp = document.getElementById('kdist-'+karteId);
+    if(inp) inp.value = before;
+    return;
+  }
+  const n = KARTES.filter(x=>x.farm===k.farm).length;
+  logSave('karte', `往診距離を設定（${k.farm} ${s===''?'（なし）':s+'km'}）`);
+  toast(s==='' ? `${k.farm} の距離を消しました（カルテ${n}件に反映）`
+               : `${k.farm} の距離を ${s}km にしました（カルテ${n}件に反映）`, 'success');
+  renderFarmDistList();   // 設定タブの一覧も合わせる
+  renderKarteList();      // d-karte出力の距離欄を描き直す
+}
 function setFarmDist(farm, val) {
   const s = String(val==null?'':val).trim();
   if(s==='') { delete FARM_DIST[farm]; }
-  else { const n = parseFloat(s); if(isNaN(n)||n<0){ toast('正しい距離を入力してください','error'); return; } FARM_DIST[farm] = n; }
+  else { const n = parseFloat(s); if(isNaN(n)||n<0){ toast('正しい距離を入力してください','error'); return false; } FARM_DIST[farm] = n; }
   saveToStorage();
+  return true;
 }
 // カルテに存在する農場名で FARMS を補完する（同期マージや農場名変更での取りこぼし対策）
 function reconcileFarms() {
@@ -4901,7 +4924,7 @@ function buildKarteCard(k, isDetail) {
     </div>`;
   return `<div class="karte-card" id="card-${k.id}">
     <div class="karte-hdr">
-      <span class="karte-title" style="display:inline-flex;align-items:center;gap:4px">【<input type="text" class="karte-title-edit" value="${esc(k.farm)}" onclick="event.stopPropagation()" onblur="updateKarteField('${k.id}','farm',this.value)" onkeydown="if(event.key==='Enter')this.blur()" title="農場名" style="width:8em"> / <input type="text" class="karte-title-edit" value="${esc(k.cow)}" onclick="event.stopPropagation()" onblur="updateKarteField('${k.id}','cow',this.value)" onkeydown="if(event.key==='Enter')this.blur()" title="牛番号" style="width:5em">】</span>
+      <span class="karte-title" style="display:inline-flex;align-items:center;gap:4px">【<input type="text" class="karte-title-edit" value="${esc(k.farm)}" onclick="event.stopPropagation()" onblur="updateKarteField('${k.id}','farm',this.value)" onkeydown="if(event.key==='Enter')this.blur()" title="農場名" style="width:8em"> / <input type="text" class="karte-title-edit" value="${esc(k.cow)}" onclick="event.stopPropagation()" onblur="updateKarteField('${k.id}','cow',this.value)" onkeydown="if(event.key==='Enter')this.blur()" title="牛番号" style="width:5em">】<span class="karte-dist" onclick="event.stopPropagation()" title="この農場の往診距離。d-karte出力の距離欄に使われます">距離<input type="number" min="0" step="0.1" inputmode="decimal" id="kdist-${k.id}" value="${(FARM_DIST[k.farm]!=null&&FARM_DIST[k.farm]!=='')?FARM_DIST[k.farm]:''}" placeholder="—" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter')this.blur()" onblur="setFarmDistFromKarte('${k.id}',this.value)">km</span></span>
       <div style="display:flex;gap:8px;align-items:center">
         ${(()=>{const stage=k.closed?2:k.finished?1:0;const bc=stage===2?'badge-closed':stage===1?'badge-unclosed':'badge-active';const bt=stage===2?'確定済':stage===1?'電子未入力':'診療中';return`<span class="karte-badge ${bc}">${bt}</span>`+(k.origUnconfirmed?'<span class="karte-badge" style="color:#1a4b8a;border-color:#1a4b8a">もともと未確定</span>':'')+(k.confirmKind==='restore'?'<span class="karte-badge" style="color:#8a4b00;border-color:#e07800">復元</span>':'')+(!k.closed?`<button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();toggleFinished('${k.id}')">${k.finished?'診療中に戻す':'終診にする'}</button>`:'');})()}
         <button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();duplicateKarte('${k.id}')" title="このカルテ全体を複製して編集">⧉ カルテ複製</button>
