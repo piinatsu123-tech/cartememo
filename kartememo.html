@@ -371,7 +371,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v14.5</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v14.6</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -644,8 +644,9 @@ input[type=checkbox]{width:auto;margin:0}
       <details style="margin-top:10px;border:1px solid var(--border);border-radius:6px">
         <summary style="cursor:pointer;font-size:14px;font-weight:700;color:var(--text2);padding:10px 12px;user-select:none">🕘 過去バージョンから復元</summary>
         <div style="padding:0 12px 12px">
-          <p class="input-hint" style="margin-bottom:8px">クラウドは保存のたびに過去の版を残しています。上書きで失われたカルテや確定（電子カルテ金額）を取り戻せる場合があります。<br><b>現在のカルテの診療記録は消しません</b>。不足分の追加と、失われた確定の書き戻しだけを行います。</p>
-          <button class="btn btn-primary btn-sm" style="width:100%;justify-content:center" onclick="browseCloudVersions()">過去バージョンを調べる</button>
+          <p class="input-hint" style="margin-bottom:8px">クラウドは保存のたびに過去の版を残しています。<b>診療内容（診療記録）の件数</b>は本来減らないので、過去の版と比べれば内容が消えていないか確認できます（差額は日々変わるため比べにくいです）。<br><b>現在の診療記録は消しません</b>。不足分の追加と、失われた確定の書き戻しだけを行います。</p>
+          <button class="btn btn-primary btn-sm" style="width:100%;justify-content:center" onclick="checkRecordLoss()">🔍 診療内容が減っていないか調べる</button>
+          <button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center;margin-top:6px" onclick="browseCloudVersions()">過去バージョンを一覧で見る</button>
           <div id="verList" class="tpl-list" style="margin-top:8px;max-height:340px"></div>
         </div>
       </details>
@@ -3542,8 +3543,30 @@ function _summarizeRecord(d) {
   const ks = Array.isArray(d.kartes)?d.kartes:[];
   const confirmed = ks.filter(k=>k && k.closed && k.electronic_amount!=null);
   const sum = confirmed.reduce((s,k)=>s+((k.electronic_amount||0)-(k.paper_total||0)),0);
-  return { kartes:ks.length, confirmed:confirmed.length, memos:(d.memos||[]).length,
+  // 診療記録の総数。差額は日々変わるが、記録の件数は減らないのが正常なので
+  // 内容が消えたかどうかはこちらで見るほうが分かりやすい
+  const recs = ks.reduce((s,k)=>s+((k&&k.records&&k.records.length)||0),0);
+  return { kartes:ks.length, recs, confirmed:confirmed.length, memos:(d.memos||[]).length,
            master:(d.master||[]).length, savedAt:d.savedAt||'', diffSum:sum };
+}
+// 手元の診療記録の総数
+function localRecCount(){ return KARTES.reduce((s,k)=>s+((k.records&&k.records.length)||0),0); }
+// 診療内容が減っていないかをワンタッチで点検する
+async function checkRecordLoss() {
+  const el=document.getElementById('verList');
+  await browseCloudVersions();
+  if(!_verCache.length) return;
+  // 診療内容が最も多い版と比べる
+  const best=_verCache.reduce((a,b)=>(b.s.recs>a.s.recs || (b.s.recs===a.s.recs && b.s.kartes>a.s.kartes)) ? b : a, _verCache[0]);
+  const nowRecs=localRecCount();
+  if(best.s.recs<=nowRecs && best.s.kartes<=KARTES.length) {
+    return showReport('✅ 診療内容は減っていません',
+      `調べた版: ${_verCache.length}件\n\n`+
+      `この端末: 診療内容 ${nowRecs}件 ／ カルテ ${KARTES.length}件\n`+
+      `過去の最大: 診療内容 ${best.s.recs}件 ／ カルテ ${best.s.kartes}件（${fmtVerTime(best.at)}）\n\n`+
+      `過去のどの版よりも、今の端末のほうが多いか同じです。欠けはありません。`);
+  }
+  compareWithVersion(best.v);
 }
 async function browseCloudVersions() {
   const key=(localStorage.getItem('cm_jbk')||'').trim();
@@ -3621,14 +3644,18 @@ async function browseCloudVersions() {
     return;
   }
   // 上書きで減ってしまった場合に迷わないよう、最も多い版を先に示す
-  const best = rows.reduce((a,b)=>(b.s.kartes>a.s.kartes || (b.s.kartes===a.s.kartes && b.s.confirmed>a.s.confirmed)) ? b : a, rows[0]);
-  const bestNote = (best && best.s.kartes > KARTES.length)
+  // 診療記録が最も多い版を基準にする（記録の件数は減らないのが正常）
+  const best = rows.reduce((a,b)=>(b.s.recs>a.s.recs || (b.s.recs===a.s.recs && b.s.kartes>a.s.kartes)) ? b : a, rows[0]);
+  const nowRecs = localRecCount();
+  const bestNote = (best && (best.s.recs > nowRecs || best.s.kartes > KARTES.length))
     ? `<div style="font-size:12px;background:#fff8e8;border:1px solid #e07800;border-radius:6px;padding:8px 10px;margin-bottom:8px">
-         <b>カルテが最も多い版: ${best.s.kartes}件</b>（確定済 ${best.s.confirmed}件）<br>
+         <b>診療内容が最も多い版: ${best.s.recs}件</b>（カルテ ${best.s.kartes}件）<br>
          <span style="color:var(--text2)">保存時刻: <b>${esc(fmtVerTime(best.at))}</b></span><br>
-         <span style="color:var(--text2)">この端末は現在 ${KARTES.length}件 です。${best.s.kartes - KARTES.length}件 戻せます。</span>
+         <span style="color:var(--text2)">この端末は現在 診療内容 ${nowRecs}件・カルテ ${KARTES.length}件 です。
+         ${best.s.recs>nowRecs?`<b style="color:#c00">診療内容が ${best.s.recs-nowRecs}件 足りません。</b>`:''}
+         ${best.s.kartes>KARTES.length?`カルテも ${best.s.kartes-KARTES.length}件 足りません。`:''}</span>
          <button class="btn btn-primary btn-sm" style="width:100%;justify-content:center;margin-top:6px"
-                 onclick="restoreFromVersion('${String(best.v).replace(/'/g,'')}')">⬆ この版から復元する（${esc(fmtVerTime(best.at))}・${best.s.kartes}件）</button>
+                 onclick="restoreFromVersion('${String(best.v).replace(/'/g,'')}')">⬆ この版から復元する（${esc(fmtVerTime(best.at))}・診療内容${best.s.recs}件）</button>
          <button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center;margin-top:4px"
                  onclick="compareWithVersion('${String(best.v).replace(/'/g,'')}')">🔍 先に今の内容と比べる（何が足りないか見る）</button>
        </div>`
@@ -3641,7 +3668,7 @@ async function browseCloudVersions() {
     return `<div class="tpl-item" style="${hi?'border-color:#1a8a4a;background:#f2fbf5':''}">
       <div class="tpl-main">
         <div class="tpl-name">${esc(when)}　<span style="font-weight:400;font-size:11px;color:var(--text3)">${esc(label)}</span></div>
-        <div class="tpl-content">カルテ${s.kartes}件・<b style="color:${hi?'#1a8a4a':'#c00'}">確定済 ${s.confirmed}件</b>・メモ${s.memos}件・薬価${s.master}件${s.confirmed?`　差額計 ${s.diffSum>=0?'+':''}${fmtAmt(s.diffSum)}`:''}</div>
+        <div class="tpl-content"><b style="color:${s.recs>=nowRecs?'#1a8a4a':'#c00'}">診療内容 ${s.recs}件</b>・カルテ${s.kartes}件・確定済 ${s.confirmed}件・メモ${s.memos}件・薬価${s.master}件</div>
       </div>
       <button class="tpl-insert" onclick="compareWithVersion('${String(v).replace(/'/g,'')}')" title="今の内容と比べる">比較</button>
       <button class="tpl-insert" onclick="restoreFromVersion('${String(v).replace(/'/g,'')}')">この版から復元</button>
@@ -3669,47 +3696,66 @@ function _mergeRecords(k, ok) {
   k.records = (k.records||[]).concat(add);
   return add.length;
 }
-// 選んだ版と今の内容を突き合わせ、何が足りないかを示す（復元前の確認用）
+// 選んだ版と今の内容を突き合わせ、何が足りないかを示す（復元前の確認用）。
+// 差額は日々変わって比べにくいので、診療内容（診療記録）の件数で見る
 function compareWithVersion(v) {
   const hit=_verCache.find(x=>String(x.v)===String(v));
   if(!hit) return toast('この版の内容が見つかりません。もう一度「過去バージョンを調べる」を押してください','error');
   const ks=(Array.isArray(hit.d.kartes)?hit.d.kartes:[]).map(k=>{ _normKarte(k); return k; });
-  const missKarte=[], missRec=[], missElec=[], lines=[];
-  let diffOld=0, diffNow=0;
+  const missKarte=[], shortRec=[], missElec=[], extraRec=[];
+  let lackTotal=0, oldRecs=0;
   ks.forEach(ok=>{
+    const oRecs=(ok.records||[]).length;
+    oldRecs += oRecs;
     const k=KARTES.find(x=>x.id===ok.id) || KARTES.find(x=>x.farm===ok.farm && x.cow===ok.cow);
-    const oPaper=(ok.records||[]).reduce((t,r)=>t+(r.amount||0),0);
-    if(ok.electronic_amount!=null) diffOld += ok.electronic_amount - oPaper;
-    if(!k) { missKarte.push(`${ok.farm} / ${ok.cow}（記録${(ok.records||[]).length}件）`); return; }
-    if(k.electronic_amount!=null) diffNow += k.diff!=null ? k.diff : (k.electronic_amount-(k.paper_total||0));
-    const tmp={records:(k.records||[]).slice()};
-    const lack=_mergeRecords(tmp, ok);          // 実際には足さず、数だけ見る
-    if(lack) { missRec.push(`${k.farm} / ${k.cow}: 記録 ${(k.records||[]).length}件 → この版には ${(ok.records||[]).length}件（${lack}件不足）`); }
+    if(!k) { missKarte.push(`${ok.farm} / ${ok.cow}（診療内容 ${oRecs}件）`); lackTotal += oRecs; return; }
+    const nRecs=(k.records||[]).length;
+    // 内容が一致しない分だけを数える（並び順や件数の差を拾う）
+    const lack=_mergeRecords({records:(k.records||[]).slice()}, ok);
+    if(lack) { shortRec.push(`${k.farm} / ${k.cow}: 今 ${nRecs}件 → この版 ${oRecs}件（${lack}件不足）`); lackTotal += lack; }
+    else if(nRecs > oRecs) extraRec.push(`${k.farm} / ${k.cow}: 今 ${nRecs}件（この版より ${nRecs-oRecs}件 多い）`);
     if(k.electronic_amount==null && ok.electronic_amount!=null) missElec.push(`${k.farm} / ${k.cow}: 電子 ¥${ok.electronic_amount.toLocaleString()}`);
   });
-  lines.push(`【この版】${fmtVerTime(hit.at)}　カルテ${ks.length}件`);
-  lines.push(`【この端末】カルテ${KARTES.length}件`);
+  const nowRecs=localRecCount();
+  const lines=[];
+  lines.push(`【この版】${fmtVerTime(hit.at)}`);
+  lines.push(`  診療内容 ${oldRecs}件 ／ カルテ ${ks.length}件`);
+  lines.push(`【この端末】`);
+  lines.push(`  診療内容 ${nowRecs}件 ／ カルテ ${KARTES.length}件`);
   lines.push('');
-  lines.push(`差額の合計（この版にある確定分）: ${diffOld>=0?'+':''}${fmtAmt(diffOld)}`);
-  lines.push(`差額の合計（今の端末の確定分）  : ${diffNow>=0?'+':''}${fmtAmt(diffNow)}`);
+  lines.push(lackTotal
+    ? `⚠️ この版にあって今の端末に無い診療内容: ${lackTotal}件`
+    : `✓ この版の診療内容はすべて今の端末にあります`);
   lines.push('');
-  lines.push(`この版にしか無いカルテ: ${missKarte.length}件`);
-  missKarte.slice(0,20).forEach(x=>lines.push('  '+x));
-  if(missKarte.length>20) lines.push(`  …ほか${missKarte.length-20}件`);
-  lines.push('');
-  lines.push(`診療記録が足りないカルテ: ${missRec.length}件`);
-  missRec.slice(0,30).forEach(x=>lines.push('  '+x));
-  if(missRec.length>30) lines.push(`  …ほか${missRec.length-30}件`);
-  lines.push('');
-  lines.push(`確定（電子カルテ金額）が失われているカルテ: ${missElec.length}件`);
-  missElec.slice(0,20).forEach(x=>lines.push('  '+x));
-  if(missElec.length>20) lines.push(`  …ほか${missElec.length-20}件`);
-  lines.push('');
-  lines.push((missKarte.length||missRec.length||missElec.length)
+  if(missKarte.length){
+    lines.push(`■ カルテごと無いもの: ${missKarte.length}件`);
+    missKarte.slice(0,25).forEach(x=>lines.push('  '+x));
+    if(missKarte.length>25) lines.push(`  …ほか${missKarte.length-25}件`);
+    lines.push('');
+  }
+  if(shortRec.length){
+    lines.push(`■ カルテはあるが診療内容が足りないもの: ${shortRec.length}件`);
+    shortRec.slice(0,40).forEach(x=>lines.push('  '+x));
+    if(shortRec.length>40) lines.push(`  …ほか${shortRec.length-40}件`);
+    lines.push('');
+  }
+  if(missElec.length){
+    lines.push(`■ 確定（電子カルテ金額）が失われているもの: ${missElec.length}件`);
+    missElec.slice(0,25).forEach(x=>lines.push('  '+x));
+    if(missElec.length>25) lines.push(`  …ほか${missElec.length-25}件`);
+    lines.push('');
+  }
+  if(extraRec.length){
+    lines.push(`（参考）この版より今の端末のほうが多いもの: ${extraRec.length}件`);
+    extraRec.slice(0,10).forEach(x=>lines.push('  '+x));
+    lines.push('  ※この版より後に入力した分です。復元しても消えません。');
+    lines.push('');
+  }
+  lines.push((lackTotal||missElec.length)
     ? '「この版から復元」を押すと、上の不足分を補います。今ある内容は消しません。'
-    : '不足はありません。この版より今の端末のほうが新しいか、同じ内容です。');
-  showReport('🔍 この版と今の内容の比較', lines.join('\n'),
-    (missKarte.length||missRec.length||missElec.length)
+    : '不足はありません。');
+  showReport('🔍 診療内容の比較', lines.join('\n'),
+    (lackTotal||missElec.length)
       ? [{label:`⬆ この版から復元する（${fmtVerTime(hit.at)}）`, fn:()=>restoreFromVersion(v)}] : []);
 }
 // 選んだ版のカルテ内容を現在のデータに取り込む（不足分の追加と確定の復元）
