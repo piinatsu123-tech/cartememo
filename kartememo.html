@@ -371,7 +371,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v14.6</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v14.7</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -645,8 +645,17 @@ input[type=checkbox]{width:auto;margin:0}
         <summary style="cursor:pointer;font-size:14px;font-weight:700;color:var(--text2);padding:10px 12px;user-select:none">🕘 過去バージョンから復元</summary>
         <div style="padding:0 12px 12px">
           <p class="input-hint" style="margin-bottom:8px">クラウドは保存のたびに過去の版を残しています。<b>診療内容（診療記録）の件数</b>は本来減らないので、過去の版と比べれば内容が消えていないか確認できます（差額は日々変わるため比べにくいです）。<br><b>現在の診療記録は消しません</b>。不足分の追加と、失われた確定の書き戻しだけを行います。</p>
+          <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
+            <span style="font-size:12px;font-weight:700;color:var(--text2);flex-shrink:0">どこまで遡る</span>
+            <select id="verDepth" style="flex:1">
+              <option value="30">30版（速い）</option>
+              <option value="100" selected>100版（おすすめ）</option>
+              <option value="200">200版（時間がかかります）</option>
+            </select>
+          </div>
           <button class="btn btn-primary btn-sm" style="width:100%;justify-content:center" onclick="checkRecordLoss()">🔍 診療内容が減っていないか調べる</button>
           <button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center;margin-top:6px" onclick="browseCloudVersions()">過去バージョンを一覧で見る</button>
+          <p class="input-hint" style="margin-top:4px">100版で、だいたい直近の保存100回分まで遡れます。1版ごとに通信するため、100版で20〜40秒ほどかかります。</p>
           <div id="verList" class="tpl-list" style="margin-top:8px;max-height:340px"></div>
         </div>
       </details>
@@ -3551,6 +3560,40 @@ function _summarizeRecord(d) {
 }
 // 手元の診療記録の総数
 function localRecCount(){ return KARTES.reduce((s,k)=>s+((k.records&&k.records.length)||0),0); }
+// Gistの版の一覧を深くたどる。GET /gists/{id} の history は件数が限られるため、
+// ページ送りできる commits を使う
+async function ghListCommits(limit) {
+  const out = [];
+  for(let page=1; page<=Math.ceil(limit/100) && out.length<limit; page++) {
+    countRequest();
+    const resp = await fetch(`https://api.github.com/gists/${ghGistId()}/commits?per_page=100&page=${page}`, {headers: ghHeaders()});
+    if(!resp.ok) await _ghFail(resp);
+    const arr = await resp.json();
+    if(!Array.isArray(arr) || !arr.length) break;
+    arr.forEach(x=>{ if(x && x.version) out.push({v:x.version, at:x.committed_at||'', ch:x.change_status||null}); });
+    if(arr.length < 100) break;
+  }
+  return out.slice(0, limit);
+}
+// 版の中身を少しずつ並行して取る（1件ずつでは100件に時間がかかりすぎる）
+async function _fetchVersionsSummaries(key, binId, list, onProgress) {
+  const rows = []; let done = 0, lastErr = '';
+  const CONC = 6;   // 同時に投げる数
+  for(let i=0; i<list.length; i+=CONC) {
+    await Promise.all(list.slice(i, i+CONC).map(async item=>{
+      try {
+        const d = await _fetchBinVersion(key, binId, item.v);
+        // 中身は持ち続けない（100件分を抱えると端末が重くなる）。
+        // 復元・比較のときに改めて取り直す
+        rows.push({v:item.v, at:item.at || d.savedAt || '', s:_summarizeRecord(d)});
+      } catch(e){ if(!lastErr) lastErr = e.message; }
+      done++;
+      if(onProgress) onProgress(done, list.length, rows);
+    }));
+  }
+  rows.sort((a,b)=> new Date(b.at||0) - new Date(a.at||0));   // 新しい順
+  return {rows, lastErr};
+}
 // 診療内容が減っていないかをワンタッチで点検する
 async function checkRecordLoss() {
   const el=document.getElementById('verList');
@@ -3566,7 +3609,7 @@ async function checkRecordLoss() {
       `過去の最大: 診療内容 ${best.s.recs}件 ／ カルテ ${best.s.kartes}件（${fmtVerTime(best.at)}）\n\n`+
       `過去のどの版よりも、今の端末のほうが多いか同じです。欠けはありません。`);
   }
-  compareWithVersion(best.v);
+  await compareWithVersion(best.v);
 }
 async function browseCloudVersions() {
   const key=(localStorage.getItem('cm_jbk')||'').trim();
@@ -3579,13 +3622,21 @@ async function browseCloudVersions() {
   let cur=null;
   let verNums=null, listErr='';
   const verTime = {};   // 版 → 実際に保存された時刻
-  // GitHub は Gist の版の履歴をそのまま使える
+  // どこまで遡るか（設定タブで選べる）
+  const depth = parseInt((document.getElementById('verDepth')||{}).value) || (usingGitHub()?100:30);
+  let ghList = null;
+  // GitHub は版の一覧をページ送りで深くたどれる
   if(usingGitHub()) {
     try {
-      const {history} = await ghGet();
-      verNums = history.map(h=>h.version).filter(Boolean);
-      history.forEach(h=>{ if(h.version && h.committed_at) verTime[h.version]=h.committed_at; });
-      if(!verNums.length) { el.innerHTML='<div class="tpl-empty">まだ過去の版がありません</div>'; return; }
+      ghList = await ghListCommits(depth);
+      // 一覧APIが使えない場合は、取れる範囲の履歴で代用する
+      if(!ghList.length) {
+        const {history} = await ghGet();
+        ghList = history.filter(h=>h&&h.version).map(h=>({v:h.version, at:h.committed_at||''}));
+      }
+      if(!ghList.length) { el.innerHTML='<div class="tpl-empty">まだ過去の版がありません</div>'; return; }
+      ghList.forEach(h=>{ if(h.at) verTime[h.v]=h.at; });
+      verNums = ghList.map(h=>h.v);
     } catch(e){ el.innerHTML=`<div class="tpl-empty" style="color:#c00">版の履歴を取得できませんでした: ${esc(e.message)}</div>`; return; }
   }
   if(!usingGitHub()) {
@@ -3619,22 +3670,17 @@ async function browseCloudVersions() {
   }
   }
   // GitHubは版の履歴が残り続け、通信回数にも余裕があるため多めに調べる
-  const LOOK = usingGitHub() ? 60 : 30;
-  verNums = verNums.slice(0, LOOK);
-  const rows=[]; let lastErr='';
-  for(let n=0; n<verNums.length; n++) {
-    const v = verNums[n];
-    el.innerHTML = `<div class="tpl-empty">確認中… ${n+1}/${verNums.length}版`
-      + (rows.length ? `（カルテが最も多い版: ${Math.max(...rows.map(r=>r.s.kartes))}件）` : '') + '</div>';
-    try {
-      const d=await _fetchBinVersion(key,binId,v);
-      const s=_summarizeRecord(d);
-      // 保存時刻は Gist の記録を優先する（送信した端末の時計に依存しないため）
-      const at = verTime[v] || s.savedAt || '';
-      _verCache.push({v, d, s, at});
-      rows.push({v, s, at});
-    } catch(e){ if(!lastErr) lastErr=e.message; }
-  }
+  verNums = verNums.slice(0, depth);
+  const nowRecsForProgress = localRecCount();
+  const {rows, lastErr} = await _fetchVersionsSummaries(
+    key, binId,
+    verNums.map(v=>({v, at:verTime[v]||''})),
+    (done, total, got)=>{
+      const mx = got.length ? Math.max(...got.map(r=>r.s.recs)) : 0;
+      el.innerHTML = `<div class="tpl-empty">確認中… ${done}/${total}版`
+        + (got.length ? `<br>診療内容が最も多い版: ${mx}件（この端末は ${nowRecsForProgress}件）` : '') + '</div>';
+    });
+  _verCache = rows;
   if(!rows.length) {
     el.innerHTML=`<div class="tpl-empty" style="color:#c00;text-align:left">過去バージョンを取得できませんでした。<br><br>
       <b>調べた版:</b> ${esc(verNums.join(', ').slice(0,80))}<br>
@@ -3698,10 +3744,20 @@ function _mergeRecords(k, ok) {
 }
 // 選んだ版と今の内容を突き合わせ、何が足りないかを示す（復元前の確認用）。
 // 差額は日々変わって比べにくいので、診療内容（診療記録）の件数で見る
-function compareWithVersion(v) {
+// 版の中身は保持していないため、必要なときに取り直す
+async function _loadVersionData(v) {
+  const key=(localStorage.getItem('cm_jbk')||'').trim();
+  const binId=(localStorage.getItem('cm_jbid')||'').trim();
+  return await _fetchBinVersion(key, binId, v);
+}
+async function compareWithVersion(v) {
   const hit=_verCache.find(x=>String(x.v)===String(v));
-  if(!hit) return toast('この版の内容が見つかりません。もう一度「過去バージョンを調べる」を押してください','error');
-  const ks=(Array.isArray(hit.d.kartes)?hit.d.kartes:[]).map(k=>{ _normKarte(k); return k; });
+  if(!hit) return toast('この版が一覧にありません。もう一度「過去バージョンを調べる」を押してください','error');
+  toast('この版を読み込んでいます…');
+  let d;
+  try { d = await _loadVersionData(v); }
+  catch(e){ return toast('この版を読み込めませんでした: '+e.message,'error'); }
+  const ks=(Array.isArray(d.kartes)?d.kartes:[]).map(k=>{ _normKarte(k); return k; });
   const missKarte=[], shortRec=[], missElec=[], extraRec=[];
   let lackTotal=0, oldRecs=0;
   ks.forEach(ok=>{
@@ -3762,8 +3818,12 @@ function compareWithVersion(v) {
 async function restoreFromVersion(v) {
   // 版の識別子は jsonbin では数値、GitHub ではSHA文字列
   const hit=_verCache.find(x=>String(x.v)===String(v));
-  if(!hit) return toast('この版の内容が見つかりません。もう一度「過去バージョンを調べる」を押してください','error');
-  const d=hit.d, s=hit.s;
+  if(!hit) return toast('この版が一覧にありません。もう一度「過去バージョンを調べる」を押してください','error');
+  const s=hit.s;
+  toast('この版を読み込んでいます…');
+  let d;
+  try { d = await _loadVersionData(v); }
+  catch(e){ return toast('この版を読み込めませんでした: '+e.message,'error'); }
   if(!confirm(`${fmtVerTime(hit.at)} の版から復元します。\n\nカルテ${s.kartes}件・確定済${s.confirmed}件\n\n・この版にしか無いカルテを追加します\n・足りない診療記録を補います\n・確定（電子カルテ金額）が失われているカルテに書き戻します\n・今ある診療記録は消しません\n\nよろしいですか？`)) return;
   const ks=Array.isArray(d.kartes)?d.kartes:[];
   ks.forEach(_normKarte);
