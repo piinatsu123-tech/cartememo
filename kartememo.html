@@ -371,7 +371,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v14.7</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v14.8</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -513,12 +513,10 @@ input[type=checkbox]{width:auto;margin:0}
       <option value="kind-restore">復元による確定のみ</option>
     </select>
     <input type="date" id="stats-since" onchange="setStatsSince(this.value)" style="width:auto;flex:none;display:none">
-    <select id="stats-range" onchange="renderStats()" style="width:auto;flex:none">
-      <option value="3">直近3ヶ月</option>
-      <option value="6">直近6ヶ月</option>
-      <option value="12">直近12ヶ月</option>
-      <option value="0">全期間</option>
-    </select>
+    <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:var(--text2);white-space:nowrap">
+      <input type="checkbox" id="statsByMonth" onchange="setStatsByMonth(this.checked)" style="width:auto;margin:0">
+      月ごとの内訳
+    </label>
     <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="exportCSV()">↓ CSVエクスポート</button>
   </div>
   <div id="statsContainer"></div>
@@ -1294,6 +1292,7 @@ function switchTab(name) {
     const sc=document.getElementById('stats-scope'), si=document.getElementById('stats-since');
     if(sc) sc.value=STATS_SCOPE;
     if(si){ si.value=STATS_SINCE; si.style.display = (STATS_SCOPE==='new'||STATS_SCOPE==='old') ? '' : 'none'; }
+    const bm=document.getElementById('statsByMonth'); if(bm) bm.checked=STATS_BY_MONTH;
     renderStats();
   }
   if(name === 'settings') { renderFarmDistList(); renderWatchList(); renderSaveLog(); loadStorageSettings(); loadSyncMemoLimit(); renderCloudSize(); renderCloudError(); }
@@ -1378,6 +1377,7 @@ function loadFromStorage() {
     const lg = localStorage.getItem('cm_ledger'); if(lg) LEDGER = JSON.parse(lg);
     ledgerSyncFromKartes();
     STATS_SCOPE = localStorage.getItem('cm_statsscope')||'all';
+    STATS_BY_MONTH = localStorage.getItem('cm_statsbymonth')==='1';
     STATS_SINCE = localStorage.getItem('cm_statssince')||'';
     RESTORE_MODE = localStorage.getItem('cm_restoremode')==='1';
     const ls = localStorage.getItem('cm_lastsync'); if(ls) LAST_SYNC_AT = Number(ls)||null;
@@ -6018,6 +6018,13 @@ function clearImportedStats() {
 }
 // 復旧作業中の確認用: 確定した日時で集計対象を絞る
 let STATS_SCOPE='all', STATS_SINCE='';
+// 月ごとの内訳を出すか（既定は出さない。横幅をとるため）
+let STATS_BY_MONTH=false;
+function setStatsByMonth(on){
+  STATS_BY_MONTH=!!on;
+  try{localStorage.setItem('cm_statsbymonth',STATS_BY_MONTH?'1':'0');}catch(e){}
+  renderStats();
+}
 // 復元モード: オンの間に確定したものは「復元による確定」として記録する
 let RESTORE_MODE=false;
 function setRestoreMode(on){
@@ -6076,7 +6083,8 @@ function markOriginallyUnconfirmed(input){
   r.readAsText(f);
 }
 function renderStats() {
-  const rangeN = parseInt(document.getElementById('stats-range').value);
+  // 集計は常に全期間。期間で区切ると合計が分かりにくいため区切らない
+  const rangeN = 0;
   // 台帳を正とする（他端末で確定した分も、カルテ本体が手元に無くても集計に入る）
   const closed = statsRows().filter(_inStatsScope);
   const el=document.getElementById('statsContainer');
@@ -6130,6 +6138,9 @@ function renderStats() {
   }));
   const ths=months.map(m=>{const[y,mo]=m.split('-');return`<th>${y}年${parseInt(mo)}月</th>`;}).join('');
   const fmtCell=(v,extra='')=>{const cls=v>0?'diff-pos':v<0?'diff-neg':'';return`<td class="${cls} ${extra}">${(v>=0?'+':'')+fmtAmt(v)}</td>`;};
+  // 月ごとの内訳を出さない場合は、農場ごとの合計だけの縦長の表にする（横幅をとらない）
+  const cntByFarm={}; farms.forEach(f=>{cntByFarm[f]=0;});
+  closed.forEach(k=>{ if(k.farm in cntByFarm) cntByFarm[k.farm]++; });
   const rows=farms.map(f=>{
     let rowTotal=0;
     const cells=months.map(m=>{
@@ -6178,7 +6189,28 @@ function renderStats() {
     `<div style="font-size:12px;font-weight:700;color:#8a4b00;background:#fff8e8;border:1px solid #e07800;border-radius:6px;padding:7px 10px;margin-bottom:8px">
       ${SCOPE_LABEL[STATS_SCOPE]||''}を表示中${STATS_SCOPE!=='old'?'（取込データは含みません）':''}
      </div>`;
-  el.innerHTML=scopeNote+cmpNote+`<table class="stats-table"><thead><tr><th>農場名</th>${ths}<th class="total-col">合計</th></tr></thead><tbody>${rows}${totalRow}</tbody></table>`;
+  // 期間の見出し（常に全期間）
+  const span = months.length
+    ? `${months[0].slice(0,4)}年${parseInt(months[0].slice(5))}月 〜 ${months[months.length-1].slice(0,4)}年${parseInt(months[months.length-1].slice(5))}月（データのある${months.length}ヶ月）`
+    : '';
+  const spanNote = `<div style="font-size:12px;color:var(--text2);margin-bottom:6px">全期間の合計　<span style="color:var(--text3)">${esc(span)}</span></div>`;
+  let table;
+  if(STATS_BY_MONTH) {
+    table = `<table class="stats-table"><thead><tr><th>農場名</th>${ths}<th class="total-col">合計</th></tr></thead><tbody>${rows}${totalRow}</tbody></table>`;
+  } else {
+    // 農場ごとの合計だけ。横に広がらないので画面に収まる
+    const simple = farms.map(f=>{
+      if(!months.some(m=>tbl[f][m]!==undefined)) return '';
+      const total = months.reduce((t,m)=>t+(tbl[f][m]||0), 0);
+      const adj = Object.keys(ADJUSTMENTS[f]||{}).some(m=>months.includes(m));
+      return `<tr><td>${esc(f)}</td>${fmtCell(total,'total-col')}<td style="color:var(--text3);font-size:11px;white-space:nowrap">${cntByFarm[f]||0}件${adj?'<span class="cmp-adj">調整</span>':''}</td></tr>`;
+    }).filter(Boolean).join('');
+    const grand = farms.reduce((t,f)=>t+months.reduce((u,m)=>u+(tbl[f][m]||0),0), 0);
+    table = `<table class="stats-table"><thead><tr><th>農場名</th><th class="total-col">差額の合計</th><th>件数</th></tr></thead>`
+          + `<tbody>${simple}<tr class="total-row"><td>合計</td>${fmtCell(grand,'total-col')}<td style="font-size:11px;white-space:nowrap">${closed.length}件</td></tr></tbody></table>`
+          + `<p class="input-hint" style="margin-top:6px">月ごとの内訳は、上の「月ごとの内訳」にチェックを入れると表示されます。</p>`;
+  }
+  el.innerHTML=scopeNote+cmpNote+spanNote+table;
   const info=document.getElementById('importedStatsInfo');
   if(info){ const n=impFarms.reduce((s,f)=>s+Object.keys(IMPORTED_STATS[f]).length,0);
     info.textContent = n ? `取込済み: ${impFarms.length}農場・${n}件（表内に「（取込）」と表示されます）${IMPORT_PRIORITY?' ／ 取込データを優先中':''}` : '取込データはありません'; }
@@ -6186,7 +6218,7 @@ function renderStats() {
 }
 function monthOffset(n){const d=new Date();d.setMonth(d.getMonth()+n);return d.toISOString().slice(0,7);}
 function exportCSV() {
-  const rangeN=parseInt(document.getElementById('stats-range').value);
+  const rangeN=0;   // CSVも全期間を出す
   const closed=statsRows();
   let months=[...new Set(closed.map(k=>k.month))].sort();
   if(rangeN>0){const cutoff=monthOffset(-rangeN);months=months.filter(m=>m>=cutoff);}
