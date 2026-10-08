@@ -371,7 +371,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v14.8</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v14.9</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -1602,8 +1602,20 @@ function saveMasterItem() {
   const price = parseFloat(document.getElementById('newMasterPrice').value);
   if(!name) return toast('品目名を入力してください', 'error');
   if(isNaN(price)||price<0) return toast('単価を正しく入力してください', 'error');
-  if(masterEditIndex >= 0) { MASTER[masterEditIndex] = {name, price}; clearDeletion('master', name); toast(`「${name}」を更新しました`, 'success'); }
-  else { if(MASTER.find(m=>m.name===name)) return toast('同じ品目名がすでに存在します', 'error'); MASTER.push({name, price}); clearDeletion('master', name); toast(`「${name}」を追加しました`, 'success'); }
+  // u は変更時刻。同期のとき、クラウドの古い値で上書きされないようにするために持つ
+  if(masterEditIndex >= 0) {
+    const before = MASTER[masterEditIndex];
+    MASTER[masterEditIndex] = {name, price, u:Date.now()};
+    clearDeletion('master', name);
+    logSave('master', `薬価「${name}」を ¥${(Number(before&&before.price)||0).toLocaleString()} → ¥${price.toLocaleString()} に変更`);
+    toast(`「${name}」を更新しました`, 'success');
+  } else {
+    if(MASTER.find(m=>m.name===name)) return toast('同じ品目名がすでに存在します', 'error');
+    MASTER.push({name, price, u:Date.now()});
+    clearDeletion('master', name);
+    logSave('master', `薬価「${name}」を追加（¥${price.toLocaleString()}）`);
+    toast(`「${name}」を追加しました`, 'success');
+  }
   saveToStorage(); cancelMasterEdit(); renderMasterEditor(); renderMasterList();
   loadPresets(); loadOjiFee();
   const dl = document.getElementById('masterNamesList');
@@ -1625,7 +1637,8 @@ function bulkImportMaster() {
     const [name, priceStr] = line.split(sep).map(c=>c.trim().replace(/^"|"$/g,''));
     if(!name) continue; const price = parseFloat(priceStr); if(isNaN(price)||price<0) continue;
     const ex = MASTER.find(m=>m.name===name);
-    if(ex) { ex.price=price; updated++; } else { MASTER.push({name,price}); clearDeletion('master', name); added++; }
+    if(ex) { ex.price=price; ex.u=Date.now(); updated++; }
+    else { MASTER.push({name,price,u:Date.now()}); clearDeletion('master', name); added++; }
   }
   saveToStorage(); renderMasterEditor(); renderMasterList();
   loadPresets(); loadOjiFee();
@@ -3283,12 +3296,23 @@ async function cloudAutoLoad() {
     if(Array.isArray(data.aliases)) ALIASES = data.aliases;
     if(Array.isArray(data.farms)) { FARMS = data.farms; FARMS.sort((a,b)=>a.localeCompare(b,'ja')); }
     if(data.farmDist && typeof data.farmDist==='object') FARM_DIST = {...FARM_DIST, ...data.farmDist};
-    // master: クラウドを基準に、ローカルのみの品目を保持
+    // master: 品目ごとに「後から変更された方」を残す。
+    // 以前はクラウドを一律で優先していたため、この端末で直した単価が
+    // 同期のたびにクラウドの古い値へ戻っていた
     if(Array.isArray(data.master) && data.master.length) {
       const cm2 = _dropDeleted('master', data.master, m=>m.name);
-      const cloudNames = new Set(cm2.map(m=>m.name));
-      const localOnly = MASTER.filter(m=>!cloudNames.has(m.name));
-      MASTER = [...cm2, ...localOnly];
+      const byName = new Map();
+      cm2.forEach(m=>{ if(m && m.name) byName.set(m.name, m); });
+      let kept = 0;
+      MASTER.forEach(lm=>{
+        if(!lm || !lm.name) return;
+        const cv = byName.get(lm.name);
+        if(!cv) { byName.set(lm.name, lm); return; }          // 手元だけにある品目は残す
+        const lu = Number(lm.u)||0, cu = Number(cv.u)||0;
+        if(lu > cu) { byName.set(lm.name, lm); kept++; }      // 手元の変更が新しい
+      });
+      MASTER = [...byName.values()];
+      if(kept) console.info(`マスター: この端末の変更${kept}件を残しました`);
     }
     // テンプレ: IDごとにマージ（クラウド基準＋ローカルのみ保持）
     if(Array.isArray(data.templates)) {
