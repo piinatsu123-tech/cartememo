@@ -371,7 +371,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v14.9</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v15.0</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -452,6 +452,7 @@ input[type=checkbox]{width:auto;margin:0}
     <div class="batch-progress"><div class="batch-progress-bar" id="batchBar" style="width:0%"></div></div>
     <button class="btn btn-green" id="batchBtn" onclick="batchProcess()">⚡ まとめてAI解析</button>
     <button class="btn btn-ghost btn-sm" onclick="newMemoFromTemplate()">💊 定型から追加</button>
+    <button class="btn btn-ghost btn-sm" onclick="refreshPricesNow()" title="カードの単価を今の薬価に合わせ直します（カルテ保存済みのカードは変わりません）">🔄 薬価を最新に</button>
     <button class="btn btn-ghost btn-sm" id="showHiddenBtn" onclick="toggleShowHidden()" style="margin-left:auto;display:none">非表示を表示</button>
   </div>
   <div class="results-list" id="resultsList">
@@ -1616,8 +1617,12 @@ function saveMasterItem() {
     logSave('master', `薬価「${name}」を追加（¥${price.toLocaleString()}）`);
     toast(`「${name}」を追加しました`, 'success');
   }
+  // 直した単価を、まだカルテに保存していない計算カードにも反映する
+  const rp = refreshMemoPrices();
   saveToStorage(); cancelMasterEdit(); renderMasterEditor(); renderMasterList();
   loadPresets(); loadOjiFee();
+  if(rp.changed) { renderResultsList(); renderMemoQueue();
+    toast(`計算カード${rp.cards}件の単価も更新しました`,'success'); }
   const dl = document.getElementById('masterNamesList');
   if(dl) { dl.innerHTML=''; MASTER.forEach(m=>{const o=document.createElement('option');o.value=m.name;dl.appendChild(o);}); }
 }
@@ -1640,8 +1645,10 @@ function bulkImportMaster() {
     if(ex) { ex.price=price; ex.u=Date.now(); updated++; }
     else { MASTER.push({name,price,u:Date.now()}); clearDeletion('master', name); added++; }
   }
+  const rp2 = refreshMemoPrices();
   saveToStorage(); renderMasterEditor(); renderMasterList();
   loadPresets(); loadOjiFee();
+  if(rp2.changed) { renderResultsList(); renderMemoQueue(); }
   const dl = document.getElementById('masterNamesList');
   if(dl) { dl.innerHTML=''; MASTER.forEach(m=>{const o=document.createElement('option');o.value=m.name;dl.appendChild(o);}); }
   toast(`更新: ${updated}件　追加: ${added}件`, 'success');
@@ -2373,6 +2380,34 @@ document.addEventListener('click', ()=>closeAllRcMenus());
 function hideResult(id){const m=memos.find(x=>x.id===id);if(!m)return;m.hidden=true;saveToStorage();renderResultsList();}
 function unhideResult(id){const m=memos.find(x=>x.id===id);if(!m)return;m.hidden=false;saveToStorage();renderResultsList();}
 function toggleShowHidden(){showHidden=!showHidden;renderResultsList();}
+// 計算カードの品目は、作ったときの単価を持ち続ける。
+// 薬価を直したあとも古い単価で計算されてしまうため、今の単価に合わせ直す。
+// カルテに保存済みのカードは、カルテ側の金額が確定しているので触らない
+function refreshMemoPrices(opts) {
+  const all = opts && opts.includeSaved;
+  let changed = 0, cards = 0;
+  memos.forEach(m=>{
+    if(!all && m.karte_saved) return;
+    let hit = 0;
+    (m.items||[]).forEach(it=>{
+      const mm = MASTER.find(x=>x.name===it.name);
+      if(!mm) { if(!it.unknown) { it.unknown = true; hit++; } return; }
+      if(it.unknown) { it.unknown = false; hit++; }
+      if(Number(it.price) !== Number(mm.price)) { it.price = mm.price; hit++; }
+    });
+    if(hit) { changed += hit; cards++; }
+  });
+  return {changed, cards};
+}
+// 画面から押して合わせ直す
+function refreshPricesNow() {
+  const r = refreshMemoPrices();
+  if(!r.changed) return toast('すべて今の薬価と一致しています','success');
+  saveToStorage();
+  renderResultsList(); renderMemoQueue();
+  logSave('master', `計算カードの単価を今の薬価に更新（${r.cards}件のカード・${r.changed}項目）`);
+  toast(`${r.cards}件のカードの単価を今の薬価に更新しました（${r.changed}項目）`,'success');
+}
 function _updateCardTotals(m, card) {
   if(!card) return;
   const base = (m.items||[]).reduce((s,it)=>s+it.price*it.qty,0);
@@ -3313,6 +3348,7 @@ async function cloudAutoLoad() {
       });
       MASTER = [...byName.values()];
       if(kept) console.info(`マスター: この端末の変更${kept}件を残しました`);
+      refreshMemoPrices();   // 他端末で直した薬価も計算カードに反映する
     }
     // テンプレ: IDごとにマージ（クラウド基準＋ローカルのみ保持）
     if(Array.isArray(data.templates)) {
