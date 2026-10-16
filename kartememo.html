@@ -371,7 +371,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v15.0</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v15.1</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -521,6 +521,25 @@ input[type=checkbox]{width:auto;margin:0}
     <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="exportCSV()">↓ CSVエクスポート</button>
   </div>
   <div id="statsContainer"></div>
+
+  <details id="md-details" style="margin-top:14px;border:1px solid var(--border);border-radius:7px;background:var(--surface)">
+    <summary style="cursor:pointer;font-size:14px;font-weight:700;color:var(--text2);padding:10px 12px;user-select:none">➕ カルテなしで差額を追加</summary>
+    <div style="padding:0 12px 12px">
+      <p class="input-hint" style="margin-bottom:8px">カルテを作らずに差額だけを集計に入れられます。何のお金かメモに残してください（例: 往診以外の収入、立替、精算の調整）。</p>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <input type="text" id="md-farm" list="farmDatalist" placeholder="農場名・項目名" style="flex:2;min-width:120px;font-size:13px">
+        <input type="month" id="md-month" style="flex:1;min-width:120px;font-size:13px">
+      </div>
+      <input type="number" id="md-amount" step="10" inputmode="numeric" placeholder="金額（マイナスも可）" style="margin-top:6px;font-size:13px;text-align:right;font-family:'JetBrains Mono',monospace">
+      <input type="text" id="md-note" placeholder="何のお金か（例: 器材の立替分）" style="margin-top:6px;font-size:13px" onkeydown="if(event.key==='Enter')addManualDiff()">
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" id="md-addbtn" style="flex:1;justify-content:center" onclick="addManualDiff()">＋ 集計に追加</button>
+        <button class="btn btn-ghost btn-sm" id="md-cancel" style="display:none" onclick="cancelEditManualDiff()">編集をやめる</button>
+      </div>
+      <div id="mdList" class="tpl-list" style="margin-top:10px;max-height:320px"></div>
+    </div>
+  </details>
+
   <details style="margin-top:14px;border:1px solid var(--border);border-radius:7px;background:var(--surface)">
     <summary style="cursor:pointer;font-size:14px;font-weight:700;color:var(--text2);padding:10px 12px;user-select:none">📥 過去の集計CSVを取り込む</summary>
     <div style="padding:0 12px 12px">
@@ -1289,7 +1308,7 @@ function switchTab(name) {
   document.getElementById('page-'+name).classList.add('active');
   if(name === 'calc') renderResultsList();
   if(name === 'karte') { updateKarteFarmFilter(); renderKarteList(); }
-  if(name === 'stats') {
+  if(name === 'stats') { renderManualDiffs();
     const sc=document.getElementById('stats-scope'), si=document.getElementById('stats-since');
     if(sc) sc.value=STATS_SCOPE;
     if(si){ si.value=STATS_SINCE; si.style.display = (STATS_SCOPE==='new'||STATS_SCOPE==='old') ? '' : 'none'; }
@@ -1339,6 +1358,7 @@ function saveToStorage() {
     localStorage.setItem('cm_memos', JSON.stringify(memos));
     localStorage.setItem('cm_dict', JSON.stringify(DICT_WORDS));
     localStorage.setItem('cm_alias', JSON.stringify(ALIASES));
+    localStorage.setItem('cm_mdiff', JSON.stringify(MANUAL_DIFFS));
     localStorage.setItem('cm_master', JSON.stringify(MASTER));
     localStorage.setItem('cm_convpairs', JSON.stringify(convPairs));
     localStorage.setItem('cm_kartes', JSON.stringify(KARTES));
@@ -1361,6 +1381,7 @@ function loadFromStorage() {
     const m = localStorage.getItem('cm_memos'); if(m) memos = JSON.parse(m);
     const d = localStorage.getItem('cm_dict'); if(d) DICT_WORDS = JSON.parse(d);
     const al = localStorage.getItem('cm_alias'); if(al) { const a2=JSON.parse(al); if(Array.isArray(a2)) ALIASES = a2; }
+    const md = localStorage.getItem('cm_mdiff'); if(md) { const m2=JSON.parse(md); if(Array.isArray(m2)) MANUAL_DIFFS = m2; }
     const ms = localStorage.getItem('cm_master'); if(ms) MASTER = JSON.parse(ms);
     const cp = localStorage.getItem('cm_convpairs'); if(cp) convPairs = JSON.parse(cp);
     const k = localStorage.getItem('cm_kartes'); if(k) KARTES = JSON.parse(k);
@@ -1368,7 +1389,7 @@ function loadFromStorage() {
     const fd = localStorage.getItem('cm_farmdist'); if(fd) FARM_DIST = JSON.parse(fd);
     const tp = localStorage.getItem('cm_templates'); if(tp) TEMPLATES = JSON.parse(tp);
     const wi = localStorage.getItem('cm_watch'); if(wi) WATCH_ITEMS = JSON.parse(wi);
-    const dl2 = localStorage.getItem('cm_deleted'); if(dl2) DELETED = Object.assign({kartes:{},memos:{},templates:{},master:{},watch:{}}, JSON.parse(dl2));
+    const dl2 = localStorage.getItem('cm_deleted'); if(dl2) DELETED = Object.assign({kartes:{},memos:{},templates:{},master:{},watch:{},mdiffs:{}}, JSON.parse(dl2));
     pruneDeletions();
     const sl = localStorage.getItem('cm_savelog'); if(sl) SAVE_LOG = JSON.parse(sl);
     const ist = localStorage.getItem('cm_impstats'); if(ist) IMPORTED_STATS = JSON.parse(ist);
@@ -2835,7 +2856,7 @@ function _buildPayload(memoLimit, karteMonths, stripSavedText) {
     return {
       version:2, savedAt:new Date().toISOString(),
       memos: ms.map(m=>_slimMemo(m, stripSavedText)),
-      dictWords:DICT_WORDS, convPairs, aliases:ALIASES,
+      dictWords:DICT_WORDS, convPairs, aliases:ALIASES, mdiffs:MANUAL_DIFFS,
       // 読み込み時に省略フィールドが復元されているため、送信時は圧縮し直す
       kartes: _cloudKartesSnapshot.map(_slimKarte),
       farms:FARMS, master:MASTER, farmDist:FARM_DIST, templates:TEMPLATES, watch:WATCH_ITEMS,
@@ -2861,7 +2882,7 @@ function _buildPayload(memoLimit, karteMonths, stripSavedText) {
   return {
     version:2, savedAt:new Date().toISOString(),
     memos: ms.map(m=>_slimMemo(m, stripSavedText)),
-    dictWords:DICT_WORDS, convPairs, aliases:ALIASES,
+    dictWords:DICT_WORDS, convPairs, aliases:ALIASES, mdiffs:MANUAL_DIFFS,
     kartes: ks.map(_slimKarte),
     farms:FARMS, master:MASTER, farmDist:FARM_DIST, templates:TEMPLATES, watch:WATCH_ITEMS,
     deleted:DELETED,
@@ -3329,6 +3350,16 @@ async function cloudAutoLoad() {
     if(Array.isArray(data.dictWords)) DICT_WORDS = data.dictWords;
     if(Array.isArray(data.convPairs)) convPairs = data.convPairs;
     if(Array.isArray(data.aliases)) ALIASES = data.aliases;
+    // 手動の差額: IDごとに後から更新された方を残す
+    if(Array.isArray(data.mdiffs)) {
+      const byId = new Map(MANUAL_DIFFS.map(x=>[x.id,x]));
+      data.mdiffs.forEach(x=>{
+        if(!x || !x.id || isDeleted('mdiffs', x.id)) return;
+        const l = byId.get(x.id);
+        if(!l || (Number(x.u)||0) > (Number(l.u)||0)) byId.set(x.id, x);
+      });
+      MANUAL_DIFFS = [...byId.values()].filter(x=>!isDeleted('mdiffs', x.id));
+    }
     if(Array.isArray(data.farms)) { FARMS = data.farms; FARMS.sort((a,b)=>a.localeCompare(b,'ja')); }
     if(data.farmDist && typeof data.farmDist==='object') FARM_DIST = {...FARM_DIST, ...data.farmDist};
     // master: 品目ごとに「後から変更された方」を残す。
@@ -4084,7 +4115,7 @@ function exportData() {
   ledgerSyncFromKartes();
   // 書き出すのは端末のデータそのもの。クラウドを経由しないため、
   // 同期できていない分も、同期対象から外している分もすべて含まれる
-  const data={version:2,exportedAt:new Date().toISOString(),memos,dictWords:DICT_WORDS,convPairs,aliases:ALIASES,kartes:KARTES,farms:FARMS,master:MASTER,farmDist:FARM_DIST,templates:TEMPLATES,watch:WATCH_ITEMS,ledger:LEDGER,adjust:{v:ADJUSTMENTS,at:ADJUST_AT},saveLog:SAVE_LOG,deleted:DELETED};
+  const data={version:2,exportedAt:new Date().toISOString(),memos,dictWords:DICT_WORDS,convPairs,aliases:ALIASES,mdiffs:MANUAL_DIFFS,kartes:KARTES,farms:FARMS,master:MASTER,farmDist:FARM_DIST,templates:TEMPLATES,watch:WATCH_ITEMS,ledger:LEDGER,adjust:{v:ADJUSTMENTS,at:ADJUST_AT},saveLog:SAVE_LOG,deleted:DELETED};
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
   a.download=`kartememo_${new Date().toISOString().slice(0,10)}.json`;a.click();
@@ -4121,6 +4152,7 @@ function importData(input) {
       if(Array.isArray(data.dictWords))data.dictWords.forEach(w=>{if(!DICT_WORDS.includes(w))DICT_WORDS.push(w);});
       if(Array.isArray(data.convPairs)){const eIds2=new Set(convPairs.map(p=>p.id));data.convPairs.forEach(p=>{if(!eIds2.has(p.id))convPairs.push(p);});}
       if(Array.isArray(data.aliases)){const have=new Set(ALIASES.map(a=>a.f));data.aliases.forEach(a=>{if(a&&a.f&&a.t&&!have.has(a.f))ALIASES.push(a);});renderAliases();}
+      if(Array.isArray(data.mdiffs)){const have=new Set(MANUAL_DIFFS.map(x=>x.id));data.mdiffs.forEach(x=>{if(x&&x.id&&!have.has(x.id))MANUAL_DIFFS.push(x);});}
       let newKartes=0;
       let restoredElec=0;
       if(Array.isArray(data.kartes)){
@@ -5355,7 +5387,7 @@ function floorAmt(v) {
 // ===== 削除の記録（tombstone） =====
 // 同期のマージは「クラウドにあるものを残す」方式のため、削除したことを
 // 記録しておかないと未送信のうちに再読み込みすると復活してしまう
-let DELETED = { kartes:{}, memos:{}, templates:{}, master:{}, watch:{} };
+let DELETED = { kartes:{}, memos:{}, templates:{}, master:{}, watch:{}, mdiffs:{} };
 const TOMBSTONE_KEEP_DAYS = 120;
 function recordDeletion(kind, key) {
   if(!DELETED[kind]) DELETED[kind] = {};
@@ -5468,7 +5500,89 @@ function statsRows() {
     if(seen.has(k.id) || !k.closed || k.diff==null) return;
     rows.push({id:k.id, farm:k.farm, month:k.month, diff:k.diff, closedAt:k.closedAt, confirmKind:k.confirmKind});
   });
+  // カルテを作らずに足した差額
+  manualDiffs().forEach(x=>{
+    if(!x.farm || !x.month || x.amount==null) return;
+    rows.push({id:'md:'+x.id, farm:x.farm, month:x.month, diff:Number(x.amount)||0,
+               closedAt:x.at||0, confirmKind:x.confirmKind||'new', manual:true, note:x.note||''});
+  });
   return rows;
+}
+
+// ===== カルテを作らずに差額だけを足す =====
+// 往診以外の収入や、カルテに紐づかない差額を、何のお金か書き残して集計に入れる
+// {id, farm, month, amount, note, at, u}
+let MANUAL_DIFFS = [];
+function manualDiffs(){ return MANUAL_DIFFS.filter(x=>x && !isDeleted('mdiffs', x.id)); }
+function addManualDiff() {
+  const farm = (document.getElementById('md-farm').value||'').trim();
+  const month = (document.getElementById('md-month').value||'').trim();
+  const raw = (document.getElementById('md-amount').value||'').trim();
+  const note = (document.getElementById('md-note').value||'').trim();
+  if(!farm) return toast('農場名（または項目名）を入れてください','error');
+  if(!/^\d{4}-\d{2}$/.test(month)) return toast('月を選んでください','error');
+  if(raw==='') return toast('金額を入れてください','error');
+  const amount = Math.round(Number(raw));
+  if(isNaN(amount)) return toast('金額を確認してください','error');
+  if(!note && !confirm('メモが空です。何のお金か分からなくなりますが、追加しますか？')) return;
+  if(_mdEditId) {
+    const x = MANUAL_DIFFS.find(y=>y.id===_mdEditId);
+    if(x) { Object.assign(x, {farm, month, amount, note, u:Date.now()});
+            logSave('karte', `差額を修正（${farm} ${month} ${amount>=0?'+':''}${fmtAmt(amount)}${note?' / '+note:''}）`); }
+    _mdEditId = null;
+  } else {
+    MANUAL_DIFFS.push({id:'md'+Date.now(), farm, month, amount, note, at:Date.now(), u:Date.now()});
+    logSave('karte', `差額を追加（${farm} ${month} ${amount>=0?'+':''}${fmtAmt(amount)}${note?' / '+note:''}）`);
+  }
+  document.getElementById('md-amount').value='';
+  document.getElementById('md-note').value='';
+  saveToStorage();
+  renderManualDiffs(); renderStats(); updateFarmDatalist();
+  toast('集計に反映しました','success');
+}
+let _mdEditId = null;
+function editManualDiff(id) {
+  const x = MANUAL_DIFFS.find(y=>y.id===id); if(!x) return;
+  _mdEditId = id;
+  document.getElementById('md-farm').value = x.farm||'';
+  document.getElementById('md-month').value = x.month||'';
+  document.getElementById('md-amount').value = x.amount;
+  document.getElementById('md-note').value = x.note||'';
+  document.getElementById('md-details').open = true;
+  renderManualDiffs();
+  document.getElementById('md-amount').focus();
+}
+function cancelEditManualDiff(){ _mdEditId=null;
+  ['md-amount','md-note'].forEach(i=>document.getElementById(i).value='');
+  renderManualDiffs(); }
+function deleteManualDiff(id) {
+  const x = MANUAL_DIFFS.find(y=>y.id===id); if(!x) return;
+  if(!confirm(`この差額を削除しますか？\n\n${x.farm} ${x.month}　${x.amount>=0?'+':''}${fmtAmt(x.amount)}\n${x.note||'（メモなし）'}`)) return;
+  logSave('delete', `差額を削除（${x.farm} ${x.month} ${x.amount>=0?'+':''}${fmtAmt(x.amount)}${x.note?' / '+x.note:''}）`);
+  recordDeletion('mdiffs', id);
+  MANUAL_DIFFS = MANUAL_DIFFS.filter(y=>y.id!==id);
+  if(_mdEditId===id) _mdEditId=null;
+  saveToStorage(); renderManualDiffs(); renderStats();
+}
+function renderManualDiffs() {
+  const el = document.getElementById('mdList'); if(!el) return;
+  const list = manualDiffs().slice().sort((a,b)=>String(b.month).localeCompare(String(a.month)) || (b.at||0)-(a.at||0));
+  const btn = document.getElementById('md-addbtn');
+  if(btn) btn.textContent = _mdEditId ? 'この内容で更新' : '＋ 集計に追加';
+  const cx = document.getElementById('md-cancel');
+  if(cx) cx.style.display = _mdEditId ? '' : 'none';
+  if(!list.length) { el.innerHTML='<div class="tpl-empty">まだありません</div>'; return; }
+  const total = list.reduce((s,x)=>s+(Number(x.amount)||0),0);
+  el.innerHTML = list.map(x=>`<div class="tpl-item${_mdEditId===x.id?' tpl-editing':''}">
+      <div class="tpl-main">
+        <div class="tpl-name">${esc(x.farm)}　<span style="font-weight:400;font-size:11px;color:var(--text3)">${esc(x.month)}</span>
+          <span class="${(x.amount||0)>=0?'diff-pos':'diff-neg'}" style="font-family:'JetBrains Mono',monospace">${(x.amount||0)>=0?'+':''}${fmtAmt(x.amount||0)}</span></div>
+        <div class="tpl-content">${esc(x.note||'（メモなし）')}</div>
+      </div>
+      <button class="tpl-edit" onclick="editManualDiff('${x.id}')" title="編集">✏️</button>
+      <button class="tpl-del" onclick="deleteManualDiff('${x.id}')" title="削除">×</button>
+    </div>`).join('')
+    + `<div style="text-align:right;font-size:12px;font-weight:700;padding:6px 2px 0">手動分の合計 <span class="${total>=0?'diff-pos':'diff-neg'}">${total>=0?'+':''}${fmtAmt(total)}</span>（${list.length}件）</div>`;
 }
 
 // ===== 保存状態の可視化 =====
@@ -6201,6 +6315,11 @@ function renderStats() {
   // 月ごとの内訳を出さない場合は、農場ごとの合計だけの縦長の表にする（横幅をとらない）
   const cntByFarm={}; farms.forEach(f=>{cntByFarm[f]=0;});
   closed.forEach(k=>{ if(k.farm in cntByFarm) cntByFarm[k.farm]++; });
+  // 手動で足した差額が含まれる農場・月に印を付ける
+  const manByFarm={}, manByCell={};
+  closed.forEach(k=>{ if(!k.manual) return;
+    manByFarm[k.farm]=(manByFarm[k.farm]||0)+1;
+    manByCell[k.farm+'|'+k.month]=(manByCell[k.farm+'|'+k.month]||0)+1; });
   const rows=farms.map(f=>{
     let rowTotal=0;
     const cells=months.map(m=>{
@@ -6213,6 +6332,7 @@ function renderStats() {
       if(!cp){ const key=Object.keys(cmp).find(x=>_nf(x)===_nf(f)&&cmp[x][m]); if(key) cp=cmp[key][m]; }
       let mark='', tip='';
       if(hasAdj[f]&&hasAdj[f][m]) mark+=`<span class="cmp-adj" title="消えたカルテ分の調整 ${(ADJUSTMENTS[f][m]>=0?'+':'')+fmtAmt(ADJUSTMENTS[f][m])} を含みます">調整</span>`;
+      if(manByCell[f+'|'+m]) mark+=`<span class="cmp-adj" title="カルテなしで足した差額 ${manByCell[f+'|'+m]}件を含みます">手動</span>`;
       if(cp){
         if(cp.st==='match'){ mark='<span class="cmp-ok" title="CSVと一致（復元完了）">✓一致</span>'; tip='CSVと一致（復元完了）'; }
         else if(cp.st==='partial'){ mark=`<span class="cmp-part" title="CSV ${fmtAmt(cp.imp)} に対しカルテ ${fmtAmt(cp.kv)}">未完</span>`; tip=`CSV ${fmtAmt(cp.imp)} / カルテ ${fmtAmt(cp.kv)}`; }
@@ -6263,7 +6383,8 @@ function renderStats() {
       if(!months.some(m=>tbl[f][m]!==undefined)) return '';
       const total = months.reduce((t,m)=>t+(tbl[f][m]||0), 0);
       const adj = Object.keys(ADJUSTMENTS[f]||{}).some(m=>months.includes(m));
-      return `<tr><td>${esc(f)}</td>${fmtCell(total,'total-col')}<td style="color:var(--text3);font-size:11px;white-space:nowrap">${cntByFarm[f]||0}件${adj?'<span class="cmp-adj">調整</span>':''}</td></tr>`;
+      const man = manByFarm[f] ? `<span class="cmp-adj" title="カルテなしで足した差額 ${manByFarm[f]}件を含みます">手動${manByFarm[f]}</span>` : '';
+      return `<tr><td>${esc(f)}</td>${fmtCell(total,'total-col')}<td style="color:var(--text3);font-size:11px;white-space:nowrap">${cntByFarm[f]||0}件${adj?'<span class="cmp-adj">調整</span>':''}${man}</td></tr>`;
     }).filter(Boolean).join('');
     const grand = farms.reduce((t,f)=>t+months.reduce((u,m)=>u+(tbl[f][m]||0),0), 0);
     table = `<table class="stats-table"><thead><tr><th>農場名</th><th class="total-col">差額の合計</th><th>件数</th></tr></thead>`
