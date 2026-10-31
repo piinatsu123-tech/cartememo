@@ -371,7 +371,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v15.2</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v15.3</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -685,6 +685,7 @@ input[type=checkbox]{width:auto;margin:0}
           <button class="btn btn-ghost btn-sm" onclick="copyDiagnostics()">📋 エラー内容をコピー</button>
           <button class="btn btn-ghost btn-sm" onclick="allowShrinkOnce()" title="この端末の内容が正しい場合だけ使ってください">⚠️ カルテが減る送信を許可</button>
           <button class="btn btn-ghost btn-sm" onclick="allowForcePush()" title="保存先を読めないまま、この端末の内容で上書きします">⚠️ この端末の内容で上書きする</button>
+          <a href="https://github.com/settings/tokens/new?scopes=gist&description=KarteMemo" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" style="text-decoration:none" title="期限切れのときはここから作り直します">🔑 トークンを作り直す</a>
         </div>
       </div>
       <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
@@ -2110,6 +2111,15 @@ function copyDiagnostics() {
       const fld = id => { const e=document.getElementById(id); return e ? String(e.value||'') : ''; };
       const sto = k => String(localStorage.getItem(k)||'');
       const cmp = (a,b) => a.trim()===b.trim() ? (a===b ? '一致' : '一致（空白の違いあり）') : '⚠️ 食い違い';
+      if(STORAGE==='github') {
+        const t = ghToken();
+        const shape = !t ? '未設定'
+          : /^ghp_[A-Za-z0-9]{36}$/.test(t) ? 'classic（形は正常）'
+          : /^github_pat_/.test(t) ? 'fine-grained（Gistには使えません）'
+          : /^ghp_/.test(t) ? '⚠️ classicだが長さが不正' : '⚠️ 見慣れない形';
+        return `GitHubトークン: ${t.length}文字 / ${shape} → ${cmp(fld('ghToken'), sto('cm_ghtoken'))}\n`
+             + `Gist ID: ${ghGistId().length}文字 → ${cmp(fld('ghGistId'), sto('cm_ghgist'))}`;
+      }
       return `APIキー: 設定欄${fld('jsonbinKey').trim().length}文字 / 保存値${sto('cm_jbk').trim().length}文字 → ${cmp(fld('jsonbinKey'), sto('cm_jbk'))}\n`
            + `Bin ID: ${cmp(fld('jsonbinId'), sto('cm_jbid'))}`;
     })(),
@@ -2649,7 +2659,8 @@ function ghHeaders(extra){
 async function _ghFail(resp){
   let m = 'HTTP '+resp.status;
   try { const r = await resp.json(); m = r.message || m; } catch(e){}
-  if(resp.status===401) m = 'トークンが正しくありません（gist 権限のあるトークンか確認してください）';
+  if(resp.status===401) m = 'GitHubトークンが使えません。期限切れか、作り直しが必要です'
+    + '（設定タブの「🔑 GitHubでトークンを作る」から作り直し、両方の端末に貼り直してください）';
   else if(resp.status===403 || resp.status===404) m += '（トークンの gist 権限、またはGist IDを確認してください）';
   throw new Error(m);
 }
