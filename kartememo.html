@@ -371,7 +371,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v15.1</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v15.2</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -679,11 +679,12 @@ input[type=checkbox]{width:auto;margin:0}
       </details>
       <div id="cloudError" style="display:none;margin-top:8px;background:#fff4f4;border:1px solid #c00;border-radius:6px;padding:10px">
         <div style="font-size:12px;font-weight:700;color:#c00;margin-bottom:4px">⚠️ 最後の同期エラー</div>
-        <div id="cloudErrorMsg" style="font-size:12px;color:var(--text2);word-break:break-all;font-family:'JetBrains Mono',monospace"></div>
+        <div id="cloudErrorMsg" style="font-size:12px;color:var(--text2);word-break:break-all;white-space:pre-wrap;font-family:'JetBrains Mono',monospace"></div>
         <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
           <button class="btn btn-ghost btn-sm" onclick="cloudSyncNow()">↻ 今すぐ再送信</button>
           <button class="btn btn-ghost btn-sm" onclick="copyDiagnostics()">📋 エラー内容をコピー</button>
           <button class="btn btn-ghost btn-sm" onclick="allowShrinkOnce()" title="この端末の内容が正しい場合だけ使ってください">⚠️ カルテが減る送信を許可</button>
+          <button class="btn btn-ghost btn-sm" onclick="allowForcePush()" title="保存先を読めないまま、この端末の内容で上書きします">⚠️ この端末の内容で上書きする</button>
         </div>
       </div>
       <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
@@ -2101,6 +2102,8 @@ function copyDiagnostics() {
     `通信回数（この端末・${REQ_COUNT.ym||'—'}）: ${REQ_COUNT.n}回 / 無料枠は月10,000回${syncPausedNote()?' / ⏸ 自動送信を一時停止中':''}`,
     `保存先: ${usingGitHub()?'GitHub（非公開Gist '+ghGistId()+'）':(STORAGE==='github'?'GitHub（設定が未完了）':'jsonbin.io')}`,
     `保存先の読み込み: ${SYNC_LOADED_TARGET===syncTargetKey()?'済み':'⚠️ 未（送信は止まります）'} / 前回読み込み時のカルテ ${CLOUD_SEEN.kartes}件`,
+    `読み込みが失敗した理由: ${_loadErrMsg || '(なし)'}`,
+    `診療内容: ${localRecCount()}件`,
     `メモ用Bin: ${usingGitHub()?'（GitHubでは不要）':(memoBinId()?'設定あり':'未設定')}${(!usingGitHub()&&MEMO_BIN_STATUS)?' / '+MEMO_BIN_STATUS:''}`,
     // 設定欄と保存値がずれていると、経路によって成否が変わるため必ず出す
     (()=>{
@@ -2671,7 +2674,12 @@ async function ghGet(sha){
   if(!f) throw new Error('Gistに '+GIST_FILE+' が見つかりません');
   let text = f.content;
   // 大きすぎて省略された場合は元ファイルを取り直す
-  if(f.truncated && f.raw_url) { const r2 = await fetch(f.raw_url); text = await r2.text(); }
+  if(f.truncated && f.raw_url) {
+    // GitHub は 1MB を超えるファイルの中身を省略して返す。取り直し先は
+    // ブラウザから直接読めないことがあるため、失敗したら理由を伝える
+    try { const r2 = await fetch(f.raw_url); if(!r2.ok) throw new Error('HTTP '+r2.status); text = await r2.text(); }
+    catch(e) { throw new Error('保存データが大きすぎて取得できませんでした（1MB超）'); }
+  }
   if(!text) throw new Error('Gistの中身が空です');
   return { text, history: g.history || [] };
 }
@@ -2788,6 +2796,8 @@ let CLOUD_READ_BLOCKED = '';
 // この保存先の内容を一度でも読み込んだか。読む前に送ると、保存先にある
 // 他の端末のデータを手元の（少ない）内容で上書きしてしまう
 let SYNC_LOADED_TARGET = '';
+// 読み込みが失敗した理由。送信を止めたメッセージで上書きされないよう別に持つ
+let _loadErrMsg = '';
 // 直前に読み込んだ保存先の件数。大幅に減る送信を止める判断に使う
 let CLOUD_SEEN = {kartes:0, memos:0};
 function syncTargetKey(){ return usingGitHub() ? 'gist:'+ghGistId() : 'jsonbin:'+((localStorage.getItem('cm_jbid')||'').trim()); }
@@ -2812,8 +2822,6 @@ async function _ungzipB64(b64) {
 // 送信する本文を作る。圧縮できたときだけ圧縮形式にする
 async function _wireBody(data) {
   const json = JSON.stringify(data);
-  // Gistは容量に余裕があるため圧縮しない（中身をそのまま読めるほうが復旧しやすい）
-  if(usingGitHub()) { _zRatio = 1; return json; }
   const z = await _gzipB64(json);
   if(!z) { _zRatio = 1; return json; }
   const wrapped = JSON.stringify({v:3, z});
@@ -2831,7 +2839,7 @@ async function _unwireRecord(rec) {
 }
 // 実際に圧縮して圧縮率を測る。絞り込みの判定に使う
 async function learnZRatio() {
-  if(usingGitHub() || !_zSupported) { _zRatio = 1; renderCloudSize(); return; }
+  if(!_zSupported) { _zRatio = 1; renderCloudSize(); return; }
   try {
     const json = JSON.stringify(_buildPayload(0, 0, false));
     const z = await _gzipB64(json);
@@ -2903,6 +2911,22 @@ function _shrinkGuard(data) {
        + `この端末の内容で保存先を上書きすると、他の端末のカルテが失われます。`
        + `\n・正しい端末から送る場合は、そちらで同期してください`
        + `\n・この端末の内容が正しい場合は、設定タブの「カルテが減る送信を許可」を押してから送ってください`;
+}
+// 読み込めないまま詰まったとき、この端末の内容で保存先を上書きする。
+// 他の端末のデータを失う可能性があるため、明示的な操作のときだけ通す
+let FORCE_PUSH_UNTIL = 0;
+function allowForcePush() {
+  const n = KARTES.length, r = localRecCount();
+  if(!confirm(`この端末の内容で保存先を上書きします。\n\n`
+    + `この端末: カルテ ${n}件 ／ 診療内容 ${r}件\n\n`
+    + `保存先の内容を読めていないため、他の端末にしか無いカルテがあれば失われます。\n`
+    + `先に 💾 JSONバックアップを取ってください。\n\n`
+    + `続けますか？`)) return;
+  FORCE_PUSH_UNTIL = Date.now() + 10*60*1000;
+  SHRINK_OK_UNTIL = FORCE_PUSH_UNTIL;
+  _syncErrMsg = ''; renderCloudError();
+  logSave('karte', `⚠️ 読み込みなしの上書きを10分間許可した（カルテ${n}件・診療内容${r}件）`);
+  toast('10分間だけ許可しました。右上の表示をタップして送信してください','success');
 }
 function allowShrinkOnce() {
   if(!confirm('カルテが減る内容での送信を、これから10分間だけ許可します。\n\n'
@@ -3170,11 +3194,12 @@ async function cloudAutoSave(key, binId, attempt) {
   }
   // まだこの保存先を読んでいないなら、送る前に読む。
   // 端末を追加した直後に、手元の少ないデータで上書きするのを防ぐ
-  if(SYNC_LOADED_TARGET !== syncTargetKey()) {
+  if(SYNC_LOADED_TARGET !== syncTargetKey() && Date.now() >= FORCE_PUSH_UNTIL) {
     await cloudAutoLoad();
-    if(SYNC_LOADED_TARGET !== syncTargetKey()) {
-      _syncErrMsg = '保存先の内容をまだ読み込めていないため、送信を止めました'
-        + '（上書きを防ぐためです）。通信を確認してもう一度お試しください。';
+    if(SYNC_LOADED_TARGET !== syncTargetKey() && Date.now() >= FORCE_PUSH_UNTIL) {
+      _syncErrMsg = '保存先の内容をまだ読み込めていないため、送信を止めました（上書きを防ぐためです）。'
+        + (_loadErrMsg ? `\n読み込みが失敗した理由: ${_loadErrMsg}` : '')
+        + '\nこの端末の内容が正しい場合は、設定タブの「⚠️ この端末の内容で上書きする」が使えます。';
       renderCloudError(); setSyncStatus('error');
       return false;
     }
@@ -3274,6 +3299,7 @@ async function cloudAutoLoad() {
     if(!Array.isArray(data.memos)) throw new Error('invalid data');
     CLOUD_READ_BLOCKED = '';   // 読めたので送信を止める必要はない
     SYNC_LOADED_TARGET = syncTargetKey();   // この保存先は読んだ
+    _loadErrMsg = '';
     CLOUD_SEEN = { kartes:(data.kartes||[]).length, memos:(data.memos||[]).length };
     // 省略されたフィールドを既定値で復元
     (data.memos||[]).forEach(_normMemo);
@@ -3415,6 +3441,7 @@ async function cloudAutoLoad() {
       CLOUD_READ_BLOCKED = m + ' — 上書きを防ぐためこの端末からの送信を止めています';
       toast('クラウドのデータを読めませんでした。この端末からの送信を止めています','error');
     }
+    _loadErrMsg = m + `（${new Date().toLocaleTimeString('ja-JP')}）`;
     _syncErrMsg = '読み込み失敗: ' + m;
     renderCloudError();
     setSyncStatus('error');
