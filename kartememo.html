@@ -386,7 +386,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v16.5</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v16.6</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -4796,8 +4796,19 @@ function dkbDeleteTemplate() {
 // ===== 診療日の範囲選択（下部のボタンまで行かずに編集する） =====
 // つまみをドラッグすると範囲を選べる。Shift+クリックでも範囲になる。
 // 1件でも選ぶと上部に操作バーが出るので、そこから編集できる
-let RSEL = { karteId:null, set:new Set(), base:new Set(), anchor:null, dragging:false, dragAdd:true };
+let RSEL = { karteId:null, set:new Set(), base:new Set(), anchor:null, last:null, dragging:false, dragAdd:true };
 function rselRows(karteId){ return Array.from(document.querySelectorAll(`#edit-rows-${karteId} .rec-edit-row`)); }
+// 画面に並んでいる順の「配列の番号」。行は日付順に並べているため、
+// 配列の番号そのままで範囲を埋めると、画面で離れた行まで入ってしまう
+function rselOrder(karteId){ return rselRows(karteId).map(el=>parseInt(el.dataset.i)).filter(x=>!isNaN(x)); }
+// 画面の並びで a〜b の範囲にある行を、配列の番号で返す
+function _rselRange(karteId, from, to) {
+  const order = rselOrder(karteId);
+  const pa = order.indexOf(from), pb = order.indexOf(to);
+  if(pa < 0 || pb < 0) return [];
+  const a = Math.min(pa, pb), b = Math.max(pa, pb);
+  return order.slice(a, b+1);
+}
 function rselPaint() {
   const id = RSEL.karteId; if(!id) return;
   rselRows(id).forEach(el=>{
@@ -4819,9 +4830,8 @@ function rselEnsure(karteId){ if(RSEL.karteId!==karteId){ RSEL.karteId=karteId; 
 function rselDown(ev, karteId, i) {
   ev.preventDefault(); ev.stopPropagation();
   rselEnsure(karteId);
-  if(ev.shiftKey && RSEL.anchor!=null) {   // Shift+クリックで範囲
-    const a=Math.min(RSEL.anchor,i), b=Math.max(RSEL.anchor,i);
-    for(let j=a;j<=b;j++) RSEL.set.add(j);
+  if(ev.shiftKey && RSEL.anchor!=null) {   // Shift+クリックで範囲（画面の並び順）
+    _rselRange(karteId, RSEL.anchor, i).forEach(j=>RSEL.set.add(j));
     rselPaint();
     return;
   }
@@ -4829,6 +4839,7 @@ function rselDown(ev, karteId, i) {
   RSEL.base = new Set(RSEL.set);     // ドラッグ開始時の状態。行き過ぎても戻せる
   if(RSEL.dragAdd) RSEL.set.add(i); else RSEL.set.delete(i);
   RSEL.anchor = i;
+  RSEL.last = i;
   RSEL.dragging = true;
   rselPaint();
   // 押したつまみに以降の移動イベントを集める。
@@ -4861,10 +4872,11 @@ function _rselRowAt(x, y) {
 function _rselMove(x, y) {
   if(!RSEL.dragging || RSEL.anchor==null) return;
   const i = _rselRowAt(x, y);
-  if(i==null) return;
-  const a = Math.min(RSEL.anchor, i), b = Math.max(RSEL.anchor, i);
+  if(i==null || i===RSEL.last) return;
+  RSEL.last = i;
+  const range = _rselRange(RSEL.karteId, RSEL.anchor, i);
   RSEL.set = new Set(RSEL.base);     // 開始時の状態から、今の範囲を足す／外す
-  for(let j=a; j<=b; j++) { if(RSEL.dragAdd) RSEL.set.add(j); else RSEL.set.delete(j); }
+  range.forEach(j=>{ if(RSEL.dragAdd) RSEL.set.add(j); else RSEL.set.delete(j); });
   rselPaint();
 }
 // 取りこぼしの保険（画面外でボタンを離した場合など）
