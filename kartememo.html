@@ -376,7 +376,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v15.9</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v16.0</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -5524,7 +5524,7 @@ function buildKarteCard(k, isDetail) {
         </div>
         <div class="rec-preset-sub">${presetChecks}</div>
       </div>
-      <input type="text" inputmode="decimal" value="${r.amount>0?r.amount:''}" placeholder="0" onclick="event.stopPropagation()" oninput="halfInput(this)" onblur="updateRecord('${k.id}',${i},'amount',this.value)" onkeydown="${!r.date?`amountOnlyKeydown('${k.id}',${i},event)`:`if(event.key==='Enter')this.blur()`}">
+      <input type="text" inputmode="decimal" class="rec-amt" value="${r.amount>0?r.amount:''}" placeholder="0" onclick="event.stopPropagation()" oninput="halfInput(this)" onblur="updateRecord('${k.id}',${i},'amount',this.value)" onkeydown="${!r.date?`amountOnlyKeydown('${k.id}',${i},event)`:`karteAmountKeydown('${k.id}',${i},event)`}">
       <button class="rec-del-btn" onclick="event.stopPropagation();deleteRecord('${k.id}',${i})" title="削除">×</button>
     </div>`;
   }).join('');
@@ -5570,7 +5570,7 @@ function buildKarteCard(k, isDetail) {
     <div class="karte-totals">
       <div class="total-row"><span style="color:var(--text2)">紙カルテ合計</span><span class="total-val" id="paper-total-${k.id}">¥${k.paper_total.toLocaleString()}</span></div>
       ${elecRow}
-      <div class="total-row ${diffClass}" style="margin-top:4px;padding-top:8px;border-top:1px solid var(--border)"><span style="font-weight:600">差額（電子−紙）</span><span class="total-val" style="font-size:16px">${diffText}</span></div>
+      <div class="total-row ${diffClass}" id="diff-row-${k.id}" style="margin-top:4px;padding-top:8px;border-top:1px solid var(--border)"><span style="font-weight:600">差額（電子−紙）</span><span class="total-val" style="font-size:16px">${diffText}</span></div>
     </div>
     ${buildDkExport(k, sortedRecs)}
   </div>`;
@@ -5968,6 +5968,40 @@ function addKarteRecord(karteId) {
   renderKarteList();
 }
 
+// 紙カルテ合計と差額の表示だけを書き換える。
+// 全体を描き直すと、入力中の欄からカーソルが外れてしまう
+function refreshKarteTotals(k) {
+  const pt = document.getElementById('paper-total-'+k.id);
+  if(pt) pt.textContent = '¥' + (k.paper_total||0).toLocaleString();
+  const dr = document.getElementById('diff-row-'+k.id);
+  if(dr) {
+    const v = k.diff;
+    dr.className = 'total-row ' + (v==null ? '' : v>0 ? 'diff-pos' : v<0 ? 'diff-neg' : '');
+    const sp = dr.querySelector('.total-val');
+    if(sp) sp.textContent = (v==null) ? '—' : (v>=0?'+':'') + fmtAmt(v);
+  }
+}
+// 金額欄でEnterを押したら、次の診療日の金額欄へ移る。
+// 最後の欄なら「金額のみ追加」の欄へ進む
+function karteAmountKeydown(karteId, recIdx, event) {
+  if(event.key === 'Escape') { event.target.blur(); return; }
+  if(event.key !== 'Enter') return;
+  event.preventDefault();
+  const el = event.target;
+  const k = KARTES.find(x=>x.id===karteId);
+  if(k && k.records[recIdx]) {
+    k.records[recIdx].amount = floorAmt(el.value);
+    recalcPaperTotal(k);
+    saveToStorage();
+    refreshKarteTotals(k);
+    el.value = k.records[recIdx].amount > 0 ? k.records[recIdx].amount : '';  // 切り捨て後の値を見せる
+  }
+  const rows = Array.from(document.querySelectorAll(`#edit-rows-${karteId} .rec-amt`));
+  const idx = rows.indexOf(el);
+  if(idx >= 0 && idx < rows.length-1) { rows[idx+1].focus(); rows[idx+1].select(); return; }
+  const q = document.getElementById('quick-add-'+karteId);
+  if(q) { q.focus(); q.select(); } else el.blur();
+}
 function amountOnlyKeydown(karteId, recIdx, event) {
   if(event.key === 'Enter') {
     event.preventDefault();
@@ -6081,7 +6115,8 @@ function updateRecord(karteId, recIdx, field, value) {
     r.amount = floorAmt(value);
     recalcPaperTotal(k);
     saveToStorage();
-    renderKarteList();
+    // 合計の表示だけ直す（描き直すと次の欄へ移ったカーソルが外れる）
+    refreshKarteTotals(k);
     return;
   }
   if(field==='date') {
