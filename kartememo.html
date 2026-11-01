@@ -202,9 +202,19 @@ input[type=checkbox]{width:auto;margin:0}
 .karte-dist input{width:4.2em;text-align:right;padding:2px 4px;font-size:12px;font-family:'JetBrains Mono',monospace;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:#111}
 .karte-summary{font-size:13px;color:var(--text2);margin-bottom:4px;line-height:1.7}
 .rec-edit-rows{margin-bottom:12px}
-.rec-edit-hdr{display:grid;grid-template-columns:112px 1fr 88px 26px;gap:5px;font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--text3);text-transform:uppercase;padding:0 0 5px;border-bottom:1px solid var(--border)}
-.rec-edit-row{display:grid;grid-template-columns:112px 1fr 88px 26px;gap:5px;align-items:start;padding:6px 0;border-bottom:1px solid var(--border)}
+.rec-edit-hdr{display:grid;grid-template-columns:22px 112px 1fr 88px 26px;gap:5px;font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--text3);text-transform:uppercase;padding:0 0 5px;border-bottom:1px solid var(--border)}
+.rec-edit-row{display:grid;grid-template-columns:22px 112px 1fr 88px 26px;gap:5px;align-items:start;padding:6px 0;border-bottom:1px solid var(--border)}
 .rec-edit-row:last-child{border-bottom:none}
+/* 範囲選択のつまみ（ドラッグでまとめて選べる） */
+.rsel{display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;border-radius:4px;align-self:stretch}
+.rsel:hover{background:var(--surface)}
+.rsel i{display:block;width:12px;height:12px;border:1.5px solid var(--border2);border-radius:3px;background:#fff}
+.rec-edit-row.rsel-on{background:#fff8e8}
+.rec-edit-row.rsel-on .rsel i{background:#e07800;border-color:#e07800;box-shadow:inset 0 0 0 2px #fff}
+/* 選択中に出る操作バー（下部まで行かずに編集できる） */
+.rsel-bar{position:sticky;top:0;z-index:30;display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+  background:#fff8e8;border:1px solid #e07800;border-radius:7px;padding:8px 10px;margin-bottom:8px;
+  font-size:12px;font-weight:700;color:#8a4b00}
 .rec-edit-row input[type=date]{padding:4px 5px;font-size:12px;font-family:'JetBrains Mono',monospace}
 .rec-edit-row input[type=text]{padding:4px 6px;font-size:12px;font-family:'Noto Sans JP',sans-serif}
 .rec-edit-row input[type=number]{padding:4px 6px;font-size:12px;font-family:'JetBrains Mono',monospace;text-align:right}
@@ -214,7 +224,7 @@ input[type=checkbox]{width:auto;margin:0}
 .rec-preset-item{display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:var(--text3);font-weight:500;user-select:none}
 .rec-preset-item input[type=checkbox]{width:13px;height:13px;cursor:pointer;accent-color:#111;margin:0;flex-shrink:0}
 .rec-preset-item:has(input:checked){color:#111;font-weight:700}
-.rec-quick-row{display:grid;grid-template-columns:112px 1fr 88px 26px;gap:5px;align-items:center;padding:6px 0;border-top:1px dashed var(--border2);margin-top:4px}
+.rec-quick-row{display:grid;grid-template-columns:22px 112px 1fr 88px 26px;gap:5px;align-items:center;padding:6px 0;border-top:1px dashed var(--border2);margin-top:4px}
 .rec-quick-row input{padding:4px 6px;font-size:13px;font-family:'JetBrains Mono',monospace;border:1px solid var(--border2);border-radius:4px;width:100%;text-align:right}
 .rec-add-btn{margin-top:8px;font-size:12px;color:var(--text2);background:none;border:1px dashed var(--border2);border-radius:5px;padding:7px 0;cursor:pointer;width:100%;text-align:center;font-family:'Noto Sans JP',sans-serif;font-weight:600;transition:all .12s}
 .dk-export{margin-top:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface)}
@@ -376,7 +386,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v16.2</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v16.3</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -4783,6 +4793,76 @@ function dkbDeleteTemplate() {
   toast('削除しました','success');
 }
 
+// ===== 診療日の範囲選択（下部のボタンまで行かずに編集する） =====
+// つまみをドラッグすると範囲を選べる。Shift+クリックでも範囲になる。
+// 1件でも選ぶと上部に操作バーが出るので、そこから編集できる
+let RSEL = { karteId:null, set:new Set(), anchor:null, dragging:false, dragAdd:true };
+function rselRows(karteId){ return Array.from(document.querySelectorAll(`#edit-rows-${karteId} .rec-edit-row`)); }
+function rselPaint() {
+  const id = RSEL.karteId; if(!id) return;
+  rselRows(id).forEach(el=>{
+    const i = parseInt(el.dataset.i);
+    el.classList.toggle('rsel-on', RSEL.set.has(i));
+  });
+  const bar = document.getElementById('rsel-bar-'+id);
+  if(!bar) return;
+  const n = RSEL.set.size;
+  if(!n) { bar.style.display='none'; bar.innerHTML=''; return; }
+  bar.style.display='flex';
+  bar.innerHTML = `<span>${n}件の診療日を選択中</span>
+    <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();rselEdit()">✏️ まとめて編集</button>
+    <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();rselToggleAll('${id}')">すべて選択</button>
+    <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="event.stopPropagation();rselClear()">選択を解除</button>`;
+}
+function rselClear(){ RSEL.set.clear(); RSEL.anchor=null; rselPaint(); }
+function rselEnsure(karteId){ if(RSEL.karteId!==karteId){ RSEL.karteId=karteId; RSEL.set=new Set(); RSEL.anchor=null; } }
+function rselDown(ev, karteId, i) {
+  ev.preventDefault(); ev.stopPropagation();
+  rselEnsure(karteId);
+  if(ev.shiftKey && RSEL.anchor!=null) {   // Shift+クリックで範囲
+    const a=Math.min(RSEL.anchor,i), b=Math.max(RSEL.anchor,i);
+    rselRows(karteId).forEach(el=>{ const j=parseInt(el.dataset.i); if(j>=a&&j<=b) RSEL.set.add(j); });
+  } else {
+    RSEL.dragAdd = !RSEL.set.has(i);
+    if(RSEL.dragAdd) RSEL.set.add(i); else RSEL.set.delete(i);
+    RSEL.anchor = i;
+    RSEL.dragging = true;
+  }
+  rselPaint();
+}
+function rselOver(karteId, i) {
+  if(!RSEL.dragging || RSEL.karteId!==karteId) return;
+  if(RSEL.dragAdd) RSEL.set.add(i); else RSEL.set.delete(i);
+  rselPaint();
+}
+document.addEventListener('mouseup', ()=>{ RSEL.dragging=false; });
+document.addEventListener('touchend', ()=>{ RSEL.dragging=false; });
+function rselToggleAll(karteId) {
+  rselEnsure(karteId);
+  const rows = rselRows(karteId);
+  const all = rows.map(el=>parseInt(el.dataset.i));
+  if(RSEL.set.size === all.length) RSEL.set.clear();
+  else all.forEach(i=>RSEL.set.add(i));
+  rselPaint();
+}
+// 選んだ診療日でまとめて編集を開く（日付を選ぶ画面は飛ばす）
+function rselEdit() {
+  const id = RSEL.karteId; if(!id || !RSEL.set.size) return;
+  const sel = new Set(RSEL.set);
+  openBulkEdit(id);
+  // 選択を引き継いで、いきなり入力の画面にする
+  document.querySelectorAll('#bedit-list .bedit-chk').forEach(c=>{ c.checked = sel.has(parseInt(c.dataset.i)); });
+  beditGoStep(2);
+}
+// 開いているカルテで Ctrl+E（Macは⌘E）→ 選択中、無ければ全日でまとめて編集
+document.addEventListener('keydown', e => {
+  if(!(e.ctrlKey||e.metaKey) || (e.key||'').toLowerCase()!=='e') return;
+  if(!activeKarteId) return;
+  e.preventDefault();
+  if(RSEL.karteId!==activeKarteId || !RSEL.set.size) rselToggleAll(activeKarteId);
+  if(RSEL.set.size) rselEdit();
+});
+
 // ===== 複数カルテまとめて編集 =====
 // 1つのカルテ内の「複数日まとめて編集」とは別に、一覧に出ている
 // 複数のカルテに対して診療内容・症状をまとめて入れる
@@ -5500,7 +5580,10 @@ function buildKarteCard(k, isDetail) {
         ${pr.label}
       </label>`;
     }).join('');
-    return `<div class="rec-edit-row">
+    return `<div class="rec-edit-row" data-i="${i}">
+      <span class="rsel" title="ドラッグでまとめて選択／Shift+クリックで範囲"
+            onmousedown="rselDown(event,'${k.id}',${i})" onmouseenter="rselOver('${k.id}',${i})"
+            ontouchstart="rselDown(event,'${k.id}',${i})"><i></i></span>
       <input type="date" value="${esc(r.date)}" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'date',this.value)">
       <div>
         <div style="display:flex;gap:6px;align-items:center">
@@ -5550,17 +5633,18 @@ function buildKarteCard(k, isDetail) {
       </div>
     </div>
     <div class="rec-edit-rows" id="edit-rows-${k.id}">
-      <div class="rec-edit-hdr"><span>診療日</span><span>診療内容</span><span style="text-align:right">金額(円)</span><span></span></div>
+      <div id="rsel-bar-${k.id}" class="rsel-bar" style="display:none"></div>
+      <div class="rec-edit-hdr"><span class="rsel" title="すべて選択／解除" onclick="event.stopPropagation();rselToggleAll('${k.id}')"><i></i></span><span>診療日</span><span>診療内容</span><span style="text-align:right">金額(円)</span><span></span></div>
       ${editRows}
       <div class="rec-quick-row" onclick="event.stopPropagation()">
-        <span style="grid-column:1/3;font-size:11px;color:var(--text3);align-self:center">金額のみ追加 →</span>
+        <span style="grid-column:1/4;font-size:11px;color:var(--text3);align-self:center">金額のみ追加 →</span>
         <input type="text" inputmode="decimal" id="quick-add-${k.id}" placeholder="0" onclick="event.stopPropagation()" oninput="halfInput(this,event)" onkeydown="quickAddAmountKeydown('${k.id}',event)">
         <div></div>
       </div>
       <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
         <button class="rec-add-btn" style="margin-top:0;flex:1;min-width:130px" onclick="event.stopPropagation();addKarteRecord('${k.id}')">＋ 診療日を追加</button>
         <button class="rec-add-btn" style="margin-top:0;flex:1;min-width:130px" onclick="event.stopPropagation();openBulkAdd('${k.id}')">📅 複数日まとめて追加</button>
-        <button class="rec-add-btn" style="margin-top:0;flex:1;min-width:130px" onclick="event.stopPropagation();openBulkEdit('${k.id}')">✏️ 複数日まとめて編集</button>
+        <button class="rec-add-btn" style="margin-top:0;flex:1;min-width:130px" onclick="event.stopPropagation();openBulkEdit('${k.id}')" title="左端のつまみをドラッグしても選べます（Ctrl+Eで全日）">✏️ 複数日まとめて編集</button>
       </div>
     </div>
     <div class="karte-totals">
@@ -6275,6 +6359,7 @@ function renderKarteList() {
 }
 
 function selectKarte(id) {
+  if(RSEL.karteId !== id) { RSEL.karteId=null; RSEL.set.clear(); RSEL.anchor=null; }
   activeKarteId = id;
   try { localStorage.setItem('cm_active_karte', id); } catch(e){}
   renderKarteList();
