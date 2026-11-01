@@ -371,7 +371,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v15.5</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v15.6</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -895,7 +895,7 @@ input[type=checkbox]{width:auto;margin:0}
       </div>
       <div style="flex:1"><label>症状</label>
         <div style="display:flex;gap:4px">
-          <input type="text" id="modal-symptom" placeholder="軟便など" style="flex:1;min-width:0">
+          <input type="text" id="modal-symptom" placeholder="軟便など（↓でパターン）" style="flex:1;min-width:0" oninput="tplSuggestInput(this,'symptom')" onkeydown="tplSuggestKeydown(this,'symptom',event)" onfocus="tplSuggestInput(this,'symptom')" onblur="tplSuggestBlur()">
           <button type="button" class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="openSymptomTemplateForModal()">💊</button>
         </div>
       </div>
@@ -904,11 +904,11 @@ input[type=checkbox]{width:auto;margin:0}
     <input type="text" id="modal-oji" placeholder="空欄可">
     <label>診療内容（B1形式）</label>
     <div style="display:flex;gap:6px">
-      <input type="text" id="modal-content" style="flex:1;min-width:0">
+      <input type="text" id="modal-content" placeholder="↓でパターン" style="flex:1;min-width:0" oninput="tplSuggestInput(this,'karte')" onkeydown="tplSuggestKeydown(this,'karte',event)" onfocus="tplSuggestInput(this,'karte')" onblur="tplSuggestBlur()">
       <button type="button" class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="openTemplateForModal()">💊 定型</button>
     </div>
     <label>金額（円）</label>
-    <input type="number" id="modal-amount" min="0" step="10">
+    <input type="text" inputmode="decimal" id="modal-amount" oninput="halfInput(this)">
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn btn-primary" onclick="confirmKarteSave()">保存</button>
       <button class="btn btn-ghost" onclick="closeKarteModal()">キャンセル</button>
@@ -955,7 +955,7 @@ input[type=checkbox]{width:auto;margin:0}
     </div>
     <label style="margin-top:8px">診療内容</label>
     <div style="display:flex;gap:6px">
-      <input type="text" id="bulk-content" placeholder="例: iv/アンピ" style="flex:1;min-width:0">
+      <input type="text" id="bulk-content" placeholder="例: iv/アンピ（↓でパターン）" style="flex:1;min-width:0" oninput="tplSuggestInput(this,'karte')" onkeydown="tplSuggestKeydown(this,'karte',event)" onfocus="tplSuggestInput(this,'karte')" onblur="tplSuggestBlur()">
       <button type="button" class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="openTemplateForBulk()">💊</button>
     </div>
     <div style="display:flex;gap:8px;margin-top:8px">
@@ -968,7 +968,7 @@ input[type=checkbox]{width:auto;margin:0}
       </div>
       <div style="flex:1"><label>症状</label>
         <div style="display:flex;gap:4px">
-          <input type="text" id="bulk-symptom" placeholder="—" style="flex:1;min-width:0">
+          <input type="text" id="bulk-symptom" placeholder="—（↓でパターン）" style="flex:1;min-width:0" oninput="tplSuggestInput(this,'symptom')" onkeydown="tplSuggestKeydown(this,'symptom',event)" onfocus="tplSuggestInput(this,'symptom')" onblur="tplSuggestBlur()">
           <button type="button" class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="openSymptomTemplateForBulk()">💊</button>
         </div>
       </div>
@@ -978,7 +978,7 @@ input[type=checkbox]{width:auto;margin:0}
       <div style="flex:1"><label>往診元</label><input type="text" id="bulk-oji" placeholder="空欄可"></div>
     </div>
     <label style="margin-top:8px">1日あたりの金額（円）</label>
-    <input type="number" id="bulk-amount" min="0" step="10" placeholder="0" oninput="updateBulkPreview()">
+    <input type="text" inputmode="decimal" id="bulk-amount" placeholder="0" oninput="halfInput(this);updateBulkPreview()">
     <div id="bulk-preview" style="margin-top:12px;font-size:12px;color:var(--text2);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px"></div>
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn btn-primary" onclick="confirmBulkAdd()">まとめて追加</button>
@@ -1039,7 +1039,7 @@ input[type=checkbox]{width:auto;margin:0}
       <div id="bedit-in-content" class="bedit-input-block" style="display:none">
         <label>💊 診療内容</label>
         <div style="display:flex;gap:6px">
-          <input type="text" id="bedit-content" placeholder="例: iv/アンピ" style="flex:1;min-width:0">
+          <input type="text" id="bedit-content" placeholder="例: iv/アンピ（↓でパターン）" style="flex:1;min-width:0" oninput="tplSuggestInput(this,'karte')" onkeydown="tplSuggestKeydown(this,'karte',event)" onfocus="tplSuggestInput(this,'karte')" onblur="tplSuggestBlur()">
           <button type="button" class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="openTemplateForBedit()">定型</button>
         </div>
       </div>
@@ -1047,7 +1047,7 @@ input[type=checkbox]{width:auto;margin:0}
       <div id="bedit-in-symptom" class="bedit-input-block" style="display:none">
         <label>🩺 症状</label>
         <div style="display:flex;gap:6px">
-          <input type="text" id="bedit-symptom" placeholder="例: 軟便" style="flex:1;min-width:0">
+          <input type="text" id="bedit-symptom" placeholder="例: 軟便（↓でパターン）" style="flex:1;min-width:0" oninput="tplSuggestInput(this,'symptom')" onkeydown="tplSuggestKeydown(this,'symptom',event)" onfocus="tplSuggestInput(this,'symptom')" onblur="tplSuggestBlur()">
           <button type="button" class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="openSymptomTemplateForBedit()">定型</button>
         </div>
       </div>
@@ -1160,6 +1160,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <datalist id="masterNamesList"></datalist>
 <div id="nameAc" class="name-ac"></div>
+<div id="tplAc" class="name-ac"></div>
 <div class="toast-wrap" id="toastWrap"></div>
 
 <!-- ===== 電子金額カルテ選択モーダル ===== -->
@@ -2503,6 +2504,91 @@ function qtyKeydown(el, event) {
     else { const memoId=card.id.replace('rc-',''); addItemToMemo(memoId); }
   }
 }
+// ===== 数字の欄は全角で打たれても半角に直す =====
+// ブラウザからIMEを切り替える標準の方法は無いため、入力された文字を直す
+function toHalfWidth(v) {
+  return String(v==null?'':v)
+    .replace(/[０-９Ａ-Ｚａ-ｚ]/g, c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0))
+    .replace(/[．。]/g, '.').replace(/[，、]/g, ',')
+    .replace(/[：]/g, ':').replace(/[－−―ー]/g, '-')
+    .replace(/　/g, ' ');
+}
+// 入力中に直す（カーソル位置は保つ）
+function halfInput(el) {
+  const v = toHalfWidth(el.value);
+  if(v === el.value) return;
+  const p = el.selectionStart;
+  el.value = v;
+  try { el.setSelectionRange(p, p); } catch(e){}
+}
+
+// ===== 診療内容・症状の欄から直接パターンを探す =====
+// これまでは💊→一覧→検索→挿入の手数がかかっていた。欄に触れた時点で
+// よく使うパターンを出し、打てば絞り込み、↑↓とEnterで入れられるようにする
+let _tsTarget=null, _tsIdx=-1, _tsType='karte';
+function _tsBox(){ return document.getElementById('tplAc'); }
+function closeTs(){ const b=_tsBox(); if(b) b.style.display='none'; _tsTarget=null; _tsIdx=-1; }
+function tplSuggestBlur(){ setTimeout(closeTs, 150); }
+function tplSuggestInput(el, type) {
+  _tsType = type || 'karte';
+  const q = normItemName(el.value||'');
+  let list = TEMPLATES.filter(t=>t.type===_tsType);
+  if(q) list = list.filter(t=>normItemName(t.name||'').includes(q) || normItemName(t.content||'').includes(q));
+  list = list.slice(0,12);
+  const box = _tsBox();
+  if(!box || !list.length) { closeTs(); return; }
+  _tsTarget = el; _tsIdx = -1;
+  const r = el.getBoundingClientRect();
+  box.style.left = Math.max(4, Math.min(r.left, window.innerWidth-260)) + 'px';
+  box.style.top = (r.bottom+2) + 'px';
+  box.style.minWidth = Math.max(r.width, 200) + 'px';
+  box.style.maxWidth = (window.innerWidth-8) + 'px';
+  box.innerHTML = list.map((t,i)=>`<div class="name-ac-item" data-i="${i}" data-c="${esc(t.content||'')}" onmousedown="event.preventDefault();pickTs(this)">
+      <span style="font-weight:700">${esc(t.name||'（無名）')}</span>
+      <span style="color:var(--text3);font-size:11px;overflow:hidden;text-overflow:ellipsis;max-width:55%">${esc(t.content||'')}</span>
+    </div>`).join('');
+  box.style.display='block';
+}
+function pickTs(item) {
+  if(!_tsTarget) return;
+  const el = _tsTarget;
+  // 文字を打って絞り込んでいた場合も、パターンの内容で置き換える
+  el.value = item.dataset.c || '';
+  closeTs();
+  el.focus();
+  // 欄を離れたときに保存する作りのものは、ここで保存を走らせる
+  if(el.getAttribute('onblur')) el.blur();
+}
+function _tsMove(dir) {
+  const box = _tsBox(); if(!box) return;
+  const items = box.querySelectorAll('.name-ac-item');
+  if(!items.length) return;
+  if(_tsIdx>=0 && items[_tsIdx]) items[_tsIdx].classList.remove('ac-sel');
+  _tsIdx = Math.max(-1, Math.min(items.length-1, _tsIdx+dir));
+  if(_tsIdx>=0) { items[_tsIdx].classList.add('ac-sel'); items[_tsIdx].scrollIntoView({block:'nearest'}); }
+}
+function tplSuggestKeydown(el, type, event) {
+  const box = _tsBox();
+  const open = box && box.style.display!=='none';
+  if(open) {
+    if(event.key==='ArrowDown'){ event.preventDefault(); _tsMove(1); return; }
+    if(event.key==='ArrowUp'){ event.preventDefault(); _tsMove(-1); return; }
+    if(event.key==='Escape'){ event.preventDefault(); closeTs(); return; }
+    if(event.key==='Enter'){
+      event.preventDefault();
+      const items = box.querySelectorAll('.name-ac-item');
+      if(_tsIdx>=0 && items[_tsIdx]) pickTs(items[_tsIdx]);
+      else { closeTs(); el.blur(); }
+      return;
+    }
+  } else if(event.key==='ArrowDown') {
+    // 何も打っていなくても↓でよく使うパターンを開ける
+    event.preventDefault(); tplSuggestInput(el, type); _tsMove(1); return;
+  } else if(event.key==='Enter') {
+    event.preventDefault(); el.blur();
+  }
+}
+
 let _acTarget=null, _acIdx=-1;
 function nameInputInput(el) {
   const val=el.value.trim();
@@ -5226,7 +5312,7 @@ function buildKarteCard(k, isDetail) {
       <input type="date" value="${esc(r.date)}" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'date',this.value)">
       <div>
         <div style="display:flex;gap:6px;align-items:center">
-          <input type="text" value="${esc(r.content)}" placeholder="診療内容" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'content',this.value)" style="flex:1;min-width:0">
+          <input type="text" value="${esc(r.content)}" placeholder="診療内容（↓でパターン）" onclick="event.stopPropagation()" oninput="tplSuggestInput(this,'karte')" onkeydown="tplSuggestKeydown(this,'karte',event)" onfocus="tplSuggestInput(this,'karte')" onblur="tplSuggestBlur();updateRecord('${k.id}',${i},'content',this.value)" style="flex:1;min-width:0">
           <button class="btn btn-ghost btn-xs" style="flex-shrink:0;padding:2px 6px" onclick="event.stopPropagation();openTemplateForRecord('${k.id}',${i})" title="よく使う治療パターンから挿入／保存">💊</button>
           <button class="btn btn-ghost btn-xs" style="flex-shrink:0;padding:2px 6px" onclick="event.stopPropagation();copyRecordContent('${k.id}',${i})" title="この診療内容をコピー">📋</button>
           <button class="btn btn-ghost btn-xs" style="flex-shrink:0;padding:2px 6px" onclick="event.stopPropagation();duplicateRecord('${k.id}',${i})" title="この行を複製して新しい行を追加">⧉ 複製</button>
@@ -5237,12 +5323,12 @@ function buildKarteCard(k, isDetail) {
         <div class="rec-detail-sub">
           <span class="rds-label">日付</span><button type="button" class="date-step" onclick="event.stopPropagation();stepRecordDate('${k.id}',${i},-1)">−1日</button><button type="button" class="date-step" onclick="event.stopPropagation();stepRecordDate('${k.id}',${i},1)">＋1日</button>
           <span class="rds-label">時間</span><input type="time" value="${esc(r.time||'')}" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'time',this.value)">
-          <span class="rds-label">体温</span><input type="text" inputmode="decimal" value="${esc(r.temp||'')}" placeholder="—" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'temp',this.value)" style="width:52px"><button type="button" class="temp-quick" style="padding:3px 6px;font-size:11px" onclick="event.stopPropagation();setRecordTemp('${k.id}',${i},'39')">39</button><button type="button" class="temp-quick" style="padding:3px 6px;font-size:11px" onclick="event.stopPropagation();setRecordTemp('${k.id}',${i},'40')">40</button>
-          <span class="rds-label">症状</span><input type="text" value="${esc(r.symptom||'')}" placeholder="—" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'symptom',this.value)" style="flex:1;min-width:60px"><button type="button" class="temp-quick" style="padding:3px 6px;font-size:11px" onclick="event.stopPropagation();openSymptomTemplateForRecord('${k.id}',${i})" title="よく使う症状から選択／保存">💊</button>
+          <span class="rds-label">体温</span><input type="text" inputmode="decimal" value="${esc(r.temp||'')}" placeholder="—" onclick="event.stopPropagation()" oninput="halfInput(this)" onblur="updateRecord('${k.id}',${i},'temp',this.value)" style="width:52px"><button type="button" class="temp-quick" style="padding:3px 6px;font-size:11px" onclick="event.stopPropagation();setRecordTemp('${k.id}',${i},'39')">39</button><button type="button" class="temp-quick" style="padding:3px 6px;font-size:11px" onclick="event.stopPropagation();setRecordTemp('${k.id}',${i},'40')">40</button>
+          <span class="rds-label">症状</span><input type="text" value="${esc(r.symptom||'')}" placeholder="—" onclick="event.stopPropagation()" oninput="tplSuggestInput(this,'symptom')" onkeydown="tplSuggestKeydown(this,'symptom',event)" onfocus="tplSuggestInput(this,'symptom')" onblur="tplSuggestBlur();updateRecord('${k.id}',${i},'symptom',this.value)" style="flex:1;min-width:60px"><button type="button" class="temp-quick" style="padding:3px 6px;font-size:11px" onclick="event.stopPropagation();openSymptomTemplateForRecord('${k.id}',${i})" title="よく使う症状から選択／保存">💊</button>
         </div>
         <div class="rec-preset-sub">${presetChecks}</div>
       </div>
-      <input type="number" min="0" step="100" value="${r.amount>0?r.amount:''}" placeholder="0" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'amount',this.value)" onkeydown="${!r.date?`amountOnlyKeydown('${k.id}',${i},event)`:`if(event.key==='Enter')this.blur()`}">
+      <input type="text" inputmode="decimal" value="${r.amount>0?r.amount:''}" placeholder="0" onclick="event.stopPropagation()" oninput="halfInput(this)" onblur="updateRecord('${k.id}',${i},'amount',this.value)" onkeydown="${!r.date?`amountOnlyKeydown('${k.id}',${i},event)`:`if(event.key==='Enter')this.blur()`}">
       <button class="rec-del-btn" onclick="event.stopPropagation();deleteRecord('${k.id}',${i})" title="削除">×</button>
     </div>`;
   }).join('');
@@ -5256,15 +5342,15 @@ function buildKarteCard(k, isDetail) {
       </div>`).join('')}
       <div class="elec-part-sum">${parts.length}枚の合計 ¥${_sumAmts(parts).toLocaleString()}</div>
     </div>` : '';
-  const elecRow = `<div class="total-row elec-row"><span style="color:var(--text2)">電子カルテ${parts.length>1?`<span style="font-size:11px;color:var(--text3)">（${parts.length}枚の合計）</span>`:''}</span><div class="elec-input-wrap"><input type="number" id="elec-${k.id}" min="0" step="100" value="${k.electronic_amount!==null?k.electronic_amount:''}" placeholder="金額を入力" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter')this.blur()" onblur="autoSaveElectronic('${k.id}')"></div></div>
+  const elecRow = `<div class="total-row elec-row"><span style="color:var(--text2)">電子カルテ${parts.length>1?`<span style="font-size:11px;color:var(--text3)">（${parts.length}枚の合計）</span>`:''}</span><div class="elec-input-wrap"><input type="text" inputmode="decimal" id="elec-${k.id}" value="${k.electronic_amount!==null?k.electronic_amount:''}" placeholder="金額を入力" onclick="event.stopPropagation()" oninput="halfInput(this)" onkeydown="if(event.key==='Enter')this.blur()" onblur="autoSaveElectronic('${k.id}')"></div></div>
     ${partRows}
     <div class="elec-add" onclick="event.stopPropagation()">
-      <input type="number" id="elec-add-${k.id}" min="0" step="100" placeholder="別の電子カルテの金額" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter'){event.preventDefault();addElecPart('${k.id}')}">
+      <input type="text" inputmode="decimal" id="elec-add-${k.id}" placeholder="別の電子カルテの金額" onclick="event.stopPropagation()" oninput="halfInput(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();addElecPart('${k.id}')}">
       <button type="button" class="btn btn-ghost btn-xs" style="flex-shrink:0" onclick="event.stopPropagation();addElecPart('${k.id}')">＋ 合算</button>
     </div>`;
   return `<div class="karte-card" id="card-${k.id}">
     <div class="karte-hdr">
-      <span class="karte-title" style="display:inline-flex;align-items:center;gap:4px">【<input type="text" class="karte-title-edit" value="${esc(k.farm)}" onclick="event.stopPropagation()" onblur="updateKarteField('${k.id}','farm',this.value)" onkeydown="if(event.key==='Enter')this.blur()" title="農場名" style="width:8em"> / <input type="text" class="karte-title-edit" value="${esc(k.cow)}" onclick="event.stopPropagation()" onblur="updateKarteField('${k.id}','cow',this.value)" onkeydown="if(event.key==='Enter')this.blur()" title="牛番号" style="width:5em">】<span class="karte-dist" onclick="event.stopPropagation()" title="この農場の往診距離。d-karte出力の距離欄に使われます">距離<input type="number" min="0" step="0.1" inputmode="decimal" id="kdist-${k.id}" value="${(FARM_DIST[k.farm]!=null&&FARM_DIST[k.farm]!=='')?FARM_DIST[k.farm]:''}" placeholder="—" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter')this.blur()" onblur="setFarmDistFromKarte('${k.id}',this.value)">km</span></span>
+      <span class="karte-title" style="display:inline-flex;align-items:center;gap:4px">【<input type="text" class="karte-title-edit" value="${esc(k.farm)}" onclick="event.stopPropagation()" onblur="updateKarteField('${k.id}','farm',this.value)" onkeydown="if(event.key==='Enter')this.blur()" title="農場名" style="width:8em"> / <input type="text" class="karte-title-edit" value="${esc(k.cow)}" onclick="event.stopPropagation()" oninput="halfInput(this)" onblur="updateKarteField('${k.id}','cow',this.value)" onkeydown="if(event.key==='Enter')this.blur()" title="牛番号" style="width:5em">】<span class="karte-dist" onclick="event.stopPropagation()" title="この農場の往診距離。d-karte出力の距離欄に使われます">距離<input type="number" min="0" step="0.1" inputmode="decimal" id="kdist-${k.id}" value="${(FARM_DIST[k.farm]!=null&&FARM_DIST[k.farm]!=='')?FARM_DIST[k.farm]:''}" placeholder="—" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter')this.blur()" onblur="setFarmDistFromKarte('${k.id}',this.value)">km</span></span>
       <div style="display:flex;gap:8px;align-items:center">
         ${(()=>{const stage=k.closed?2:k.finished?1:0;const bc=stage===2?'badge-closed':stage===1?'badge-unclosed':'badge-active';const bt=stage===2?'確定済':stage===1?'電子未入力':'診療中';return`<span class="karte-badge ${bc}">${bt}</span>`+(k.origUnconfirmed?'<span class="karte-badge" style="color:#1a4b8a;border-color:#1a4b8a">もともと未確定</span>':'')+(k.confirmKind==='restore'?'<span class="karte-badge" style="color:#8a4b00;border-color:#e07800">復元</span>':'')+(!k.closed?`<button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();toggleFinished('${k.id}')">${k.finished?'診療中に戻す':'終診にする'}</button>`:'');})()}
         <button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();duplicateKarte('${k.id}')" title="このカルテ全体を複製して編集">⧉ カルテ複製</button>
@@ -5276,7 +5362,7 @@ function buildKarteCard(k, isDetail) {
       ${editRows}
       <div class="rec-quick-row" onclick="event.stopPropagation()">
         <span style="grid-column:1/3;font-size:11px;color:var(--text3);align-self:center">金額のみ追加 →</span>
-        <input type="number" id="quick-add-${k.id}" min="0" step="100" placeholder="0" onclick="event.stopPropagation()" onkeydown="quickAddAmountKeydown('${k.id}',event)">
+        <input type="text" inputmode="decimal" id="quick-add-${k.id}" placeholder="0" onclick="event.stopPropagation()" oninput="halfInput(this)" onkeydown="quickAddAmountKeydown('${k.id}',event)">
         <div></div>
       </div>
       <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
@@ -5758,7 +5844,7 @@ function buildAmountOnlyRowHtml(karteId, i) {
       </div>
       <div class="rec-preset-sub">${presetChecks}</div>
     </div>
-    <input type="number" min="0" step="100" value="${rec.amount||''}" placeholder="0" onclick="event.stopPropagation()" onblur="updateRecord('${karteId}',${i},'amount',this.value)" onkeydown="amountOnlyKeydown('${karteId}',${i},event)">
+    <input type="text" inputmode="decimal" value="${rec.amount||''}" placeholder="0" onclick="event.stopPropagation()" oninput="halfInput(this)" onblur="updateRecord('${karteId}',${i},'amount',this.value)" onkeydown="amountOnlyKeydown('${karteId}',${i},event)">
     <button class="rec-del-btn" onclick="event.stopPropagation();deleteRecord('${karteId}',${i})" title="削除">×</button>`;
 }
 
