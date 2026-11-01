@@ -212,6 +212,8 @@ input[type=checkbox]{width:auto;margin:0}
 .rec-edit-row.rsel-on{background:#fff8e8}
 .rec-edit-row.rsel-on .rsel i{background:#e07800;border-color:#e07800;box-shadow:inset 0 0 0 2px #fff}
 /* 選択中に出る操作バー（下部まで行かずに編集できる） */
+.rsel-fill{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:#8a4b00;cursor:pointer}
+.rsel-fill input{width:auto;margin:0}
 .rsel-bar{position:sticky;top:0;z-index:30;display:flex;gap:8px;align-items:center;flex-wrap:wrap;
   background:#fff8e8;border:1px solid #e07800;border-radius:7px;padding:8px 10px;margin-bottom:8px;
   font-size:12px;font-weight:700;color:#8a4b00}
@@ -386,7 +388,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v16.6</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v16.7</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -4796,7 +4798,9 @@ function dkbDeleteTemplate() {
 // ===== 診療日の範囲選択（下部のボタンまで行かずに編集する） =====
 // つまみをドラッグすると範囲を選べる。Shift+クリックでも範囲になる。
 // 1件でも選ぶと上部に操作バーが出るので、そこから編集できる
-let RSEL = { karteId:null, set:new Set(), base:new Set(), anchor:null, last:null, dragging:false, dragAdd:true };
+let RSEL = { karteId:null, set:new Set(), base:new Set(), anchor:null, last:null, dragging:false, dragAdd:true,
+  // 選択中の行のどれかに入力したら、他の行にも同じ値を入れるか
+  fill: (localStorage.getItem('cm_selfill') !== '0') };
 function rselRows(karteId){ return Array.from(document.querySelectorAll(`#edit-rows-${karteId} .rec-edit-row`)); }
 // 画面に並んでいる順の「配列の番号」。行は日付順に並べているため、
 // 配列の番号そのままで範囲を埋めると、画面で離れた行まで入ってしまう
@@ -4821,11 +4825,19 @@ function rselPaint() {
   if(!n) { bar.style.display='none'; bar.innerHTML=''; return; }
   bar.style.display='flex';
   bar.innerHTML = `<span>${n}件の診療日を選択中</span>
+    ${n>1 ? `<label class="rsel-fill" onclick="event.stopPropagation()"><input type="checkbox" ${RSEL.fill?'checked':''} onchange="rselSetFill(this.checked)">
+        どれかに入力すると${n}件すべてに反映（診療内容・症状・体温・時間）</label>` : ''}
     <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();rselEdit()">✏️ まとめて編集</button>
     <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();rselToggleAll('${id}')">すべて選択</button>
     <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="event.stopPropagation();rselClear()">選択を解除</button>`;
 }
 function rselClear(){ RSEL.set.clear(); RSEL.anchor=null; rselPaint(); }
+function rselSetFill(on){
+  RSEL.fill = !!on;
+  try { localStorage.setItem('cm_selfill', RSEL.fill?'1':'0'); } catch(e){}
+  rselPaint();
+  toast(RSEL.fill ? '入力した内容を選択中の全部に反映します' : '1件ずつの入力に戻しました');
+}
 function rselEnsure(karteId){ if(RSEL.karteId!==karteId){ RSEL.karteId=karteId; RSEL.set=new Set(); RSEL.anchor=null; } }
 function rselDown(ev, karteId, i) {
   ev.preventDefault(); ev.stopPropagation();
@@ -5631,7 +5643,7 @@ function buildKarteCard(k, isDetail) {
       <input type="date" value="${esc(r.date)}" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'date',this.value)">
       <div>
         <div style="display:flex;gap:6px;align-items:center">
-          <input type="text" value="${esc(r.content)}" placeholder="診療内容（↓でパターン）" onclick="event.stopPropagation()" oninput="tplSuggestInput(this,'karte')" onkeydown="tplSuggestKeydown(this,'karte',event)" onfocus="tplSuggestInput(this,'karte')" onblur="tplSuggestBlur();updateRecord('${k.id}',${i},'content',this.value)" style="flex:1;min-width:0">
+          <input type="text" data-f="content" value="${esc(r.content)}" placeholder="診療内容（↓でパターン）" onclick="event.stopPropagation()" oninput="tplSuggestInput(this,'karte')" onkeydown="tplSuggestKeydown(this,'karte',event)" onfocus="tplSuggestInput(this,'karte')" onblur="tplSuggestBlur();updateRecord('${k.id}',${i},'content',this.value)" style="flex:1;min-width:0">
           <button class="btn btn-ghost btn-xs" style="flex-shrink:0;padding:2px 6px" onclick="event.stopPropagation();openTemplateForRecord('${k.id}',${i})" title="よく使う治療パターンから挿入／保存">💊</button>
           <button class="btn btn-ghost btn-xs" style="flex-shrink:0;padding:2px 6px" onclick="event.stopPropagation();copyRecordContent('${k.id}',${i})" title="この診療内容をコピー">📋</button>
           <button class="btn btn-ghost btn-xs" style="flex-shrink:0;padding:2px 6px" onclick="event.stopPropagation();duplicateRecord('${k.id}',${i})" title="この行を複製して新しい行を追加">⧉ 複製</button>
@@ -5641,9 +5653,9 @@ function buildKarteCard(k, isDetail) {
         </div>
         <div class="rec-detail-sub">
           <span class="rds-label">日付</span><button type="button" class="date-step" onclick="event.stopPropagation();stepRecordDate('${k.id}',${i},-1)">−1日</button><button type="button" class="date-step" onclick="event.stopPropagation();stepRecordDate('${k.id}',${i},1)">＋1日</button>
-          <span class="rds-label">時間</span><input type="time" value="${esc(r.time||'')}" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'time',this.value)">
-          <span class="rds-label">体温</span><input type="text" inputmode="decimal" value="${esc(r.temp||'')}" placeholder="—" onclick="event.stopPropagation()" oninput="halfInput(this,event)" onblur="updateRecord('${k.id}',${i},'temp',this.value)" style="width:52px"><button type="button" class="temp-quick" style="padding:3px 6px;font-size:11px" onclick="event.stopPropagation();setRecordTemp('${k.id}',${i},'39')">39</button><button type="button" class="temp-quick" style="padding:3px 6px;font-size:11px" onclick="event.stopPropagation();setRecordTemp('${k.id}',${i},'40')">40</button>
-          <span class="rds-label">症状</span><input type="text" value="${esc(r.symptom||'')}" placeholder="—" onclick="event.stopPropagation()" oninput="tplSuggestInput(this,'symptom')" onkeydown="tplSuggestKeydown(this,'symptom',event)" onfocus="tplSuggestInput(this,'symptom')" onblur="tplSuggestBlur();updateRecord('${k.id}',${i},'symptom',this.value)" style="flex:1;min-width:60px"><button type="button" class="temp-quick" style="padding:3px 6px;font-size:11px" onclick="event.stopPropagation();openSymptomTemplateForRecord('${k.id}',${i})" title="よく使う症状から選択／保存">💊</button>
+          <span class="rds-label">時間</span><input type="time" data-f="time" value="${esc(r.time||'')}" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'time',this.value)">
+          <span class="rds-label">体温</span><input type="text" data-f="temp" inputmode="decimal" value="${esc(r.temp||'')}" placeholder="—" onclick="event.stopPropagation()" oninput="halfInput(this,event)" onblur="updateRecord('${k.id}',${i},'temp',this.value)" style="width:52px"><button type="button" class="temp-quick" style="padding:3px 6px;font-size:11px" onclick="event.stopPropagation();setRecordTemp('${k.id}',${i},'39')">39</button><button type="button" class="temp-quick" style="padding:3px 6px;font-size:11px" onclick="event.stopPropagation();setRecordTemp('${k.id}',${i},'40')">40</button>
+          <span class="rds-label">症状</span><input type="text" data-f="symptom" value="${esc(r.symptom||'')}" placeholder="—" onclick="event.stopPropagation()" oninput="tplSuggestInput(this,'symptom')" onkeydown="tplSuggestKeydown(this,'symptom',event)" onfocus="tplSuggestInput(this,'symptom')" onblur="tplSuggestBlur();updateRecord('${k.id}',${i},'symptom',this.value)" style="flex:1;min-width:60px"><button type="button" class="temp-quick" style="padding:3px 6px;font-size:11px" onclick="event.stopPropagation();openSymptomTemplateForRecord('${k.id}',${i})" title="よく使う症状から選択／保存">💊</button>
         </div>
         <div class="rec-preset-sub">${presetChecks}</div>
       </div>
@@ -6225,12 +6237,39 @@ function addAmountOnlyRecord(karteId) {
   }
 }
 
+// 選択中の行を編集したら、選択している他の日付にも同じ値を入れる。
+// 日付と金額は日ごとに違うものなので対象にしない
+const SEL_FILL_FIELDS = ['content','symptom','temp','time'];
+function _selFillTargets(karteId, recIdx, field) {
+  if(!RSEL.fill) return null;
+  if(SEL_FILL_FIELDS.indexOf(field) < 0) return null;
+  if(RSEL.karteId !== karteId || RSEL.set.size < 2) return null;
+  if(!RSEL.set.has(recIdx)) return null;        // 選択していない行の編集はそのまま
+  return [...RSEL.set].filter(i=>i!==recIdx);
+}
+// 他の行の入力欄にも同じ値を見せる（描き直さずに済ませる）
+function _selFillPaint(karteId, field, value, idxs) {
+  idxs.forEach(i=>{
+    const row = document.querySelector(`#edit-rows-${karteId} .rec-edit-row[data-i="${i}"]`);
+    const inp = row && row.querySelector(`input[data-f="${field}"]`);
+    if(inp) { inp.value = value; flashSaved(inp); }
+  });
+}
 function updateRecord(karteId, recIdx, field, value) {
   const k = KARTES.find(x=>x.id===karteId);
   if(!k || recIdx<0 || recIdx>=k.records.length) return;
   const r = k.records[recIdx];
   if(field==='content'||field==='time'||field==='temp'||field==='symptom') {
-    r[field] = value.trim ? value.trim() : value;
+    const v = value.trim ? value.trim() : value;
+    r[field] = v;
+    const others = _selFillTargets(karteId, recIdx, field);
+    if(others && others.length) {
+      others.forEach(i=>{ if(k.records[i]) k.records[i][field] = v; });
+      _selFillPaint(karteId, field, v, others);
+      const label = {content:'診療内容',symptom:'症状',temp:'体温',time:'時間'}[field];
+      logSave('karte', `【${k.farm} / ${k.cow}】選択中の${others.length+1}件の${label}を「${v||'（空）'}」にした`);
+      toast(`選択中の${others.length+1}件の${label}に反映しました`,'success');
+    }
     touchKarte(k);
     saveToStorage();
     return; // 再描画不要
