@@ -371,7 +371,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v15.3</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v15.4</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -518,7 +518,8 @@ input[type=checkbox]{width:auto;margin:0}
       <input type="checkbox" id="statsByMonth" onchange="setStatsByMonth(this.checked)" style="width:auto;margin:0">
       月ごとの内訳
     </label>
-    <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="exportCSV()">↓ CSVエクスポート</button>
+    <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="copyStatsBreakdown()" title="端末で金額が違うとき、どの要素が違うのか調べます">🔍 内訳をコピー</button>
+    <button class="btn btn-ghost btn-sm" onclick="exportCSV()">↓ CSVエクスポート</button>
   </div>
   <div id="statsContainer"></div>
 
@@ -6110,6 +6111,70 @@ function duplicateKarte(id){
 // ===== 過去の集計CSVの取り込み =====
 // カルテが失われた期間の集計を、以前エクスポートしたCSVから補う
 // 形式: {"農場名": {"YYYY-MM": 差額, ...}, ...}
+// 農家ごとの金額が端末で食い違うとき、どの要素が違うのかを切り分けるための内訳。
+// 両方の端末でこれをコピーして見比べると、違う列がそのまま原因になる
+function copyStatsBreakdown() {
+  const rows = statsRows().filter(_inStatsScope);
+  const ledgerIds = new Set(Object.keys(LEDGER).filter(id=>LEDGER[id].d!=null));
+  const per = {};
+  const get = f => (per[f] = per[f] || {led:0, ledN:0, loc:0, locN:0, man:0, manN:0, adj:0, imp:0});
+  rows.forEach(r=>{
+    const o = get(r.farm||'(農場名なし)');
+    if(r.manual) { o.man += r.diff; o.manN++; }
+    else if(ledgerIds.has(r.id)) { o.led += r.diff; o.ledN++; }
+    else { o.loc += r.diff; o.locN++; }       // 台帳に無く、手元のカルテから出た分
+  });
+  Object.keys(ADJUSTMENTS).forEach(f=>{
+    const o = get(f);
+    Object.keys(ADJUSTMENTS[f]||{}).forEach(m=>{ o.adj += Number(ADJUSTMENTS[f][m])||0; });
+  });
+  Object.keys(IMPORTED_STATS).forEach(f=>{
+    const o = get(f);
+    Object.keys(IMPORTED_STATS[f]||{}).forEach(m=>{ o.imp += Number(IMPORTED_STATS[f][m])||0; });
+  });
+  const farms = Object.keys(per).sort((a,b)=>a.localeCompare(b,'ja'));
+  const L = [];
+  L.push(`KarteMemo 農家ごと集計の内訳`);
+  L.push(`日時: ${new Date().toLocaleString('ja-JP')}`);
+  L.push(`バージョン: ${(document.querySelector('header span')||{}).textContent||''}`);
+  L.push(`カルテ: ${KARTES.length}件 ／ 診療内容: ${localRecCount()}件 ／ 集計台帳: ${ledgerIds.size}件`);
+  L.push(`表示条件: ${STATS_SCOPE}${STATS_SINCE?' / '+STATS_SINCE:''}　取込優先: ${IMPORT_PRIORITY?'オン':'オフ'}`);
+  L.push('');
+  L.push('農場名 | 台帳 | 手元のみ | 手動 | 調整 | 取込 | 合計');
+  L.push('（「手元のみ」は台帳に無く手元のカルテから出た分。端末差の元になりやすい）');
+  L.push('（「取込」は参考値。集計表に合成されるのはカルテに無い月だけなので合計には含めていない）');
+  L.push('');
+  let t = {led:0, loc:0, man:0, adj:0, imp:0, all:0};
+  farms.forEach(f=>{
+    const o = per[f];
+    const sum = o.led + o.loc + o.man + o.adj;   // 取込は条件により合成されるため合計には入れない
+    t.led+=o.led; t.loc+=o.loc; t.man+=o.man; t.adj+=o.adj; t.imp+=o.imp; t.all+=sum;
+    L.push(`${f} | ${fmtAmt(o.led)}(${o.ledN}) | ${fmtAmt(o.loc)}(${o.locN}) | ${fmtAmt(o.man)}(${o.manN}) | ${fmtAmt(o.adj)} | ${fmtAmt(o.imp)} | ${fmtAmt(sum)}`);
+  });
+  L.push('');
+  L.push(`合計 | 台帳 ${fmtAmt(t.led)} | 手元のみ ${fmtAmt(t.loc)} | 手動 ${fmtAmt(t.man)} | 調整 ${fmtAmt(t.adj)} | 取込 ${fmtAmt(t.imp)}`);
+  L.push(`→ 集計に出ている合計: ${fmtAmt(t.all)}`);
+  L.push('');
+  if(t.loc) L.push(`⚠️ 「手元のみ」が ${fmtAmt(t.loc)} あります。この分は集計台帳に載っておらず、他の端末には共有されていない可能性があります。`);
+  // 台帳の金額と手元のカルテの金額が食い違っていないか（復元のあとに起きやすい）
+  const gap = [];
+  KARTES.forEach(k=>{
+    if(!k.closed || k.diff==null) return;
+    const e = LEDGER[k.id];
+    if(!e || e.d==null) return;
+    if(Number(e.d) !== Number(k.diff)) gap.push(`  ${k.farm} / ${k.cow}: カルテ ${fmtAmt(k.diff)} ／ 台帳 ${fmtAmt(e.d)}`);
+  });
+  if(gap.length) {
+    L.push('');
+    L.push(`⚠️ カルテの差額と集計台帳の金額が食い違うもの: ${gap.length}件`);
+    L.push('　（集計は台帳の金額を使います。紙カルテ合計が端末で違うと起きます）');
+    gap.slice(0,20).forEach(x=>L.push(x));
+    if(gap.length>20) L.push(`  …ほか${gap.length-20}件`);
+  }
+  if(Object.keys(IMPORTED_STATS).length) L.push(`⚠️ 取込データが残っています。取込は端末ごとの持ち物なので、他の端末と金額が違う原因になります。`);
+  if(STATS_SCOPE!=='all') L.push(`⚠️ 表示条件が「すべての確定」以外です。端末ごとに違うと金額も違って見えます。`);
+  showReport('📋 農家ごと集計の内訳', L.join('\n'));
+}
 let IMPORTED_STATS = {};
 let IMPORT_PRIORITY = false; // 取込データをカルテより優先するか
 // 消えたカルテの分を固定の調整額として保持する {農場:{YYYY-MM:金額}}
