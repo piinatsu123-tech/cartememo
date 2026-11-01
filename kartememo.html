@@ -376,7 +376,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v16.1</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v16.2</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -1018,16 +1018,11 @@ input[type=checkbox]{width:auto;margin:0}
     </select>
 
     <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
-      <label class="bedit-fieldbtn" style="display:block"><input type="checkbox" id="mk-use-content" onchange="mkPreview()"><span>💊 診療内容</span></label>
-      <div style="display:flex;gap:6px;margin-top:4px">
-        <input type="text" id="mk-content" placeholder="例: iv/アンピ（↓でパターン）" style="flex:1;min-width:0" oninput="tplSuggestInput(this,'karte');mkPreview()" onkeydown="tplSuggestKeydown(this,'karte',event)" onfocus="tplSuggestInput(this,'karte')" onblur="tplSuggestBlur()">
-      </div>
-    </div>
-    <div style="margin-top:10px">
-      <label class="bedit-fieldbtn" style="display:block"><input type="checkbox" id="mk-use-symptom" onchange="mkPreview()"><span>🩺 症状</span></label>
-      <div style="display:flex;gap:6px;margin-top:4px">
-        <input type="text" id="mk-symptom" placeholder="例: 軟便（↓でパターン）" style="flex:1;min-width:0" oninput="tplSuggestInput(this,'symptom');mkPreview()" onkeydown="tplSuggestKeydown(this,'symptom',event)" onfocus="tplSuggestInput(this,'symptom')" onblur="tplSuggestBlur()">
-      </div>
+      <div class="bedit-note" style="margin-bottom:8px">入力した項目だけが反映されます</div>
+      <label>💊 診療内容</label>
+      <input type="text" id="mk-content" placeholder="例: iv/アンピ（↓でパターン）" style="width:100%" oninput="tplSuggestInput(this,'karte');mkPreview()" onkeydown="tplSuggestKeydown(this,'karte',event)" onfocus="tplSuggestInput(this,'karte')" onblur="tplSuggestBlur()">
+      <label style="margin-top:8px">🩺 症状</label>
+      <input type="text" id="mk-symptom" placeholder="例: 軟便（↓でパターン）" style="width:100%" oninput="tplSuggestInput(this,'symptom');mkPreview()" onkeydown="tplSuggestKeydown(this,'symptom',event)" onfocus="tplSuggestInput(this,'symptom')" onblur="tplSuggestBlur()">
     </div>
 
     <div id="mk-preview" style="margin-top:12px;font-size:12px;color:var(--text2);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px"></div>
@@ -1061,33 +1056,16 @@ input[type=checkbox]{width:auto;margin:0}
       <div id="bedit-list" class="bedit-list"></div>
       <div class="bedit-nav">
         <button class="btn btn-ghost" onclick="closeBulkEdit()">キャンセル</button>
-        <button class="btn btn-primary" style="margin-left:auto" onclick="beditGoStep(2)">次へ →</button>
+        <button class="btn btn-primary" style="margin-left:auto" onclick="beditGoStep(2)">次へ（内容を入力）→</button>
       </div>
     </div>
 
-    <!-- STEP 2: 項目を選ぶ -->
+    <!-- STEP 2: 入力する（項目を選ぶ工程は無くし、入れた項目だけ反映する） -->
     <div id="bedit-page-2" class="bedit-page" style="display:none">
-      <div class="bedit-help">まとめて変更したい項目を選んでください（複数可）</div>
-      <div class="bedit-fieldgrid">
-        <label class="bedit-fieldbtn"><input type="checkbox" id="bedit-use-content" onchange="beditSyncFieldBtns()"><span>💊 診療内容</span></label>
-        <label class="bedit-fieldbtn"><input type="checkbox" id="bedit-use-symptom" onchange="beditSyncFieldBtns()"><span>🩺 症状</span></label>
-        <label class="bedit-fieldbtn"><input type="checkbox" id="bedit-use-temp" onchange="beditSyncFieldBtns()"><span>🌡 体温</span></label>
-        <label class="bedit-fieldbtn"><input type="checkbox" id="bedit-use-time" onchange="beditSyncFieldBtns()"><span>🕐 時間</span></label>
-        <label class="bedit-fieldbtn"><input type="checkbox" id="bedit-use-oji" onchange="beditSyncFieldBtns()"><span>🚗 往診元</span></label>
-        <label class="bedit-fieldbtn"><input type="checkbox" id="bedit-use-amount" onchange="beditSyncFieldBtns()"><span>💴 金額</span></label>
-      </div>
-      <div class="bedit-note">選ばなかった項目は元の値のまま変わりません</div>
-      <div class="bedit-nav">
-        <button class="btn btn-ghost" onclick="beditGoStep(1)">← 戻る</button>
-        <button class="btn btn-primary" style="margin-left:auto" onclick="beditGoStep(3)">次へ →</button>
-      </div>
-    </div>
-
-    <!-- STEP 3: 入力する -->
-    <div id="bedit-page-3" class="bedit-page" style="display:none">
       <div class="bedit-help" id="bedit-step3-help"></div>
+      <div class="bedit-note" style="margin-bottom:8px">入力した項目だけが反映されます。空のままにした項目は元の値が残ります。</div>
 
-      <div id="bedit-in-content" class="bedit-input-block" style="display:none">
+      <div id="bedit-in-content" class="bedit-input-block">
         <label>💊 診療内容</label>
         <div style="display:flex;gap:6px">
           <input type="text" id="bedit-content" placeholder="例: iv/アンピ（↓でパターン）" style="flex:1;min-width:0" oninput="tplSuggestInput(this,'karte')" onkeydown="tplSuggestKeydown(this,'karte',event)" onfocus="tplSuggestInput(this,'karte')" onblur="tplSuggestBlur()">
@@ -1095,7 +1073,7 @@ input[type=checkbox]{width:auto;margin:0}
         </div>
       </div>
 
-      <div id="bedit-in-symptom" class="bedit-input-block" style="display:none">
+      <div id="bedit-in-symptom" class="bedit-input-block">
         <label>🩺 症状</label>
         <div style="display:flex;gap:6px">
           <input type="text" id="bedit-symptom" placeholder="例: 軟便（↓でパターン）" style="flex:1;min-width:0" oninput="tplSuggestInput(this,'symptom')" onkeydown="tplSuggestKeydown(this,'symptom',event)" onfocus="tplSuggestInput(this,'symptom')" onblur="tplSuggestBlur()">
@@ -1103,7 +1081,7 @@ input[type=checkbox]{width:auto;margin:0}
         </div>
       </div>
 
-      <div id="bedit-in-temp" class="bedit-input-block" style="display:none">
+      <div id="bedit-in-temp" class="bedit-input-block">
         <label>🌡 体温(℃)</label>
         <div style="display:flex;gap:4px;align-items:center">
           <input type="text" inputmode="decimal" id="bedit-temp" placeholder="—" style="flex:1;min-width:0">
@@ -1112,23 +1090,25 @@ input[type=checkbox]{width:auto;margin:0}
         </div>
       </div>
 
-      <div id="bedit-in-time" class="bedit-input-block" style="display:none">
+      <div id="bedit-in-time" class="bedit-input-block">
         <label>🕐 時間</label>
         <input type="time" id="bedit-time" style="width:100%">
       </div>
 
-      <div id="bedit-in-oji" class="bedit-input-block" style="display:none">
+      <div id="bedit-in-oji" class="bedit-input-block">
         <label>🚗 往診元</label>
         <input type="text" id="bedit-oji" placeholder="空欄にすると往診チェックを外します" style="width:100%">
       </div>
 
-      <div id="bedit-in-amount" class="bedit-input-block" style="display:none">
+      <div id="bedit-in-amount" class="bedit-input-block">
         <label>💴 金額（円・1日あたり）</label>
-        <input type="number" id="bedit-amount" min="0" step="10" placeholder="0" style="width:100%">
+        <input type="text" inputmode="decimal" id="bedit-amount" placeholder="0" style="width:100%" oninput="halfInput(this,event)">
       </div>
 
+      <label class="bedit-fieldbtn" style="display:block;margin-top:10px"><input type="checkbox" id="bedit-clear-empty"><span>空のままにした項目は「消す」（既定は変更しない）</span></label>
+
       <div class="bedit-nav">
-        <button class="btn btn-ghost" onclick="beditGoStep(2)">← 戻る</button>
+        <button class="btn btn-ghost" onclick="beditGoStep(1)">← 日付を選び直す</button>
         <button class="btn btn-primary" style="margin-left:auto" onclick="confirmBulkEdit()">まとめて反映</button>
       </div>
     </div>
@@ -4812,7 +4792,7 @@ function openMultiKarte() {
   document.getElementById('mk-target').textContent =
     `いま一覧に出ている ${list.length}件 のカルテが対象です（絞り込みを変えると対象も変わります）`;
   ['mk-content','mk-symptom'].forEach(id=>document.getElementById(id).value='');
-  ['mk-use-content','mk-use-symptom'].forEach(id=>document.getElementById(id).checked=false);
+
   document.getElementById('mk-scope').value='empty';
   document.getElementById('mk-mode').value='fill';
   mkPreview();
@@ -4836,9 +4816,12 @@ function _mkTargets(k, field) {
 // 何件に反映されるかを数える（実際には書き換えない）
 function _mkCount() {
   const mode = document.getElementById('mk-mode').value;
+  // 入力がある項目だけを対象にする（項目を選ぶ工程は無くした）
   const fields = [];
-  if(document.getElementById('mk-use-content').checked) fields.push(['content', document.getElementById('mk-content').value.trim()]);
-  if(document.getElementById('mk-use-symptom').checked) fields.push(['symptom', document.getElementById('mk-symptom').value.trim()]);
+  const cv = document.getElementById('mk-content').value.trim();
+  const sv = document.getElementById('mk-symptom').value.trim();
+  if(cv) fields.push(['content', cv]);
+  if(sv) fields.push(['symptom', sv]);
   const list = filteredKartes();
   let kartes=0, recs=0, skipped=0;
   list.forEach(k=>{
@@ -4859,8 +4842,7 @@ function _mkCount() {
 function mkPreview() {
   const el = document.getElementById('mk-preview'); if(!el) return;
   const {kartes, recs, skipped, fields, mode} = _mkCount();
-  if(!fields.length) { el.innerHTML='<span style="color:var(--text3)">診療内容・症状のどちらかにチェックを入れて、内容を入力してください</span>'; return; }
-  if(!fields.some(([,v])=>v)) { el.innerHTML='<span style="color:var(--text3)">内容を入力してください</span>'; return; }
+  if(!fields.length) { el.innerHTML='<span style="color:var(--text3)">診療内容か症状を入力してください</span>'; return; }
   if(!recs) { el.innerHTML='<span style="color:#c00">反映される診療日がありません（条件を見直してください）</span>'; return; }
   const names = fields.filter(([,v])=>v).map(([f])=>f==='content'?'診療内容':'症状').join('・');
   el.innerHTML = `<b>${kartes}件のカルテ・${recs}件の診療日</b>の${names}を${mode==='replace'?'置き換え':mode==='append'?'付け足し':'入力'}します`
@@ -4910,30 +4892,33 @@ function openBulkEdit(karteId) {
   document.getElementById('bedit-from').value = dates[0]||'';
   document.getElementById('bedit-to').value = dates[dates.length-1]||'';
   ['bedit-content','bedit-symptom','bedit-temp','bedit-time','bedit-oji','bedit-amount'].forEach(id=>document.getElementById(id).value='');
-  ['bedit-use-content','bedit-use-symptom','bedit-use-temp','bedit-use-time','bedit-use-oji','bedit-use-amount'].forEach(id=>document.getElementById(id).checked=false);
+  document.getElementById('bedit-clear-empty').checked = false;
   renderBeditList();
   beditGoStep(1);
   document.getElementById('bulkEditModal').style.display = 'flex';
 }
 const BEDIT_FIELDS = ['content','symptom','temp','time','oji','amount'];
 const BEDIT_LABELS = {content:'診療内容',symptom:'症状',temp:'体温',time:'時間',oji:'往診元',amount:'金額'};
-function _beditUsed(){ return BEDIT_FIELDS.filter(f=>document.getElementById('bedit-use-'+f).checked); }
 function _beditSelectedIdxs(){ return [...document.querySelectorAll('#bedit-list .bedit-chk:checked')].map(c=>parseInt(c.dataset.i)); }
+// 入力した項目だけを反映する（項目を選ぶ工程は無くした）。
+// 「空のままにした項目は消す」にチェックが入っているときは空も反映する
+function _beditUsed() {
+  const clear = (document.getElementById('bedit-clear-empty')||{}).checked;
+  return BEDIT_FIELDS.filter(f=>{
+    const v = String((document.getElementById('bedit-'+f)||{}).value||'').trim();
+    return clear ? true : v !== '';
+  });
+}
 function beditGoStep(n) {
-  // 前進時のみバリデーション
   if(n===2 && !_beditSelectedIdxs().length) return toast('編集する診療日を選択してください','error');
-  if(n===3) {
-    const used = _beditUsed();
-    if(!used.length) return toast('変更する項目を選んでください','error');
-    BEDIT_FIELDS.forEach(f=>{ document.getElementById('bedit-in-'+f).style.display = used.includes(f) ? '' : 'none'; });
+  if(n===2) {
     const cnt = _beditSelectedIdxs().length;
     document.getElementById('bedit-step3-help').textContent = `${cnt}件の診療日に反映する内容を入力してください`;
   }
-  [1,2,3].forEach(i=>{
+  [1,2].forEach(i=>{
     document.getElementById('bedit-page-'+i).style.display = (i===n) ? '' : 'none';
   });
 }
-function beditSyncFieldBtns(){ /* :has(input:checked) で見た目は自動更新 */ }
 function closeBulkEdit(){ document.getElementById('bulkEditModal').style.display='none'; _beditKarteId=null; }
 document.getElementById('bulkEditModal').addEventListener('click', e => { if(e.target===document.getElementById('bulkEditModal')) closeBulkEdit(); });
 function _beditSorted(k) {
@@ -4990,10 +4975,10 @@ function confirmBulkEdit() {
   const k = KARTES.find(x=>x.id===_beditKarteId); if(!k) return;
   const idxs = _beditSelectedIdxs().filter(i=>k.records[i]);
   if(!idxs.length) return toast('編集する診療日を選択してください','error');
-  const use = id => document.getElementById('bedit-use-'+id).checked;
   const val = id => document.getElementById('bedit-'+id).value;
   const fields = _beditUsed();
-  if(!fields.length) return toast('変更する項目を選んでください','error');
+  const use = id => fields.includes(id);
+  if(!fields.length) return toast('反映する内容を入力してください','error');
   if(!confirm(`${idxs.length}件の診療記録の【${fields.map(f=>BEDIT_LABELS[f]).join('・')}】を上書きします。よろしいですか？`)) return;
   idxs.forEach(i => {
     const r = k.records[i];
