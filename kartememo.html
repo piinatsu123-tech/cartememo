@@ -376,7 +376,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v15.7</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v15.8</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -478,7 +478,7 @@ input[type=checkbox]{width:auto;margin:0}
     <select id="karte-filter-farm" onchange="renderKarteList()" style="width:140px">
       <option value="">全農場</option>
     </select>
-    <input type="text" id="karte-filter-cow" placeholder="牛番号" oninput="renderKarteList()" style="width:120px">
+    <input type="text" id="karte-filter-cow" placeholder="牛番号" oninput="halfInput(this);renderKarteList()" style="width:120px">
     <select id="karte-filter-stage" onchange="renderKarteList()" style="width:150px">
       <option value="">すべての状態</option>
       <option value="active">診療中のみ</option>
@@ -885,7 +885,7 @@ input[type=checkbox]{width:auto;margin:0}
       </select>
     </div>
     <label>牛番号</label>
-    <input type="text" id="modal-cow" placeholder="0001">
+    <input type="text" id="modal-cow" placeholder="0001" oninput="halfInput(this)">
     <div style="display:flex;gap:8px">
       <div style="flex:1"><label>日付</label><input type="date" id="modal-date"></div>
       <div style="width:110px"><label>時間</label><input type="time" id="modal-time"></div>
@@ -5228,7 +5228,7 @@ function updateKarteSelect() {
   });
   wrap.style.display = actives.length ? '' : 'none';
   // 牛番号と一致するカルテを自動選択
-  const cow = document.getElementById('modal-cow').value.trim();
+  const cow = toHalfWidth(document.getElementById('modal-cow').value).trim();
   if(cow) {
     const match = actives.find(k => k.cow === cow);
     if(match) sel.value = match.id;
@@ -5249,7 +5249,8 @@ function openKarteModal(memoId) {
   const formula = (memo.items||[]).filter(it=>it.price>0).map(it=>`${it.name}*${it.qty}`).join('/');
   karteSaveMemoId = memoId;
   document.getElementById('modal-farm').value = memo.ownerName || '';
-  document.getElementById('modal-cow').value = memo.patientNo || '';
+  // 解析結果の患者番号が全角のことがあるため半角にそろえる
+  document.getElementById('modal-cow').value = toHalfWidth(memo.patientNo || '');
   document.getElementById('modal-date').value = new Date().toISOString().slice(0,10);
   document.getElementById('modal-time').value = ''; // 時間はデフォルト空欄
   document.getElementById('modal-temp').value = memo.temp || '';
@@ -5265,7 +5266,7 @@ document.getElementById('karteModal').addEventListener('click', e => { if(e.targ
 
 function confirmKarteSave() {
   const farm = document.getElementById('modal-farm').value.trim();
-  const cow = document.getElementById('modal-cow').value.trim();
+  const cow = toHalfWidth(document.getElementById('modal-cow').value).trim();
   const date = document.getElementById('modal-date').value;
   const time = document.getElementById('modal-time').value;
   const temp = document.getElementById('modal-temp').value.trim();
@@ -5984,8 +5985,9 @@ function updateKarteField(karteId, field, value) {
     k.farm = v;
     if(!FARMS.includes(v)){FARMS.push(v);FARMS.sort((a,b)=>a.localeCompare(b,'ja'));updateFarmDatalist();updateKarteFarmFilter();}
   } else if(field==='cow') {
-    if(!v) return toast('牛番号は空にできません','error');
-    k.cow = v;
+    const cv = toHalfWidth(v);            // 牛番号は半角にそろえる
+    if(!cv) return toast('牛番号は空にできません','error');
+    k.cow = cv;
   } else return;
   touchKarte(k);
   saveToStorage();
@@ -6061,12 +6063,13 @@ function renderKarteList() {
   filterBar.style.display = '';
   document.getElementById('monthFilterPanel').style.display = _monthPanelOpen ? '' : 'none';
   const farmF = document.getElementById('karte-filter-farm').value;
-  const cowF = document.getElementById('karte-filter-cow').value.trim().toLowerCase();
+  // 全角で保存済みのものも見つかるよう、検索語もカルテ側も半角にそろえて比べる
+  const cowF = toHalfWidth(document.getElementById('karte-filter-cow').value).trim().toLowerCase();
   const stageF = document.getElementById('karte-filter-stage').value;
   const isSearching = !!(farmF || cowF || MONTH_FILTER.size);
   let list = [...KARTES];
   if(farmF) list = list.filter(k=>k.farm===farmF);
-  if(cowF) list = list.filter(k=>k.cow.toLowerCase().includes(cowF));
+  if(cowF) list = list.filter(k=>toHalfWidth(k.cow||'').toLowerCase().includes(cowF));
   if(MONTH_FILTER.size) list = list.filter(k=>_karteMonths(k).some(m=>MONTH_FILTER.has(m)));
   if(!isSearching) list = list.filter(k=>!k.archived);
   // 状態で絞り込み（診療中 = 未終診、電子未入力 = 終診済みだが金額未入力）
