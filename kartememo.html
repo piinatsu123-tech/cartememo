@@ -131,6 +131,11 @@ input[type=checkbox]{width:auto;margin:0}
 .rc-menu button{background:none;border:none;text-align:left;padding:11px 14px;font-size:13px;cursor:pointer;font-family:'Noto Sans JP',sans-serif;color:#111;white-space:nowrap;border-bottom:1px solid var(--border)}
 .rc-menu button:last-child{border-bottom:none}
 .rc-menu button:hover{background:var(--surface)}
+/* 複数日追加の、日ごとの金額欄 */
+.ba-list{max-height:210px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:6px}
+.ba-row{display:flex;gap:8px;align-items:center;margin-bottom:4px}
+.ba-date{font-size:12px;font-weight:700;color:var(--text2);width:5.4em;flex-shrink:0;font-family:'JetBrains Mono',monospace}
+.ba-amt{flex:1;min-width:0;text-align:right;padding:5px 8px;font-size:13px;font-family:'JetBrains Mono',monospace;border:1px solid var(--border2);border-radius:5px}
 .name-ac{position:fixed;background:#fff;border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.15);z-index:9999;max-height:200px;overflow-y:auto;display:none}
 .name-ac-item{padding:6px 12px;cursor:pointer;font-size:13px;white-space:nowrap;display:flex;justify-content:space-between;gap:16px}
 .name-ac-item:hover,.name-ac-item.ac-sel{background:var(--surface)}
@@ -371,7 +376,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v15.6</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v15.7</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -950,8 +955,8 @@ input[type=checkbox]{width:auto;margin:0}
     <div class="modal-title">📅 複数日まとめて追加</div>
     <div id="bulk-karte-label" style="font-size:13px;color:var(--text2);margin-bottom:10px;font-weight:600"></div>
     <div style="display:flex;gap:8px">
-      <div style="flex:1"><label>開始日</label><input type="date" id="bulk-from" onchange="updateBulkPreview()"></div>
-      <div style="flex:1"><label>終了日</label><input type="date" id="bulk-to" onchange="updateBulkPreview()"></div>
+      <div style="flex:1"><label>開始日</label><input type="date" id="bulk-from" onchange="renderBulkAmountRows();updateBulkPreview()"></div>
+      <div style="flex:1"><label>終了日</label><input type="date" id="bulk-to" onchange="renderBulkAmountRows();updateBulkPreview()"></div>
     </div>
     <label style="margin-top:8px">診療内容</label>
     <div style="display:flex;gap:6px">
@@ -977,8 +982,12 @@ input[type=checkbox]{width:auto;margin:0}
       <div style="width:110px"><label>時間</label><input type="time" id="bulk-time"></div>
       <div style="flex:1"><label>往診元</label><input type="text" id="bulk-oji" placeholder="空欄可"></div>
     </div>
-    <label style="margin-top:8px">1日あたりの金額（円）</label>
-    <input type="text" inputmode="decimal" id="bulk-amount" placeholder="0" oninput="halfInput(this);updateBulkPreview()">
+    <label style="margin-top:8px">金額（円）<span style="font-size:10px;font-weight:400;color:var(--text3)">　日ごとに入れられます。Enter／Tabで次の日へ</span></label>
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+      <input type="text" inputmode="decimal" id="bulk-amount" placeholder="全日に同じ金額" style="flex:1;min-width:0" oninput="halfInput(this);updateBulkPreview()">
+      <button type="button" class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="bulkFillAmount()">全日に入れる</button>
+    </div>
+    <div id="bulk-amount-rows"></div>
     <div id="bulk-preview" style="margin-top:12px;font-size:12px;color:var(--text2);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px"></div>
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn btn-primary" onclick="confirmBulkAdd()">まとめて追加</button>
@@ -4437,8 +4446,12 @@ function openBulkAdd(karteId) {
   if(dates.length) { const d=new Date(dates[dates.length-1]+'T00:00:00'); d.setDate(d.getDate()+1); start=_ymd(d); }
   else start = new Date().toISOString().slice(0,10);
   document.getElementById('bulk-from').value = start;
-  document.getElementById('bulk-to').value = start;
+  // 既定は3日間（最もよく使う幅）
+  const e = new Date(start+'T00:00:00'); e.setDate(e.getDate()+2);
+  document.getElementById('bulk-to').value = _ymd(e);
   ['bulk-content','bulk-temp','bulk-symptom','bulk-time','bulk-oji','bulk-amount'].forEach(id=>document.getElementById(id).value='');
+  _bulkAmts = {};
+  renderBulkAmountRows();
   updateBulkPreview();
   document.getElementById('bulkAddModal').style.display = 'flex';
 }
@@ -4455,6 +4468,47 @@ function _bulkDates() {
   while(d <= end && out.length < 366) { out.push(_ymd(d)); d.setDate(d.getDate()+1); }
   return out;
 }
+// 日ごとの金額。日付の範囲が変わっても入力済みの金額は保つ
+let _bulkAmts = {};
+function renderBulkAmountRows() {
+  const el = document.getElementById('bulk-amount-rows'); if(!el) return;
+  const dates = _bulkDates();
+  if(!dates.length) { el.innerHTML=''; return; }
+  el.innerHTML = '<div class="ba-list">' + dates.map((d,i)=>{
+    const md = d.slice(5).replace('-','/');
+    const wd = ['日','月','火','水','木','金','土'][new Date(d+'T00:00:00').getDay()];
+    return `<div class="ba-row">
+      <span class="ba-date">${md}<span style="color:var(--text3)">(${wd})</span></span>
+      <input type="text" inputmode="decimal" class="ba-amt" data-date="${d}" data-i="${i}"
+             value="${_bulkAmts[d]!=null?_bulkAmts[d]:''}" placeholder="0"
+             oninput="halfInput(this);_bulkAmts[this.dataset.date]=this.value;updateBulkPreview()"
+             onkeydown="bulkAmountKeydown(this,event)">
+    </div>`;
+  }).join('') + '</div>';
+}
+// Enter／Tab で次の日の欄へ。最後の欄なら追加まで進める
+function bulkAmountKeydown(el, event) {
+  if(event.key!=='Enter') return;          // Tabはブラウザの既定で動く
+  event.preventDefault();
+  const rows = Array.from(document.querySelectorAll('#bulk-amount-rows .ba-amt'));
+  const i = rows.indexOf(el);
+  if(i>=0 && i<rows.length-1) { rows[i+1].focus(); rows[i+1].select(); }
+  else el.blur();
+}
+// 上の欄の金額を全日に入れる
+function bulkFillAmount() {
+  const v = (document.getElementById('bulk-amount').value||'').trim();
+  const dates = _bulkDates();
+  if(!dates.length) return toast('日付の範囲を選んでください','error');
+  dates.forEach(d=>{ _bulkAmts[d] = v; });
+  renderBulkAmountRows(); updateBulkPreview();
+  toast(v==='' ? '金額を空にしました' : `${dates.length}日すべてに ¥${floorAmt(v).toLocaleString()} を入れました`,'success');
+}
+function _bulkAmountFor(d) {
+  const v = _bulkAmts[d];
+  if(v!=null && String(v).trim()!=='') return floorAmt(v);
+  return floorAmt(document.getElementById('bulk-amount').value);   // 日ごとが空なら上の欄を使う
+}
 function updateBulkPreview() {
   const el = document.getElementById('bulk-preview'); if(!el) return;
   const from = document.getElementById('bulk-from').value;
@@ -4462,10 +4516,12 @@ function updateBulkPreview() {
   const dates = _bulkDates();
   if(!from || !to) { el.innerHTML = '<span style="color:var(--text3)">開始日と終了日を選んでください</span>'; return; }
   if(to < from) { el.innerHTML = '<span style="color:#c00">終了日は開始日以降にしてください</span>'; return; }
-  const amt = floorAmt(document.getElementById('bulk-amount').value);
+  const amts = dates.map(_bulkAmountFor);
+  const sum = amts.reduce((a,b)=>a+b,0);
+  const n = amts.filter(a=>a>0).length;
   el.innerHTML = `<b>${dates.length}日分</b>の診療記録を追加します<br>
-    <span style="font-family:'JetBrains Mono',monospace;font-size:11px">${dates.slice(0,5).join(' / ')}${dates.length>5?` … ${dates[dates.length-1]}`:''}</span>
-    ${amt>0?`<br>金額合計: <b>¥${(amt*dates.length).toLocaleString()}</b>（¥${amt.toLocaleString()} × ${dates.length}日）`:''}`;
+    <span style="font-family:'JetBrains Mono',monospace;font-size:11px">${dates[0]} 〜 ${dates[dates.length-1]}</span>
+    ${sum>0?`<br>金額合計: <b>¥${sum.toLocaleString()}</b>（金額を入れた日 ${n}/${dates.length}日）`:''}`;
 }
 function openTemplateForBulk() {
   const cur = document.getElementById('bulk-content').value.trim();
@@ -4486,18 +4542,19 @@ function confirmBulkAdd() {
   const symptom = document.getElementById('bulk-symptom').value.trim();
   const time = document.getElementById('bulk-time').value;
   const ojiMemo = document.getElementById('bulk-oji').value.trim();
-  const amount = floorAmt(document.getElementById('bulk-amount').value);
-  if(!content && !symptom && !amount) return toast('診療内容・症状・金額のいずれかを入力してください','error');
+  const amts = dates.map(_bulkAmountFor);
+  const sum = amts.reduce((a,b)=>a+b,0);
+  if(!content && !symptom && !sum) return toast('診療内容・症状・金額のいずれかを入力してください','error');
   if(dates.length > 31 && !confirm(`${dates.length}日分を追加します。よろしいですか？`)) return;
-  dates.forEach(date => {
-    const rec = {date, time, temp, symptom, content, amount};
+  dates.forEach((date,i) => {
+    const rec = {date, time, temp, symptom, content, amount:amts[i]};
     if(ojiMemo) { rec.oji = true; rec.ojiFeeAdded = false; rec.oji_memo = ojiMemo; }
     k.records.push(rec);
   });
   _recalcMonth(k);
   recalcPaperTotal(k);
   saveToStorage();
-  logSave('karte', `【${k.farm} / ${k.cow}】${dates[0]}〜${dates[dates.length-1]} ${dates.length}日分を追加`);
+  logSave('karte', `【${k.farm} / ${k.cow}】${dates[0]}〜${dates[dates.length-1]} ${dates.length}日分を追加（金額計 ¥${sum.toLocaleString()}）`);
   closeBulkAdd();
   renderKarteList();
   toast(`${dates.length}日分の診療記録を追加しました`,'success');
