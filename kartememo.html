@@ -386,7 +386,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v16.3</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v16.4</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -4796,7 +4796,7 @@ function dkbDeleteTemplate() {
 // ===== 診療日の範囲選択（下部のボタンまで行かずに編集する） =====
 // つまみをドラッグすると範囲を選べる。Shift+クリックでも範囲になる。
 // 1件でも選ぶと上部に操作バーが出るので、そこから編集できる
-let RSEL = { karteId:null, set:new Set(), anchor:null, dragging:false, dragAdd:true };
+let RSEL = { karteId:null, set:new Set(), base:new Set(), anchor:null, dragging:false, dragAdd:true };
 function rselRows(karteId){ return Array.from(document.querySelectorAll(`#edit-rows-${karteId} .rec-edit-row`)); }
 function rselPaint() {
   const id = RSEL.karteId; if(!id) return;
@@ -4821,22 +4821,50 @@ function rselDown(ev, karteId, i) {
   rselEnsure(karteId);
   if(ev.shiftKey && RSEL.anchor!=null) {   // Shift+クリックで範囲
     const a=Math.min(RSEL.anchor,i), b=Math.max(RSEL.anchor,i);
-    rselRows(karteId).forEach(el=>{ const j=parseInt(el.dataset.i); if(j>=a&&j<=b) RSEL.set.add(j); });
-  } else {
-    RSEL.dragAdd = !RSEL.set.has(i);
-    if(RSEL.dragAdd) RSEL.set.add(i); else RSEL.set.delete(i);
-    RSEL.anchor = i;
-    RSEL.dragging = true;
+    for(let j=a;j<=b;j++) RSEL.set.add(j);
+    rselPaint();
+    return;
   }
-  rselPaint();
-}
-function rselOver(karteId, i) {
-  if(!RSEL.dragging || RSEL.karteId!==karteId) return;
+  RSEL.dragAdd = !RSEL.set.has(i);
+  RSEL.base = new Set(RSEL.set);     // ドラッグ開始時の状態。行き過ぎても戻せる
   if(RSEL.dragAdd) RSEL.set.add(i); else RSEL.set.delete(i);
+  RSEL.anchor = i;
+  RSEL.dragging = true;
   rselPaint();
 }
+// ドラッグ中はカーソル（指）の下にある行を直接拾う。
+// つまみの上を正確に通らなくても効き、素早く動かして行を飛ばしても取りこぼさない
+function _rselRowAt(x, y) {
+  const el = document.elementFromPoint(x, y);
+  const row = (el && el.closest) ? el.closest('.rec-edit-row') : null;
+  if(!row || !row.parentElement || row.parentElement.id !== 'edit-rows-'+RSEL.karteId) return null;
+  const i = parseInt(row.dataset.i);
+  return isNaN(i) ? null : i;
+}
+function _rselMove(x, y) {
+  if(!RSEL.dragging || RSEL.anchor==null) return;
+  const i = _rselRowAt(x, y);
+  if(i==null) return;
+  const a = Math.min(RSEL.anchor, i), b = Math.max(RSEL.anchor, i);
+  RSEL.set = new Set(RSEL.base);     // 開始時の状態から、今の範囲を足す／外す
+  for(let j=a; j<=b; j++) { if(RSEL.dragAdd) RSEL.set.add(j); else RSEL.set.delete(j); }
+  rselPaint();
+}
+document.addEventListener('mousemove', e => {
+  if(!RSEL.dragging) return;
+  e.preventDefault();
+  _rselMove(e.clientX, e.clientY);
+});
+document.addEventListener('touchmove', e => {
+  if(!RSEL.dragging) return;
+  const t = e.changedTouches && e.changedTouches[0];
+  if(!t) return;
+  e.preventDefault();               // ドラッグ中は画面を動かさない
+  _rselMove(t.clientX, t.clientY);
+}, {passive:false});
 document.addEventListener('mouseup', ()=>{ RSEL.dragging=false; });
 document.addEventListener('touchend', ()=>{ RSEL.dragging=false; });
+document.addEventListener('touchcancel', ()=>{ RSEL.dragging=false; });
 function rselToggleAll(karteId) {
   rselEnsure(karteId);
   const rows = rselRows(karteId);
@@ -5582,7 +5610,7 @@ function buildKarteCard(k, isDetail) {
     }).join('');
     return `<div class="rec-edit-row" data-i="${i}">
       <span class="rsel" title="ドラッグでまとめて選択／Shift+クリックで範囲"
-            onmousedown="rselDown(event,'${k.id}',${i})" onmouseenter="rselOver('${k.id}',${i})"
+            onmousedown="rselDown(event,'${k.id}',${i})"
             ontouchstart="rselDown(event,'${k.id}',${i})"><i></i></span>
       <input type="date" value="${esc(r.date)}" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'date',this.value)">
       <div>
