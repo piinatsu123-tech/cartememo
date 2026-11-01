@@ -371,7 +371,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v15.4</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v15.5</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -678,6 +678,7 @@ input[type=checkbox]{width:auto;margin:0}
           <div id="verList" class="tpl-list" style="margin-top:8px;max-height:340px"></div>
         </div>
       </details>
+      <div id="verSkewNote" style="display:none;margin-top:8px;background:#fff8e8;border:1px solid #e07800;border-radius:6px;padding:8px 10px;font-size:12px;font-weight:600;color:#8a4b00;white-space:pre-wrap"></div>
       <div id="cloudError" style="display:none;margin-top:8px;background:#fff4f4;border:1px solid #c00;border-radius:6px;padding:10px">
         <div style="font-size:12px;font-weight:700;color:#c00;margin-bottom:4px">⚠️ 最後の同期エラー</div>
         <div id="cloudErrorMsg" style="font-size:12px;color:var(--text2);word-break:break-all;white-space:pre-wrap;font-family:'JetBrains Mono',monospace"></div>
@@ -2105,6 +2106,7 @@ function copyDiagnostics() {
     `保存先: ${usingGitHub()?'GitHub（非公開Gist '+ghGistId()+'）':(STORAGE==='github'?'GitHub（設定が未完了）':'jsonbin.io')}`,
     `保存先の読み込み: ${SYNC_LOADED_TARGET===syncTargetKey()?'済み':'⚠️ 未（送信は止まります）'} / 前回読み込み時のカルテ ${CLOUD_SEEN.kartes}件`,
     `読み込みが失敗した理由: ${_loadErrMsg || '(なし)'}`,
+    `バージョンの食い違い: ${CLOUD_APP_NOTE || '(なし)'}`,
     `診療内容: ${localRecCount()}件`,
     `メモ用Bin: ${usingGitHub()?'（GitHubでは不要）':(memoBinId()?'設定あり':'未設定')}${(!usingGitHub()&&MEMO_BIN_STATUS)?' / '+MEMO_BIN_STATUS:''}`,
     // 設定欄と保存値がずれていると、経路によって成否が変わるため必ず出す
@@ -2876,7 +2878,7 @@ function _buildPayload(memoLimit, karteMonths, stripSavedText) {
     return {
       version:2, savedAt:new Date().toISOString(),
       memos: ms.map(m=>_slimMemo(m, stripSavedText)),
-      dictWords:DICT_WORDS, convPairs, aliases:ALIASES, mdiffs:MANUAL_DIFFS,
+      app:appVer(), dictWords:DICT_WORDS, convPairs, aliases:ALIASES, mdiffs:MANUAL_DIFFS,
       // 読み込み時に省略フィールドが復元されているため、送信時は圧縮し直す
       kartes: _cloudKartesSnapshot.map(_slimKarte),
       farms:FARMS, master:MASTER, farmDist:FARM_DIST, templates:TEMPLATES, watch:WATCH_ITEMS,
@@ -2902,7 +2904,7 @@ function _buildPayload(memoLimit, karteMonths, stripSavedText) {
   return {
     version:2, savedAt:new Date().toISOString(),
     memos: ms.map(m=>_slimMemo(m, stripSavedText)),
-    dictWords:DICT_WORDS, convPairs, aliases:ALIASES, mdiffs:MANUAL_DIFFS,
+    app:appVer(), dictWords:DICT_WORDS, convPairs, aliases:ALIASES, mdiffs:MANUAL_DIFFS,
     kartes: ks.map(_slimKarte),
     farms:FARMS, master:MASTER, farmDist:FARM_DIST, templates:TEMPLATES, watch:WATCH_ITEMS,
     deleted:DELETED,
@@ -3132,6 +3134,12 @@ let _lastSentMain = '';   // 直近に送信できた内容の指紋
 let _lastSentMemo = '';
 let SYNC_PAUSED_UNTIL = 0; // 自動送信を止める期限。Infinity なら手動操作まで止める
 // 送信のたびに変わる savedAt を除いて内容を比べる
+// 画面に出しているバージョン文字列（例 v15.5）
+function appVer(){ return String(((document.querySelector('header span')||{}).textContent)||'').trim(); }
+function _verNum(v){ const m=String(v||'').match(/(\d+)\.(\d+)/); return m ? Number(m[1])*1000+Number(m[2]) : 0; }
+// 古いバージョンの端末が保存すると、その端末が知らない項目がクラウドから
+// 落ちてしまう。気づけるように、保存したバージョンを記録して見比べる
+let CLOUD_APP_NOTE = '';
 function _fingerprint(p) {
   try { const o = Object.assign({}, p); delete o.savedAt; return JSON.stringify(o); }
   catch(e) { return 'x'+Math.random(); }
@@ -3177,6 +3185,8 @@ function scheduleCloudAutoSave() {
 let _syncErrMsg = '';
 function renderCloudError() {
   const box = document.getElementById('cloudError'); if(!box) return;
+  const vb = document.getElementById('verSkewNote');
+  if(vb) { vb.style.display = CLOUD_APP_NOTE ? '' : 'none'; vb.textContent = CLOUD_APP_NOTE ? '⚠️ '+CLOUD_APP_NOTE : ''; }
   if(_syncErrMsg) {
     box.style.display = '';
     document.getElementById('cloudErrorMsg').textContent = _syncErrMsg;
@@ -3312,6 +3322,16 @@ async function cloudAutoLoad() {
     CLOUD_READ_BLOCKED = '';   // 読めたので送信を止める必要はない
     SYNC_LOADED_TARGET = syncTargetKey();   // この保存先は読んだ
     _loadErrMsg = '';
+    // 保存した端末のバージョンを見比べる
+    const cv = _verNum(data.app), mv = _verNum(appVer());
+    if(cv && mv && cv < mv) {
+      CLOUD_APP_NOTE = `クラウドに保存したのは ${data.app} の端末です（この端末は ${appVer()}）。`
+        + `古いバージョンの端末が保存すると、新しい項目（カルテなしで足した差額など）が`
+        + `クラウドから落ちてしまいます。両方の端末を同じバージョンで開いてください。`;
+    } else if(cv && mv && cv > mv) {
+      CLOUD_APP_NOTE = `クラウドに保存したのは ${data.app} の端末です（この端末は ${appVer()}）。`
+        + `この端末のほうが古いため、画面を再読み込みして最新にしてください。`;
+    } else CLOUD_APP_NOTE = '';
     CLOUD_SEEN = { kartes:(data.kartes||[]).length, memos:(data.memos||[]).length };
     // 省略されたフィールドを既定値で復元
     (data.memos||[]).forEach(_normMemo);
@@ -6173,6 +6193,7 @@ function copyStatsBreakdown() {
   }
   if(Object.keys(IMPORTED_STATS).length) L.push(`⚠️ 取込データが残っています。取込は端末ごとの持ち物なので、他の端末と金額が違う原因になります。`);
   if(STATS_SCOPE!=='all') L.push(`⚠️ 表示条件が「すべての確定」以外です。端末ごとに違うと金額も違って見えます。`);
+  if(CLOUD_APP_NOTE) { L.push(''); L.push('⚠️ '+CLOUD_APP_NOTE); }
   showReport('📋 農家ごと集計の内訳', L.join('\n'));
 }
 let IMPORTED_STATS = {};
