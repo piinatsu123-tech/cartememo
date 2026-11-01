@@ -206,7 +206,7 @@ input[type=checkbox]{width:auto;margin:0}
 .rec-edit-row{display:grid;grid-template-columns:22px 112px 1fr 88px 26px;gap:5px;align-items:start;padding:6px 0;border-bottom:1px solid var(--border)}
 .rec-edit-row:last-child{border-bottom:none}
 /* 範囲選択のつまみ（ドラッグでまとめて選べる） */
-.rsel{display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;border-radius:4px;align-self:stretch}
+.rsel{display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;border-radius:4px;align-self:stretch;touch-action:none}
 .rsel:hover{background:var(--surface)}
 .rsel i{display:block;width:12px;height:12px;border:1.5px solid var(--border2);border-radius:3px;background:#fff}
 .rec-edit-row.rsel-on{background:#fff8e8}
@@ -386,7 +386,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v16.4</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v16.5</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -4831,6 +4831,23 @@ function rselDown(ev, karteId, i) {
   RSEL.anchor = i;
   RSEL.dragging = true;
   rselPaint();
+  // 押したつまみに以降の移動イベントを集める。
+  // document の移動イベント頼みだと他の処理に邪魔されることがあるため、
+  // 押した要素自身で受け取る（カーソルが要素から外れても届く）
+  const el = ev.currentTarget || ev.target;
+  if(!el) return;
+  try { if(el.setPointerCapture && ev.pointerId!=null) el.setPointerCapture(ev.pointerId); } catch(e){}
+  const onMove = e2 => { if(!RSEL.dragging) return; e2.preventDefault(); _rselMove(e2.clientX, e2.clientY); };
+  const onEnd = () => {
+    RSEL.dragging = false;
+    el.removeEventListener('pointermove', onMove);
+    el.removeEventListener('pointerup', onEnd);
+    el.removeEventListener('pointercancel', onEnd);
+    try { if(el.releasePointerCapture && ev.pointerId!=null) el.releasePointerCapture(ev.pointerId); } catch(e){}
+  };
+  el.addEventListener('pointermove', onMove);
+  el.addEventListener('pointerup', onEnd);
+  el.addEventListener('pointercancel', onEnd);
 }
 // ドラッグ中はカーソル（指）の下にある行を直接拾う。
 // つまみの上を正確に通らなくても効き、素早く動かして行を飛ばしても取りこぼさない
@@ -4850,21 +4867,9 @@ function _rselMove(x, y) {
   for(let j=a; j<=b; j++) { if(RSEL.dragAdd) RSEL.set.add(j); else RSEL.set.delete(j); }
   rselPaint();
 }
-document.addEventListener('mousemove', e => {
-  if(!RSEL.dragging) return;
-  e.preventDefault();
-  _rselMove(e.clientX, e.clientY);
-});
-document.addEventListener('touchmove', e => {
-  if(!RSEL.dragging) return;
-  const t = e.changedTouches && e.changedTouches[0];
-  if(!t) return;
-  e.preventDefault();               // ドラッグ中は画面を動かさない
-  _rselMove(t.clientX, t.clientY);
-}, {passive:false});
-document.addEventListener('mouseup', ()=>{ RSEL.dragging=false; });
-document.addEventListener('touchend', ()=>{ RSEL.dragging=false; });
-document.addEventListener('touchcancel', ()=>{ RSEL.dragging=false; });
+// 取りこぼしの保険（画面外でボタンを離した場合など）
+document.addEventListener('pointerup', ()=>{ RSEL.dragging=false; });
+document.addEventListener('pointercancel', ()=>{ RSEL.dragging=false; });
 function rselToggleAll(karteId) {
   rselEnsure(karteId);
   const rows = rselRows(karteId);
@@ -5610,8 +5615,7 @@ function buildKarteCard(k, isDetail) {
     }).join('');
     return `<div class="rec-edit-row" data-i="${i}">
       <span class="rsel" title="ドラッグでまとめて選択／Shift+クリックで範囲"
-            onmousedown="rselDown(event,'${k.id}',${i})"
-            ontouchstart="rselDown(event,'${k.id}',${i})"><i></i></span>
+            onpointerdown="rselDown(event,'${k.id}',${i})"><i></i></span>
       <input type="date" value="${esc(r.date)}" onclick="event.stopPropagation()" onblur="updateRecord('${k.id}',${i},'date',this.value)">
       <div>
         <div style="display:flex;gap:6px;align-items:center">
