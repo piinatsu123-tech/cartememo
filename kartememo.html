@@ -376,7 +376,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v15.8</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v15.9</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -495,6 +495,7 @@ input[type=checkbox]{width:auto;margin:0}
     </select>
     <button class="btn btn-ghost btn-sm" id="monthFilterBtn" onclick="toggleMonthFilter()">📅 月で絞る</button>
     <span id="karte-count" style="font-size:12px;color:var(--text3);margin-left:auto"></span>
+    <button class="btn btn-ghost btn-sm" onclick="openMultiKarte()" title="いま一覧に出ているカルテの診療内容・症状をまとめて入れます">📚 まとめて編集</button>
     <button class="btn btn-primary btn-sm" onclick="openNewKarteModal()">＋ 新規カルテ</button>
   </div>
   <div id="monthFilterPanel" class="month-filter" style="display:none">
@@ -992,6 +993,47 @@ input[type=checkbox]{width:auto;margin:0}
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn btn-primary" onclick="confirmBulkAdd()">まとめて追加</button>
       <button class="btn btn-ghost" onclick="closeBulkAdd()">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 複数カルテまとめて編集モーダル ===== -->
+<div id="multiKarteModal" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <div class="modal-title">📚 複数カルテまとめて編集</div>
+    <div id="mk-target" style="font-size:13px;color:var(--text2);margin-bottom:10px;font-weight:600"></div>
+
+    <label>どの診療日に入れるか</label>
+    <select id="mk-scope" onchange="mkPreview()" style="width:100%">
+      <option value="empty">その項目が空の診療日だけ</option>
+      <option value="all">すべての診療日</option>
+      <option value="last">いちばん新しい診療日だけ</option>
+    </select>
+
+    <label style="margin-top:10px">入れ方</label>
+    <select id="mk-mode" onchange="mkPreview()" style="width:100%">
+      <option value="fill">空のときだけ入れる（既にある内容は変えない）</option>
+      <option value="replace">置き換える（既にある内容を上書き）</option>
+      <option value="append">末尾に付け足す</option>
+    </select>
+
+    <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
+      <label class="bedit-fieldbtn" style="display:block"><input type="checkbox" id="mk-use-content" onchange="mkPreview()"><span>💊 診療内容</span></label>
+      <div style="display:flex;gap:6px;margin-top:4px">
+        <input type="text" id="mk-content" placeholder="例: iv/アンピ（↓でパターン）" style="flex:1;min-width:0" oninput="tplSuggestInput(this,'karte');mkPreview()" onkeydown="tplSuggestKeydown(this,'karte',event)" onfocus="tplSuggestInput(this,'karte')" onblur="tplSuggestBlur()">
+      </div>
+    </div>
+    <div style="margin-top:10px">
+      <label class="bedit-fieldbtn" style="display:block"><input type="checkbox" id="mk-use-symptom" onchange="mkPreview()"><span>🩺 症状</span></label>
+      <div style="display:flex;gap:6px;margin-top:4px">
+        <input type="text" id="mk-symptom" placeholder="例: 軟便（↓でパターン）" style="flex:1;min-width:0" oninput="tplSuggestInput(this,'symptom');mkPreview()" onkeydown="tplSuggestKeydown(this,'symptom',event)" onfocus="tplSuggestInput(this,'symptom')" onblur="tplSuggestBlur()">
+      </div>
+    </div>
+
+    <div id="mk-preview" style="margin-top:12px;font-size:12px;color:var(--text2);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px"></div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-primary" onclick="mkApply()">まとめて反映</button>
+      <button class="btn btn-ghost" onclick="closeMultiKarte()">キャンセル</button>
     </div>
   </div>
 </div>
@@ -4750,6 +4792,102 @@ function dkbDeleteTemplate() {
   toast('削除しました','success');
 }
 
+// ===== 複数カルテまとめて編集 =====
+// 1つのカルテ内の「複数日まとめて編集」とは別に、一覧に出ている
+// 複数のカルテに対して診療内容・症状をまとめて入れる
+function openMultiKarte() {
+  const list = filteredKartes();
+  if(!list.length) return toast('対象のカルテがありません','error');
+  document.getElementById('mk-target').textContent =
+    `いま一覧に出ている ${list.length}件 のカルテが対象です（絞り込みを変えると対象も変わります）`;
+  ['mk-content','mk-symptom'].forEach(id=>document.getElementById(id).value='');
+  ['mk-use-content','mk-use-symptom'].forEach(id=>document.getElementById(id).checked=false);
+  document.getElementById('mk-scope').value='empty';
+  document.getElementById('mk-mode').value='fill';
+  mkPreview();
+  document.getElementById('multiKarteModal').style.display='flex';
+}
+function closeMultiKarte(){ document.getElementById('multiKarteModal').style.display='none'; }
+document.getElementById('multiKarteModal').addEventListener('click', e => { if(e.target===document.getElementById('multiKarteModal')) closeMultiKarte(); });
+// 対象の診療記録を選ぶ
+function _mkTargets(k, field) {
+  const scope = document.getElementById('mk-scope').value;
+  const recs = k.records||[];
+  if(scope==='last') {
+    // 日付がいちばん新しい記録（日付なしは対象外）
+    let best=-1, bd='';
+    recs.forEach((r,i)=>{ const d=r.date||''; if(d && d>=bd){ bd=d; best=i; } });
+    return best>=0 ? [best] : [];
+  }
+  if(scope==='empty') return recs.map((r,i)=>i).filter(i=>!String(recs[i][field]||'').trim());
+  return recs.map((r,i)=>i);
+}
+// 何件に反映されるかを数える（実際には書き換えない）
+function _mkCount() {
+  const mode = document.getElementById('mk-mode').value;
+  const fields = [];
+  if(document.getElementById('mk-use-content').checked) fields.push(['content', document.getElementById('mk-content').value.trim()]);
+  if(document.getElementById('mk-use-symptom').checked) fields.push(['symptom', document.getElementById('mk-symptom').value.trim()]);
+  const list = filteredKartes();
+  let kartes=0, recs=0, skipped=0;
+  list.forEach(k=>{
+    let touched=0;
+    fields.forEach(([f,v])=>{
+      if(!v) return;
+      _mkTargets(k,f).forEach(i=>{
+        const cur = String((k.records[i]||{})[f]||'').trim();
+        if(mode==='fill' && cur) { skipped++; return; }      // 既にある内容は変えない
+        if(mode==='replace' && cur===v) return;              // 変化なし
+        touched++;
+      });
+    });
+    if(touched){ kartes++; recs+=touched; }
+  });
+  return {kartes, recs, skipped, fields, mode};
+}
+function mkPreview() {
+  const el = document.getElementById('mk-preview'); if(!el) return;
+  const {kartes, recs, skipped, fields, mode} = _mkCount();
+  if(!fields.length) { el.innerHTML='<span style="color:var(--text3)">診療内容・症状のどちらかにチェックを入れて、内容を入力してください</span>'; return; }
+  if(!fields.some(([,v])=>v)) { el.innerHTML='<span style="color:var(--text3)">内容を入力してください</span>'; return; }
+  if(!recs) { el.innerHTML='<span style="color:#c00">反映される診療日がありません（条件を見直してください）</span>'; return; }
+  const names = fields.filter(([,v])=>v).map(([f])=>f==='content'?'診療内容':'症状').join('・');
+  el.innerHTML = `<b>${kartes}件のカルテ・${recs}件の診療日</b>の${names}を${mode==='replace'?'置き換え':mode==='append'?'付け足し':'入力'}します`
+    + (skipped?`<br><span style="color:var(--text3)">既に内容がある ${skipped}件 は変えません</span>`:'');
+}
+function mkApply() {
+  const {kartes, recs, fields, mode} = _mkCount();
+  if(!recs) return toast('反映される診療日がありません','error');
+  const names = fields.filter(([,v])=>v).map(([f])=>f==='content'?'診療内容':'症状').join('・');
+  if(!confirm(`${kartes}件のカルテ・${recs}件の診療日の${names}を${mode==='replace'?'置き換え':mode==='append'?'付け足し':'入力'}します。\n\n元に戻せないので、先に 💾 JSONバックアップを取っておくと安心です。\n\nよろしいですか？`)) return;
+  const list = filteredKartes();
+  let doneK=0, doneR=0;
+  list.forEach(k=>{
+    let touched=0;
+    fields.forEach(([f,v])=>{
+      if(!v) return;
+      _mkTargets(k,f).forEach(i=>{
+        const r = k.records[i]; if(!r) return;
+        const cur = String(r[f]||'').trim();
+        if(mode==='fill' && cur) return;
+        if(mode==='replace' && cur===v) return;
+        r[f] = (mode==='append' && cur) ? (cur+'/'+v) : v;
+        touched++;
+      });
+    });
+    if(touched){ touchKarte(k); doneK++; doneR+=touched; }
+  });
+  saveToStorage();
+  logSave('karte', `${doneK}件のカルテ・${doneR}件の診療日の${names}をまとめて${mode==='replace'?'置き換え':mode==='append'?'付け足し':'入力'}`);
+  closeMultiKarte();
+  renderKarteList();
+  showReport('✅ まとめて反映しました',
+    `対象: ${doneK}件のカルテ ／ ${doneR}件の診療日\n`+
+    `項目: ${names}\n`+
+    `入れ方: ${mode==='replace'?'置き換え':mode==='append'?'末尾に付け足し':'空のときだけ入力'}\n\n`+
+    `内容が思ったとおりか、カルテ一覧で確認してください。`);
+}
+
 // ===== 複数日まとめて編集 =====
 let _beditKarteId = null;
 function openBulkEdit(karteId) {
@@ -6036,6 +6174,42 @@ function handleKarteCardClick(e, karteId) {
   selectKarte(karteId);
 }
 
+// 一覧に出ているカルテ（絞り込みと並び順を適用したもの）。
+// まとめて編集でも同じ関数を使うことで、見えているものと対象が必ず一致する
+function filteredKartes() {
+  const farmF = document.getElementById('karte-filter-farm').value;
+  // 全角で保存済みのものも見つかるよう、検索語もカルテ側も半角にそろえて比べる
+  const cowF = toHalfWidth(document.getElementById('karte-filter-cow').value).trim().toLowerCase();
+  const stageF = document.getElementById('karte-filter-stage').value;
+  const isSearching = !!(farmF || cowF || MONTH_FILTER.size);
+  let list = [...KARTES];
+  if(farmF) list = list.filter(k=>k.farm===farmF);
+  if(cowF) list = list.filter(k=>toHalfWidth(k.cow||'').toLowerCase().includes(cowF));
+  if(MONTH_FILTER.size) list = list.filter(k=>_karteMonths(k).some(m=>MONTH_FILTER.has(m)));
+  if(!isSearching) list = list.filter(k=>!k.archived);
+  // 状態で絞り込み（診療中 = 未終診、電子未入力 = 終診済みだが金額未入力）
+  if(stageF==='active')        list = list.filter(k=>!k.finished && !k.closed);
+  else if(stageF==='unclosed') list = list.filter(k=>k.finished && !k.closed);
+  else if(stageF==='open')     list = list.filter(k=>!k.closed);
+  else if(stageF==='closed')   list = list.filter(k=>k.closed);
+  // 復旧作業用: もともと未確定だったもの／確定が失われた可能性のあるもの
+  else if(stageF==='origUnconf')  list = list.filter(k=>k.origUnconfirmed);
+  else if(stageF==='needRestore') list = list.filter(k=>!k.closed && !k.origUnconfirmed);
+  // 締め日（毎月20日）で区別する
+  const cutoffF = document.getElementById('karte-filter-cutoff').value;
+  if(cutoffF==='within')    list = list.filter(k=>_lastRecDay(k)>0 && _lastRecDay(k)<=CUTOFF_DAY);
+  else if(cutoffF==='over') list = list.filter(k=>_lastRecDay(k)>CUTOFF_DAY);
+  const getStage = k => k.closed ? 2 : k.finished ? 1 : 0;
+  list.sort((a,b) => {
+    const sd = getStage(a) - getStage(b);
+    if(sd !== 0) return sd;
+    const da = a.records.map(r=>r.date).filter(Boolean).sort().pop() || '';
+    const db = b.records.map(r=>r.date).filter(Boolean).sort().pop() || '';
+    return db.localeCompare(da);
+  });
+  return list;
+}
+
 function renderKarteList() {
   flushPendingElec(); // 入力途中の電子カルテ金額を再描画で失わない
   // 復元・追加で件数が戻ったら警告を再判定
@@ -6062,37 +6236,8 @@ function renderKarteList() {
   backBar.style.display = 'none';
   filterBar.style.display = '';
   document.getElementById('monthFilterPanel').style.display = _monthPanelOpen ? '' : 'none';
-  const farmF = document.getElementById('karte-filter-farm').value;
-  // 全角で保存済みのものも見つかるよう、検索語もカルテ側も半角にそろえて比べる
-  const cowF = toHalfWidth(document.getElementById('karte-filter-cow').value).trim().toLowerCase();
-  const stageF = document.getElementById('karte-filter-stage').value;
-  const isSearching = !!(farmF || cowF || MONTH_FILTER.size);
-  let list = [...KARTES];
-  if(farmF) list = list.filter(k=>k.farm===farmF);
-  if(cowF) list = list.filter(k=>toHalfWidth(k.cow||'').toLowerCase().includes(cowF));
-  if(MONTH_FILTER.size) list = list.filter(k=>_karteMonths(k).some(m=>MONTH_FILTER.has(m)));
-  if(!isSearching) list = list.filter(k=>!k.archived);
-  // 状態で絞り込み（診療中 = 未終診、電子未入力 = 終診済みだが金額未入力）
-  if(stageF==='active')        list = list.filter(k=>!k.finished && !k.closed);
-  else if(stageF==='unclosed') list = list.filter(k=>k.finished && !k.closed);
-  else if(stageF==='open')     list = list.filter(k=>!k.closed);
-  else if(stageF==='closed')   list = list.filter(k=>k.closed);
-  // 復旧作業用: もともと未確定だったもの／確定が失われた可能性のあるもの
-  else if(stageF==='origUnconf')  list = list.filter(k=>k.origUnconfirmed);
-  else if(stageF==='needRestore') list = list.filter(k=>!k.closed && !k.origUnconfirmed);
-  // 締め日（毎月20日）で区別する
-  const cutoffF = document.getElementById('karte-filter-cutoff').value;
-  if(cutoffF==='within')    list = list.filter(k=>_lastRecDay(k)>0 && _lastRecDay(k)<=CUTOFF_DAY);
-  else if(cutoffF==='over') list = list.filter(k=>_lastRecDay(k)>CUTOFF_DAY);
+  const list = filteredKartes();
   renderMonthFilterChips();
-  const getStage = k => k.closed ? 2 : k.finished ? 1 : 0;
-  list.sort((a,b) => {
-    const sd = getStage(a) - getStage(b);
-    if(sd !== 0) return sd;
-    const da = a.records.map(r=>r.date).filter(Boolean).sort().pop() || '';
-    const db = b.records.map(r=>r.date).filter(Boolean).sort().pop() || '';
-    return db.localeCompare(da);
-  });
   document.getElementById('karte-count').textContent = list.length + '件';
   if(!list.length){el.innerHTML='<div class="empty-state"><div class="es-icon">📋</div>カルテがありません<br>「＋ 新規カルテ」ボタンまたは一括計算タブの「カルテに保存」で追加してください</div>';return;}
   el.innerHTML = list.map(k => buildKarteCard(k, false)).join('');
