@@ -388,7 +388,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v17.0</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v17.1</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -2160,6 +2160,7 @@ function copyDiagnostics() {
     `通信回数（この端末・${REQ_COUNT.ym||'—'}）: ${REQ_COUNT.n}回 / 無料枠は月10,000回${syncPausedNote()?' / ⏸ 自動送信を一時停止中':''}`,
     `保存先: ${usingGitHub()?'GitHub（非公開Gist '+ghGistId()+'）':(STORAGE==='github'?'GitHub（設定が未完了）':'jsonbin.io')}`,
     `保存先の読み込み: ${SYNC_LOADED_TARGET===syncTargetKey()?'済み':'⚠️ 未（送信は止まります）'} / 前回読み込み時のカルテ ${CLOUD_SEEN.kartes}件`,
+    `保存先の最終更新: ${CLOUD_SAVED_AT ? new Date(CLOUD_SAVED_AT).toLocaleString('ja-JP') : '(不明)'}　※両端末でここが大きく違う場合、別の保存先を見ています`,
     `読み込みが失敗した理由: ${_loadErrMsg || '(なし)'}`,
     `バージョンの食い違い: ${CLOUD_APP_NOTE || '(なし)'}`,
     `診療内容: ${localRecCount()}件`,
@@ -2904,11 +2905,15 @@ async function testGitHub(){
       advice = `同期できています。\n他の端末にも同じトークンとGist IDを設定してください。`;
     showReport('✅ GitHubに接続できました',
       `Gist ID: ${ghGistId()}\n`+
+      `Gistの最終更新: ${d.savedAt ? new Date(d.savedAt).toLocaleString('ja-JP') : '(不明)'}\n`+
+      `保存した端末: ${d.app || '(不明)'}\n`+
       `版の履歴: ${history.length}件\n\n`+
       `Gist上のカルテ: ${gk}件\n`+
       `Gist上のメモ: ${gm}件\n`+
       `この端末のカルテ: ${KARTES.length}件／メモ: ${memos.length}件\n\n`+
-      advice);
+      advice+`\n\n`+
+      `※ もう一方の端末でもこの確認を押して、Gist IDと最終更新を見比べてください。\n`+
+      `　 違っていれば、別の保存先を見ているため共有されません。`);
   } catch(e) { showReport('⚠️ GitHubに接続できませんでした', `${e.message}\n\nGist ID: ${ghGistId()}\nトークン: ${ghToken()?ghToken().length+'文字':'未設定'}\n\n`+
       `確認する点:\n・トークンに gist 権限があるか（classic token の gist にチェック）\n・Gist IDが正しいか\n・トークンの有効期限が切れていないか`); }
 }
@@ -2961,6 +2966,8 @@ let CLOUD_READ_BLOCKED = '';
 // この保存先の内容を一度でも読み込んだか。読む前に送ると、保存先にある
 // 他の端末のデータを手元の（少ない）内容で上書きしてしまう
 let SYNC_LOADED_TARGET = '';
+// 読み込んだ内容が、いつ保存されたものか。別のGistを見ていないかの確認に使う
+let CLOUD_SAVED_AT = '';
 // 読み込みが失敗した理由。送信を止めたメッセージで上書きされないよう別に持つ
 let _loadErrMsg = '';
 // 直前に読み込んだ保存先の件数。大幅に減る送信を止める判断に使う
@@ -3473,6 +3480,7 @@ async function cloudAutoLoad() {
     CLOUD_READ_BLOCKED = '';   // 読めたので送信を止める必要はない
     SYNC_LOADED_TARGET = syncTargetKey();   // この保存先は読んだ
     _loadErrMsg = '';
+    CLOUD_SAVED_AT = data.savedAt || '';
     // 保存した端末のバージョンを見比べる
     const cv = _verNum(data.app), mv = _verNum(appVer());
     if(cv && mv && cv < mv) {
@@ -3623,7 +3631,9 @@ async function cloudAutoLoad() {
     await loadMemoBin(key);
     renderMemoQueue(); renderResultsList(); updateBadge();
     setSyncStatus('synced');
-    document.getElementById('cloudInfo').textContent = `起動時読み込み: ${new Date().toLocaleString('ja-JP')}（メモ${memos.length}件・カルテ${KARTES.length}件）`;
+    document.getElementById('cloudInfo').textContent =
+      `起動時読み込み: ${new Date().toLocaleString('ja-JP')}（メモ${memos.length}件・カルテ${KARTES.length}件）`
+      + (CLOUD_SAVED_AT ? `／保存先の最終更新: ${new Date(CLOUD_SAVED_AT).toLocaleString('ja-JP')}` : '');
   } catch(e) {
     const m = e && e.message ? e.message : '通信エラー';
     // 圧縮データを展開できなかった場合は、この端末からの送信も止める
