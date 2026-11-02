@@ -388,7 +388,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v16.8</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v16.9</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -574,6 +574,7 @@ input[type=checkbox]{width:auto;margin:0}
       <div style="margin-top:10px;padding:8px 10px;background:#eef4ff;border:1px solid #1a4b8a;border-radius:6px">
         <button class="btn btn-primary btn-sm" style="width:100%;justify-content:center" onclick="applyImportAsAdjustment()">✅ 取込額に合わせて確定する</button>
         <p class="input-hint" style="margin-top:4px;margin-bottom:0">カルテごと消えて復元できない分を<b>調整額として固定</b>します。実行すると集計金額が取込額と一致し、取込データは不要になるため消去されます。<br><b>以降に確定したカルテはこの調整額に加算されます</b>ので、今後の集計も正しくなります。</p>
+        <div id="adjLockRow" style="margin-top:8px;padding:8px 10px;border-radius:6px;font-size:12px;font-weight:600"></div>
         <button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="clearAdjustments()">調整額を取り消す</button>
       </div>
       <p class="input-hint" style="margin-top:4px">カルテの確定が一部しか復元できていない期間で使います。オンにすると、取込データがある月はCSVの金額を採用します（カルテ側の不完全な合計で過少表示になるのを防げます）。<br>確定を入力し直した月は、オフに戻すとカルテ側の実データが使われます。</p>
@@ -1419,6 +1420,7 @@ function saveToStorage() {
     localStorage.setItem('cm_ledger', JSON.stringify(LEDGER));
     localStorage.setItem('cm_adjust', JSON.stringify(ADJUSTMENTS));
     localStorage.setItem('cm_adjustat', String(ADJUST_AT||0));
+    localStorage.setItem('cm_adjlock', ADJ_LOCKED?'1':'0');
   } catch(e){}
   saveMasterMeta();
   if(!_suppressAutoSave) { PENDING_CHANGES++; updateSyncPill(); scheduleCloudAutoSave(); }
@@ -1444,6 +1446,7 @@ function loadFromStorage() {
     IMPORT_PRIORITY = localStorage.getItem('cm_imppri')==='1';
     const adj = localStorage.getItem('cm_adjust'); if(adj) ADJUSTMENTS = JSON.parse(adj);
     ADJUST_AT = Number(localStorage.getItem('cm_adjustat'))||0;
+    ADJ_LOCKED = localStorage.getItem('cm_adjlock') !== '0';   // 既定は保護
     const lg = localStorage.getItem('cm_ledger'); if(lg) LEDGER = JSON.parse(lg);
     ledgerSyncFromKartes();
     STATS_SCOPE = localStorage.getItem('cm_statsscope')||'all';
@@ -3022,7 +3025,7 @@ function _buildPayload(memoLimit, karteMonths, stripSavedText) {
       // 読み込み時に省略フィールドが復元されているため、送信時は圧縮し直す
       kartes: _cloudKartesSnapshot.map(_slimKarte),
       farms:FARMS, master:MASTER, farmDist:FARM_DIST, templates:TEMPLATES, watch:WATCH_ITEMS,
-      deleted:DELETED, ledger:_slimLedger(), adjust:{v:ADJUSTMENTS, at:ADJUST_AT}
+      deleted:DELETED, ledger:_slimLedger(), adjust:{v:ADJUSTMENTS, at:ADJUST_AT}, adjLocked:ADJ_LOCKED
     };
   }
   if(karteMonths === 0) ks = KARTES;
@@ -3049,7 +3052,7 @@ function _buildPayload(memoLimit, karteMonths, stripSavedText) {
     farms:FARMS, master:MASTER, farmDist:FARM_DIST, templates:TEMPLATES, watch:WATCH_ITEMS,
     deleted:DELETED,
     // 台帳と調整額は絞り込みの対象外。カルテを同期から外しても集計は全端末で揃う
-    ledger:_slimLedger(), adjust:{v:ADJUSTMENTS, at:ADJUST_AT}
+    ledger:_slimLedger(), adjust:{v:ADJUSTMENTS, at:ADJUST_AT}, adjLocked:ADJ_LOCKED
   };
 }
 // 送ろうとしている内容が、保存先にあったものより大幅に少なければ止める
@@ -3589,10 +3592,17 @@ async function cloudAutoLoad() {
     if(Array.isArray(data.watch)) WATCH_ITEMS = [...new Set([...data.watch, ...WATCH_ITEMS])].filter(n=>!isDeleted('watch', n));
     // 差額集計の台帳を取り込む（他端末で確定した金額をここで受け取る）
     if(data.ledger) mergeLedger(_normLedger(data.ledger));
-    // 調整額は端末ごとに分かれると合計が食い違うため、後から変更された方に揃える
-    if(data.adjust && data.adjust.v && (Number(data.adjust.at)||0) > ADJUST_AT) {
-      ADJUSTMENTS = data.adjust.v; ADJUST_AT = Number(data.adjust.at)||0;
+    // 調整額は端末ごとに分かれると合計が食い違うため同期対象に入れる。
+    // ただし中身が減る取り込みは受け付けない。読み込めていない端末が
+    // 空の内容を送ってきたときに、確定した調整額が失われるのを防ぐ
+    if(data.adjust && data.adjust.v) {
+      const inc = data.adjust.v, incAt = Number(data.adjust.at)||0;
+      const mine = _adjCount(ADJUSTMENTS), theirs = _adjCount(inc);
+      if(theirs && !mine) { ADJUSTMENTS = inc; ADJUST_AT = incAt; }            // 手元に無いなら受け取る
+      else if(theirs >= mine && incAt > ADJUST_AT) { ADJUSTMENTS = inc; ADJUST_AT = incAt; }
+      else if(theirs < mine) console.info(`調整額: 中身が減る取り込み（${theirs}件）を見送り、手元の${mine}件を保持しました`);
     }
+    if(typeof data.adjLocked === 'boolean') ADJ_LOCKED = data.adjLocked;
     _suppressAutoSave = true;
     saveToStorage(); // ローカルにも反映（クラウド再送信はしない）
     _suppressAutoSave = false;
@@ -4314,7 +4324,7 @@ function exportData() {
   ledgerSyncFromKartes();
   // 書き出すのは端末のデータそのもの。クラウドを経由しないため、
   // 同期できていない分も、同期対象から外している分もすべて含まれる
-  const data={version:2,exportedAt:new Date().toISOString(),memos,dictWords:DICT_WORDS,convPairs,aliases:ALIASES,mdiffs:MANUAL_DIFFS,kartes:KARTES,farms:FARMS,master:MASTER,farmDist:FARM_DIST,templates:TEMPLATES,watch:WATCH_ITEMS,ledger:LEDGER,adjust:{v:ADJUSTMENTS,at:ADJUST_AT},saveLog:SAVE_LOG,deleted:DELETED};
+  const data={version:2,exportedAt:new Date().toISOString(),memos,dictWords:DICT_WORDS,convPairs,aliases:ALIASES,mdiffs:MANUAL_DIFFS,kartes:KARTES,farms:FARMS,master:MASTER,farmDist:FARM_DIST,templates:TEMPLATES,watch:WATCH_ITEMS,ledger:LEDGER,adjust:{v:ADJUSTMENTS,at:ADJUST_AT},adjLocked:ADJ_LOCKED,saveLog:SAVE_LOG,deleted:DELETED};
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
   a.download=`kartememo_${new Date().toISOString().slice(0,10)}.json`;a.click();
@@ -4382,8 +4392,11 @@ function importData(input) {
       // その場で削除し直してしまう。ファイルには記録として入れてある
       // 差額集計の台帳と調整額も復元する
       if(data.ledger) mergeLedger(data.ledger.e ? _normLedger(data.ledger) : data.ledger);
-      if(data.adjust && data.adjust.v && (Number(data.adjust.at)||0) > ADJUST_AT) {
-        ADJUSTMENTS = data.adjust.v; ADJUST_AT = Number(data.adjust.at)||0;
+      if(data.adjust && data.adjust.v) {
+        const inc = data.adjust.v;
+        const mine = _adjCount(ADJUSTMENTS), theirs = _adjCount(inc);
+        // 中身が増える場合だけ取り込む（バックアップで減らさない）
+        if(theirs > mine) { ADJUSTMENTS = inc; ADJUST_AT = Number(data.adjust.at)||0; }
       }
       // 保存履歴も復元する（時刻と内容が同じものは重複させない）
       let newLogs = 0;
@@ -6692,8 +6705,26 @@ let IMPORT_PRIORITY = false; // 取込データをカルテより優先するか
 // 表示は「カルテ合計 + 調整額」となるため、以降に確定した分は正しく加算される
 let ADJUSTMENTS = {};
 let ADJUST_AT = 0;   // 調整額を最後に変更した時刻（同期で新しい方に揃えるため）
+// 調整額の保護。復旧作業で確定した額なので、うっかり消えないように鍵をかける
+let ADJ_LOCKED = true;
+function _adjCount(o){ return Object.keys(o||{}).reduce((n,f)=>n+Object.keys(o[f]||{}).length,0); }
+function setAdjLocked(on){
+  ADJ_LOCKED = !!on;
+  try { localStorage.setItem('cm_adjlock', ADJ_LOCKED?'1':'0'); } catch(e){}
+  saveToStorage();
+  renderStats();
+  toast(ADJ_LOCKED ? '調整額を保護しました（変更できません）' : '調整額の保護を外しました', ADJ_LOCKED?'success':'error');
+}
+function toggleAdjLock(){
+  if(!ADJ_LOCKED) return setAdjLocked(true);
+  if(!confirm('調整額の保護を外しますか？\n\n外すと「取り消す」「取込額に合わせて確定する」で変更できるようになります。\n'
+    + '調整額は復旧作業で確定した額なので、変更すると集計が合わなくなります。\n\n'
+    + '先に 💾 JSONバックアップを取っておいてください。')) return;
+  setAdjLocked(false);
+}
 // 現在のカルテ合計と取込額の差を調整額として確定する
 function applyImportAsAdjustment() {
+  if(ADJ_LOCKED) return toast('調整額は保護されています。変更するには先に保護を外してください','error');
   const impFarms=Object.keys(IMPORTED_STATS);
   if(!impFarms.length) return toast('取込データがありません','error');
   // 現在のカルテ側の合計を農場・月ごとに集計（調整前の実データ）
@@ -6728,6 +6759,7 @@ function applyImportAsAdjustment() {
   alert(`調整額を確定しました（${plan.length}件）。\n\n集計金額が取込額と一致しているか確認してください。\n以降に確定したカルテは、この調整額に加算されます。`);
 }
 function clearAdjustments() {
+  if(ADJ_LOCKED) return toast('調整額は保護されています。変更するには先に保護を外してください','error');
   if(!Object.keys(ADJUSTMENTS).length) return toast('調整額はありません');
   if(!confirm('調整額をすべて取り消しますか？（カルテには影響しません）')) return;
   ADJUSTMENTS={}; ADJUST_AT = Date.now();
@@ -6997,6 +7029,7 @@ function renderStats() {
          この合計には次を含みます　${admTotal?`<b>調整額 ${admTotal>=0?'+':''}${fmtAmt(admTotal)}</b>（消えたカルテ分の補正）`:''}
          ${(admTotal&&manTotal)?'／':''}
          ${manTotal?`<b>手動で足した差額 ${manTotal>=0?'+':''}${fmtAmt(manTotal)}</b>（${manCount}件）`:''}
+         ${admTotal?`${ADJ_LOCKED?'　<span style="color:#1a8a4a">🔒 調整額は保護中（変更できません）</span>':'　<span style="color:#c00">🔓 調整額の保護が外れています</span>'}`:''}
          <br><span style="font-weight:400;color:var(--text2)">端末で合計が違うときは「🔍 内訳をコピー」を両方の端末で押して見比べてください。</span>
        </div>`
     : '';
@@ -7023,6 +7056,19 @@ function renderStats() {
   if(info){ const n=impFarms.reduce((s,f)=>s+Object.keys(IMPORTED_STATS[f]).length,0);
     info.textContent = n ? `取込済み: ${impFarms.length}農場・${n}件（表内に「（取込）」と表示されます）${IMPORT_PRIORITY?' ／ 取込データを優先中':''}` : '取込データはありません'; }
   const pri=document.getElementById('importPriority'); if(pri) pri.checked=IMPORT_PRIORITY;
+  const lockEl=document.getElementById('adjLockRow');
+  if(lockEl) {
+    const n=_adjCount(ADJUSTMENTS);
+    const sum=Object.keys(ADJUSTMENTS).reduce((t,f)=>t+Object.keys(ADJUSTMENTS[f]||{}).reduce((u,m)=>u+(Number(ADJUSTMENTS[f][m])||0),0),0);
+    lockEl.style.background = ADJ_LOCKED ? '#f2fbf5' : '#fff4f4';
+    lockEl.style.border = '1px solid ' + (ADJ_LOCKED ? '#1a8a4a' : '#c00');
+    lockEl.style.color = ADJ_LOCKED ? '#1a8a4a' : '#c00';
+    lockEl.innerHTML = (n
+        ? `${ADJ_LOCKED?'🔒':'🔓'} 調整額 ${n}件・${sum>=0?'+':''}${fmtAmt(sum)}　${ADJ_LOCKED?'保護中（変更できません）':'保護が外れています'}`
+        : `${ADJ_LOCKED?'🔒':'🔓'} 調整額はありません`)
+      + `<br><span style="font-weight:400;color:var(--text2)">同期でも、中身が減る取り込みは受け付けません。</span>`
+      + `<button class="btn btn-ghost btn-xs" style="margin-top:6px" onclick="toggleAdjLock()">${ADJ_LOCKED?'保護を外す':'保護する'}</button>`;
+  }
 }
 function monthOffset(n){const d=new Date();d.setMonth(d.getMonth()+n);return d.toISOString().slice(0,7);}
 function exportCSV() {
