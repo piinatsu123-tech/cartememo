@@ -388,7 +388,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v16.7</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v16.8</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -6987,6 +6987,19 @@ function renderStats() {
   const span = months.length
     ? `${months[0].slice(0,4)}年${parseInt(months[0].slice(5))}月 〜 ${months[months.length-1].slice(0,4)}年${parseInt(months[months.length-1].slice(5))}月（データのある${months.length}ヶ月）`
     : '';
+  // 内訳の目立たない部分（調整額・手動で足した差額）を数字で出す。
+  // 端末で金額が違うとき、ここを見比べれば原因が分かる
+  const admTotal = Object.keys(ADJUSTMENTS).reduce((t,f)=>t+Object.keys(ADJUSTMENTS[f]||{}).reduce((u,m)=>u+(months.includes(m)?(Number(ADJUSTMENTS[f][m])||0):0),0),0);
+  const manTotal = closed.filter(k=>k.manual).reduce((t,k)=>t+(k.diff||0),0);
+  const manCount = closed.filter(k=>k.manual).length;
+  const partsNote = (admTotal || manTotal)
+    ? `<div style="font-size:11px;color:#8a4b00;background:#fff8e8;border:1px solid #e07800;border-radius:6px;padding:7px 10px;margin-bottom:8px">
+         この合計には次を含みます　${admTotal?`<b>調整額 ${admTotal>=0?'+':''}${fmtAmt(admTotal)}</b>（消えたカルテ分の補正）`:''}
+         ${(admTotal&&manTotal)?'／':''}
+         ${manTotal?`<b>手動で足した差額 ${manTotal>=0?'+':''}${fmtAmt(manTotal)}</b>（${manCount}件）`:''}
+         <br><span style="font-weight:400;color:var(--text2)">端末で合計が違うときは「🔍 内訳をコピー」を両方の端末で押して見比べてください。</span>
+       </div>`
+    : '';
   const spanNote = `<div style="font-size:12px;color:var(--text2);margin-bottom:6px">全期間の合計　<span style="color:var(--text3)">${esc(span)}</span></div>`;
   let table;
   if(STATS_BY_MONTH) {
@@ -7005,7 +7018,7 @@ function renderStats() {
           + `<tbody>${simple}<tr class="total-row"><td>合計</td>${fmtCell(grand,'total-col')}<td style="font-size:11px;white-space:nowrap">${closed.length}件</td></tr></tbody></table>`
           + `<p class="input-hint" style="margin-top:6px">月ごとの内訳は、上の「月ごとの内訳」にチェックを入れると表示されます。</p>`;
   }
-  el.innerHTML=scopeNote+cmpNote+spanNote+table;
+  el.innerHTML=scopeNote+cmpNote+spanNote+partsNote+table;
   const info=document.getElementById('importedStatsInfo');
   if(info){ const n=impFarms.reduce((s,f)=>s+Object.keys(IMPORTED_STATS[f]).length,0);
     info.textContent = n ? `取込済み: ${impFarms.length}農場・${n}件（表内に「（取込）」と表示されます）${IMPORT_PRIORITY?' ／ 取込データを優先中':''}` : '取込データはありません'; }
