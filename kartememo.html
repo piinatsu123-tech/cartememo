@@ -388,7 +388,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v16.9</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v17.0</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -2145,6 +2145,14 @@ function copyDiagnostics() {
     ``,
     `カルテ: ${KARTES.length}件（確定済 ${KARTES.filter(k=>k.closed).length}件）`,
     `メモ: ${memos.length}件`,
+    (()=>{   // メモが送信に含まれているかを確かめる
+      try {
+        const p = buildCloudPayload();
+        const pend = memos.filter(m=>m.status==='pending').length;
+        return `送信に含むメモ: ${(p.memos||[]).length}/${memos.length}件（未解析 ${pend}件）`
+             + (usingGitHub() ? '' : (memoBinId() ? ' ／ メモは専用Binへ' : ''));
+      } catch(e) { return `送信に含むメモ: 取得できません（${e.message}）`; }
+    })(),
     `薬価: ${MASTER.length}件`,
     `集計台帳: ${Object.keys(LEDGER).filter(id=>LEDGER[id].d!=null).length}件（${fmtBytes(JSON.stringify(_slimLedger()).length)}）`,
     `送信サイズ: ${fmtBytes(Math.round(size*_zRatio))}（圧縮前 ${fmtBytes(size)}）`,
