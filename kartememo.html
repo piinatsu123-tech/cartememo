@@ -414,7 +414,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v17.7</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v17.8</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -1077,12 +1077,34 @@ input[type=checkbox]{width:auto;margin:0}
     <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
       <button class="btn btn-ghost btn-sm" onclick="dkqCopyAll()">📋 表示中すべてをまとめてコピー</button>
       <button class="btn btn-ghost btn-sm" onclick="openDkNoBulk()">🔢 カルテ番号をまとめて登録</button>
+      <button class="btn btn-ghost btn-sm" onclick="openBpBulk()">📥 B点をまとめて取り込む</button>
       <button class="btn btn-ghost" style="margin-left:auto" onclick="closeDkQueue()">閉じる</button>
     </div>
   </div>
 </div>
 
 <!-- ===== カルテ番号のまとめて登録 ===== -->
+<!-- ===== B点をまとめて取り込む ===== -->
+<div id="bpBulkModal" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <div class="modal-title">📥 B点をまとめて取り込む</div>
+    <p class="input-hint" style="margin-bottom:8px">
+      d-karte の「🐄 カルテ連続入力」で集めたB点を貼り付けてください。<br>
+      <b>カルテ番号｜点数｜金額</b>　（金額が無い場合は点数×10円で計算します）<br>
+      カルテ番号で突き合わせて、電子カルテ金額に入れます。
+    </p>
+    <textarea id="bp-text" style="min-height:150px;font-family:'JetBrains Mono',monospace;font-size:12px" placeholder="1024｜560｜5600&#10;1057｜1234｜12340"></textarea>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn btn-ghost btn-sm" onclick="bpPreview()">内容を確認する</button>
+      <button class="btn btn-primary btn-sm" id="bp-apply" style="display:none" onclick="bpApply()">この内容で取り込む</button>
+    </div>
+    <div id="bp-result" style="font-size:12px;margin-top:10px"></div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-ghost" style="margin-left:auto" onclick="closeBpBulk()">閉じる</button>
+    </div>
+  </div>
+</div>
+
 <div id="dkNoBulkModal" class="modal-overlay" style="display:none">
   <div class="modal-box">
     <div class="modal-title">🔢 カルテ番号をまとめて登録</div>
@@ -5281,6 +5303,81 @@ async function dkqCopyAll() {
     `③ 「▶ 開始」を押す\n\n`+
     `1件ずつ検索→入力→登録→閉じる、が自動で進みます。\n`+
     `途中で止まった場合は、その画面に理由が出ます。`);
+}
+
+// ===== B点をまとめて取り込む =====
+// d-karte で連続入力したあと、1件ずつ電子カルテに戻って金額を入れる手間をなくす。
+// カルテ番号で突き合わせて電子カルテ金額に入れる
+function openBpBulk(){
+  document.getElementById('bp-text').value='';
+  document.getElementById('bp-result').innerHTML='';
+  document.getElementById('bp-apply').style.display='none';
+  document.getElementById('bpBulkModal').style.display='flex';
+}
+function closeBpBulk(){ document.getElementById('bpBulkModal').style.display='none'; }
+document.getElementById('bpBulkModal').addEventListener('click', e => { if(e.target===document.getElementById('bpBulkModal')) closeBpBulk(); });
+// 貼り付けた行を読む。カルテ番号｜点数｜金額 ／ カルテ番号｜点数 ／ カルテ番号,金額
+function _bpParse() {
+  const lines = (document.getElementById('bp-text').value||'').split('\n').map(l=>l.trim()).filter(Boolean);
+  const rows = [];
+  lines.forEach(line=>{
+    const col = toHalfWidth(line).split(/[｜|\t,、 ]+/).map(c=>c.trim()).filter(Boolean);
+    if(col.length < 2) { rows.push({line, err:'形式が読めません'}); return; }
+    const no = col[0];
+    if(!/^\d+$/.test(no)) { rows.push({line, err:'先頭がカルテ番号ではありません'}); return; }
+    const nums = col.slice(1).filter(c=>/^\d+(\.\d+)?$/.test(c)).map(Number);
+    if(!nums.length) { rows.push({line, err:'点数・金額が読めません'}); return; }
+    // 3列以上なら最後を金額、2列なら点数×10
+    const amount = col.length >= 3 ? Math.round(nums[nums.length-1]) : Math.round(nums[0]*10);
+    const pts = nums[0];
+    const hit = KARTES.filter(k=>dkNoOf(k)===no);
+    if(!hit.length) { rows.push({line, no, amount, pts, err:'このカルテ番号が見つかりません'}); return; }
+    if(hit.length > 1) { rows.push({line, no, amount, pts, err:'同じカルテ番号が'+hit.length+'件あります'}); return; }
+    rows.push({line, no, amount, pts, k:hit[0]});
+  });
+  return rows;
+}
+let _bpRows = [];
+function bpPreview() {
+  _bpRows = _bpParse();
+  const el = document.getElementById('bp-result');
+  if(!_bpRows.length) { el.innerHTML='<span style="color:#c00">貼り付けてください</span>'; return; }
+  const ok = _bpRows.filter(r=>r.k);
+  const same = ok.filter(r=>r.k.electronic_amount === r.amount);
+  const change = ok.filter(r=>r.k.electronic_amount !== r.amount);
+  const over = change.filter(r=>r.k.electronic_amount != null);
+  const bad = _bpRows.filter(r=>r.err);
+  el.innerHTML =
+    `<div style="font-weight:700">取り込む: ${change.length}件`
+    + (same.length?`　<span style="color:var(--text3);font-weight:400">同じ金額で変更なし ${same.length}件</span>`:'')
+    + `</div>`
+    + (over.length ? `<div style="color:#8a4b00;margin-top:4px">⚠️ すでに金額が入っているカルテを上書きします: ${over.length}件</div>` : '')
+    + (change.length ? `<div style="margin-top:6px;max-height:200px;overflow-y:auto">`
+        + change.slice(0,40).map(r=>`<div style="font-family:'JetBrains Mono',monospace;font-size:11px">`
+            + `#${esc(r.no)} ${esc(r.k.farm)}/${esc(r.k.cow)}　`
+            + `${r.k.electronic_amount!=null?'¥'+r.k.electronic_amount.toLocaleString()+' → ':''}`
+            + `<b>¥${r.amount.toLocaleString()}</b>　<span style="color:var(--text3)">紙 ¥${(r.k.paper_total||0).toLocaleString()}</span></div>`).join('')
+        + (change.length>40?`<div style="color:var(--text3)">…ほか${change.length-40}件</div>`:'')
+        + `</div>` : '')
+    + (bad.length ? `<div style="color:#c00;margin-top:6px">読めない／見つからない行: ${bad.length}件<br>`
+        + bad.slice(0,10).map(r=>`<span style="font-size:11px">${esc(r.line)} → ${esc(r.err)}</span>`).join('<br>')
+        + (bad.length>10?`<br><span style="font-size:11px">…ほか${bad.length-10}件</span>`:'') + `</div>` : '');
+  document.getElementById('bp-apply').style.display = change.length ? '' : 'none';
+}
+function bpApply() {
+  const target = _bpRows.filter(r=>r.k && r.k.electronic_amount !== r.amount);
+  if(!target.length) return toast('取り込む内容がありません','error');
+  if(!confirm(`${target.length}件の電子カルテ金額を取り込みます。\n\n`
+    + `すでに金額が入っているものは上書きされます。\n`
+    + `先に 💾 JSONバックアップを取っておくと安心です。\n\nよろしいですか？`)) return;
+  let done=0;
+  target.forEach(r=>{ if(setElectronicAmount(r.k.id, r.amount)) done++; });
+  logSave('elec', `B点をまとめて取り込み（${done}件）`);
+  bpPreview();
+  showReport('✅ B点を取り込みました',
+    `電子カルテ金額を入れたカルテ: ${done}件\n\n`+
+    `集計ページで差額を確認してください。\n`+
+    `金額が違うものがあれば、カルテ画面で直してください。`);
 }
 
 // ===== d-karte のカルテ番号（牛番号とは別の番号） =====
