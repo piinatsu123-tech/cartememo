@@ -214,6 +214,19 @@ input[type=checkbox]{width:auto;margin:0}
 /* 選択中に出る操作バー（下部まで行かずに編集できる） */
 .rsel-fill{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:#8a4b00;cursor:pointer}
 .rsel-fill input{width:auto;margin:0}
+/* d-karte 出力キュー */
+.dkq-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.dkq-help{font-size:11px;color:var(--text2);padding:8px 0}
+.dkq-list{max-height:52vh;overflow-y:auto;border:1px solid var(--border);border-radius:7px}
+.dkq-row{display:grid;grid-template-columns:5.6em 1fr 5.4em 92px;gap:8px;align-items:center;padding:7px 9px;border-bottom:1px solid var(--border);font-size:12px}
+.dkq-row:last-child{border-bottom:none}
+.dkq-row.dkq-done{opacity:.5}
+.dkq-row.dkq-next{background:#fff8e8;outline:2px solid #e07800;outline-offset:-2px}
+.dkq-no input{width:100%;text-align:center;padding:4px 2px;font-size:13px;font-weight:700;font-family:'JetBrains Mono',monospace;border:1px solid var(--border2);border-radius:4px}
+.dkq-no input.dkq-empty{border-color:#c00;background:#fff4f4}
+.dkq-who{font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dkq-c{font-family:'Noto Sans JP',sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dkq-date{font-size:11px;color:var(--text3);font-family:'JetBrains Mono',monospace}
 .rsel-bar{position:sticky;top:0;z-index:30;display:flex;gap:8px;align-items:center;flex-wrap:wrap;
   background:#fff8e8;border:1px solid #e07800;border-radius:7px;padding:8px 10px;margin-bottom:8px;
   font-size:12px;font-weight:700;color:#8a4b00}
@@ -388,7 +401,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v17.3</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v17.4</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -490,7 +503,7 @@ input[type=checkbox]{width:auto;margin:0}
     <select id="karte-filter-farm" onchange="renderKarteList()" style="width:140px">
       <option value="">全農場</option>
     </select>
-    <input type="text" id="karte-filter-cow" placeholder="牛番号" oninput="halfInput(this,event);renderKarteList()" style="width:120px">
+    <input type="text" id="karte-filter-cow" placeholder="牛番号・カルテ番号" oninput="halfInput(this,event);renderKarteList()" style="width:120px">
     <select id="karte-filter-stage" onchange="renderKarteList()" style="width:150px">
       <option value="">すべての状態</option>
       <option value="active">診療中のみ</option>
@@ -507,6 +520,7 @@ input[type=checkbox]{width:auto;margin:0}
     </select>
     <button class="btn btn-ghost btn-sm" id="monthFilterBtn" onclick="toggleMonthFilter()">📅 月で絞る</button>
     <span id="karte-count" style="font-size:12px;color:var(--text3);margin-left:auto"></span>
+    <button class="btn btn-ghost btn-sm" onclick="openDkQueue()" title="未出力の診療内容を一覧にして、順に貼り付けていけます">📤 d-karte出力</button>
     <button class="btn btn-ghost btn-sm" onclick="openMultiKarte()" title="いま一覧に出ているカルテの診療内容・症状をまとめて入れます">📚 まとめて編集</button>
     <button class="btn btn-primary btn-sm" onclick="openNewKarteModal()">＋ 新規カルテ</button>
   </div>
@@ -1008,6 +1022,54 @@ input[type=checkbox]{width:auto;margin:0}
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn btn-primary" onclick="confirmBulkAdd()">まとめて追加</button>
       <button class="btn btn-ghost" onclick="closeBulkAdd()">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== d-karte 出力キュー ===== -->
+<div id="dkQueueModal" class="modal-overlay" style="display:none">
+  <div class="modal-box" style="max-width:860px">
+    <div class="modal-title">📤 d-karte 出力キュー</div>
+    <div class="dkq-bar">
+      <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;margin:0">
+        <input type="checkbox" id="dkq-onlynew" checked onchange="renderDkQueue()" style="width:auto;margin:0">未出力のみ
+      </label>
+      <select id="dkq-sort" onchange="renderDkQueue()" style="width:auto;flex:none">
+        <option value="no">カルテ番号順</option>
+        <option value="date">診療日順</option>
+        <option value="farm">農場順</option>
+      </select>
+      <select id="dkq-fmt" onchange="renderDkQueue()" style="width:auto;flex:none" title="コピーする形式">
+        <option value="content">診療内容だけ</option>
+        <option value="line">d-karte 7項目</option>
+        <option value="nocontent">カルテ番号＋診療内容</option>
+      </select>
+      <span id="dkq-count" style="font-size:12px;color:var(--text3);margin-left:auto"></span>
+    </div>
+    <div class="dkq-help" id="dkq-help"></div>
+    <div id="dkq-list" class="dkq-list"></div>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" onclick="dkqCopyAll()">📋 表示中すべてをまとめてコピー</button>
+      <button class="btn btn-ghost btn-sm" onclick="openDkNoBulk()">🔢 カルテ番号をまとめて登録</button>
+      <button class="btn btn-ghost" style="margin-left:auto" onclick="closeDkQueue()">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== カルテ番号のまとめて登録 ===== -->
+<div id="dkNoBulkModal" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <div class="modal-title">🔢 カルテ番号をまとめて登録</div>
+    <p class="input-hint" style="margin-bottom:8px">
+      1行に1頭ずつ貼り付けてください。区切りはタブ・カンマ・空白のどれでも構いません。<br>
+      <b>牛番号 カルテ番号</b>　（例: <code>A1024　1057</code>）<br>
+      同じ牛番号が複数の農場にある場合は <b>農場名 牛番号 カルテ番号</b> の3列にしてください。
+    </p>
+    <textarea id="dkno-text" style="min-height:160px;font-family:'JetBrains Mono',monospace;font-size:12px" placeholder="A1024&#9;1057&#10;B205&#9;1103"></textarea>
+    <div id="dkno-result" style="font-size:12px;margin-top:8px"></div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-primary" onclick="applyDkNoBulk()">登録する</button>
+      <button class="btn btn-ghost" onclick="closeDkNoBulk()">閉じる</button>
     </div>
   </div>
 </div>
@@ -4943,6 +5005,180 @@ function dkbDeleteTemplate() {
   toast('削除しました','success');
 }
 
+// ===== d-karte 出力キュー =====
+// カルテを1つずつ開いてコピーしていた流れを、1画面で済ませる
+function openDkQueue(){ renderDkQueue(); document.getElementById('dkQueueModal').style.display='flex'; }
+function closeDkQueue(){ document.getElementById('dkQueueModal').style.display='none'; }
+document.getElementById('dkQueueModal').addEventListener('click', e => { if(e.target===document.getElementById('dkQueueModal')) closeDkQueue(); });
+// キューに並べる行（カルテ×診療日）
+function dkqRows() {
+  const onlyNew = document.getElementById('dkq-onlynew').checked;
+  const sort = document.getElementById('dkq-sort').value;
+  const out = [];
+  KARTES.forEach(k=>{
+    if(k.archived) return;
+    (k.records||[]).forEach((r,i)=>{
+      if(!(r.content||'').trim()) return;          // 診療内容が無い行は出さない
+      if(onlyNew && r.karteExported) return;
+      out.push({k, r, i});
+    });
+  });
+  const no = x => dkNoOf(x.k);
+  out.sort((a,b)=>{
+    if(sort==='no') {
+      const na=no(a), nb=no(b);
+      if(!na && nb) return 1; if(na && !nb) return -1;      // 番号なしは後ろ
+      const d = na.localeCompare(nb, 'ja', {numeric:true});
+      if(d) return d;
+    } else if(sort==='farm') {
+      const d = String(a.k.farm||'').localeCompare(String(b.k.farm||''),'ja');
+      if(d) return d;
+    }
+    return String(a.r.date||'').localeCompare(String(b.r.date||''));
+  });
+  return out;
+}
+// コピーする文字列（形式を選べる）
+function dkqText(x) {
+  const fmt = document.getElementById('dkq-fmt').value;
+  if(fmt==='line') return toKarteLine(x.k, x.r);
+  const c = String(x.r.content||'').trim();
+  if(fmt==='nocontent') return dkNoOf(x.k) + '｜' + c;      // カルテ番号＋診療内容
+  return c;
+}
+let _dkqRows = [];
+function renderDkQueue() {
+  const el = document.getElementById('dkq-list'); if(!el) return;
+  _dkqRows = dkqRows();
+  const noNo = _dkqRows.filter(x=>!dkNoOf(x.k)).length;
+  document.getElementById('dkq-count').textContent = `${_dkqRows.length}件`;
+  document.getElementById('dkq-help').innerHTML =
+    `コピーを押すと<b>出力済みになり、次の行が目印になります</b>。番号の欄はその場で入力・修正できます。`
+    + (noNo ? `<br><span style="color:#c00;font-weight:700">カルテ番号が未登録: ${noNo}件</span>（番号の欄に入れると次回から並び順に入ります）` : '');
+  if(!_dkqRows.length) { el.innerHTML = '<div class="tpl-empty">出力する診療内容がありません</div>'; return; }
+  const nextIdx = _dkqRows.findIndex(x=>!x.r.karteExported);
+  el.innerHTML = _dkqRows.map((x,n)=>{
+    const no = dkNoOf(x.k);
+    const d = (x.r.date||'').slice(5).replace('-','/');
+    return `<div class="dkq-row ${x.r.karteExported?'dkq-done':''} ${n===nextIdx?'dkq-next':''}" id="dkq-r-${n}">
+      <span class="dkq-no"><input type="text" inputmode="numeric" value="${esc(no)}" placeholder="番号" class="${no?'':'dkq-empty'}"
+             oninput="halfInput(this,event)" onkeydown="dkqNoKeydown(this,${n},event)" onblur="dkqSetNo(${n},this.value)"></span>
+      <span>
+        <span class="dkq-c" title="${esc(x.r.content||'')}">${esc(x.r.content||'')}</span>
+        <span class="dkq-who">${esc(x.k.farm)} / ${esc(x.k.cow)}${x.r.symptom?'　'+esc(x.r.symptom):''}</span>
+      </span>
+      <span class="dkq-date">${d||'—'}</span>
+      <span style="display:flex;gap:4px">
+        <button class="btn btn-primary btn-xs" style="flex:1" onclick="dkqCopy(${n})">📋</button>
+        <button class="btn btn-ghost btn-xs" onclick="dkqToggleDone(${n})" title="${x.r.karteExported?'未出力に戻す':'出力済みにする'}">${x.r.karteExported?'↺':'✓'}</button>
+      </span>
+    </div>`;
+  }).join('');
+}
+function dkqSetNo(n, val) {
+  const x = _dkqRows[n]; if(!x) return;
+  if(setDkNo(x.k.id, val)) renderDkQueue();
+}
+// 番号の欄でEnter → そのままコピーして次へ
+function dkqNoKeydown(el, n, event) {
+  if(event.key !== 'Enter') return;
+  event.preventDefault();
+  const x = _dkqRows[n];
+  if(x) setDkNo(x.k.id, el.value);
+  dkqCopy(n);
+}
+async function dkqCopy(n) {
+  const x = _dkqRows[n]; if(!x) return;
+  const txt = dkqText(x);
+  if(!txt.trim()) return toast('コピーする内容がありません','error');
+  const ok = await copyToClipboard(txt);
+  if(!ok) return showCopyFallback(txt);
+  if(!x.r.karteExported) {
+    x.r.karteExported = true;
+    x.r.karteExportedAt = new Date().toISOString();
+    touchKarte(x.k);
+    saveToStorage();
+  }
+  renderDkQueue();
+  // 次の行へ画面を寄せる
+  const nx = _dkqRows.findIndex(y=>!y.r.karteExported);
+  if(nx >= 0) { const el = document.getElementById('dkq-r-'+nx); if(el) el.scrollIntoView({block:'nearest'}); }
+  toast(`コピーしました（残り ${_dkqRows.filter(y=>!y.r.karteExported).length}件）`,'success');
+}
+function dkqToggleDone(n) {
+  const x = _dkqRows[n]; if(!x) return;
+  if(x.r.karteExported) { delete x.r.karteExported; delete x.r.karteExportedAt; }
+  else { x.r.karteExported = true; x.r.karteExportedAt = new Date().toISOString(); }
+  touchKarte(x.k); saveToStorage(); renderDkQueue();
+}
+async function dkqCopyAll() {
+  if(!_dkqRows.length) return toast('コピーするものがありません','error');
+  const txt = _dkqRows.map(dkqText).join('\n');
+  const ok = await copyToClipboard(txt);
+  if(!ok) return showCopyFallback(txt);
+  const now = new Date().toISOString();
+  let n=0;
+  _dkqRows.forEach(x=>{ if(!x.r.karteExported){ x.r.karteExported=true; x.r.karteExportedAt=now; touchKarte(x.k); n++; } });
+  saveToStorage(); renderDkQueue();
+  logSave('karte', `d-karte出力キューから${_dkqRows.length}件をまとめてコピー`);
+  toast(`${_dkqRows.length}行をコピーしました（${n}件を出力済みに）`,'success');
+}
+
+// ===== d-karte のカルテ番号（牛番号とは別の番号） =====
+// 電子カルテ側の番号は牛番号と違うため、毎回頭で変換していた。
+// カルテごとに覚えておけば、その手間がなくなる
+function dkNoOf(k){ return String((k && k.dkNo) || '').trim(); }
+function setDkNo(karteId, val) {
+  const k = KARTES.find(x=>x.id===karteId); if(!k) return false;
+  const v = toHalfWidth(String(val==null?'':val)).trim();
+  if(dkNoOf(k) === v) return false;
+  // 同じ番号が別のカルテに付いていたら知らせる（取り違えを防ぐ）
+  if(v) {
+    const dup = KARTES.find(x=>x.id!==karteId && dkNoOf(x)===v);
+    if(dup && !confirm(`カルテ番号 ${v} は【${dup.farm} / ${dup.cow}】にも付いています。\nこのまま登録しますか？`)) return false;
+  }
+  if(v) k.dkNo = v; else delete k.dkNo;
+  touchKarte(k);
+  saveToStorage();
+  logSave('karte', `【${k.farm} / ${k.cow}】カルテ番号を ${v||'（なし）'} にした`);
+  return true;
+}
+// 紙の一覧などから「牛番号 カルテ番号」をまとめて登録する
+function openDkNoBulk() {
+  document.getElementById('dkno-text').value = '';
+  document.getElementById('dkno-result').innerHTML = '';
+  document.getElementById('dkNoBulkModal').style.display = 'flex';
+}
+function closeDkNoBulk(){ document.getElementById('dkNoBulkModal').style.display='none'; }
+function applyDkNoBulk() {
+  const text = document.getElementById('dkno-text').value;
+  const lines = text.split('\n').map(l=>l.trim()).filter(Boolean);
+  if(!lines.length) return toast('貼り付けてください','error');
+  const nf = v => toHalfWidth(String(v||'')).trim().toLowerCase();
+  let done=0, miss=[], amb=[];
+  lines.forEach(line=>{
+    const col = line.split(/[\t,、 ]+/).map(c=>c.trim()).filter(Boolean);
+    if(col.length < 2) { miss.push(line); return; }
+    // 3列なら 農場名・牛番号・カルテ番号。2列なら 牛番号・カルテ番号
+    const farm = col.length>=3 ? col[0] : '';
+    const cow  = col.length>=3 ? col[1] : col[0];
+    const no   = col[col.length-1];
+    let cands = KARTES.filter(k=>nf(k.cow)===nf(cow));
+    if(farm) cands = cands.filter(k=>nf(k.farm)===nf(farm) || String(k.farm||'').includes(farm));
+    if(!cands.length) { miss.push(line); return; }
+    if(cands.length > 1) { amb.push(`${line} → ${cands.map(k=>k.farm).join('／')}`); return; }
+    const k = cands[0];
+    const v = toHalfWidth(no).trim();
+    if(dkNoOf(k) !== v) { k.dkNo = v; touchKarte(k); done++; }
+  });
+  if(done) { saveToStorage(); logSave('karte', `カルテ番号を${done}件まとめて登録`); renderKarteList(); }
+  const el = document.getElementById('dkno-result');
+  el.innerHTML = `<div style="font-weight:700">登録: ${done}件</div>`
+    + (amb.length ? `<div style="color:#c00;margin-top:6px">同じ牛番号が複数の農場にあり決められません: ${amb.length}件<br><span style="font-size:11px">${amb.slice(0,8).map(esc).join('<br>')}</span><br><span style="font-size:11px;color:var(--text2)">農場名を先頭に足した3列（農場名 牛番号 カルテ番号）で貼り直してください。</span></div>` : '')
+    + (miss.length ? `<div style="color:#8a4b00;margin-top:6px">見つからない行: ${miss.length}件<br><span style="font-size:11px">${miss.slice(0,8).map(esc).join('<br>')}</span></div>` : '');
+  if(done) toast(`${done}件のカルテ番号を登録しました`,'success');
+}
+
 // ===== 診療日の範囲選択（下部のボタンまで行かずに編集する） =====
 // つまみをドラッグすると範囲を選べる。Shift+クリックでも範囲になる。
 // 1件でも選ぶと上部に操作バーが出るので、そこから編集できる
@@ -5829,7 +6065,7 @@ function buildKarteCard(k, isDetail) {
     </div>`;
   return `<div class="karte-card" id="card-${k.id}">
     <div class="karte-hdr">
-      <span class="karte-title" style="display:inline-flex;align-items:center;gap:4px">【<input type="text" class="karte-title-edit" value="${esc(k.farm)}" onclick="event.stopPropagation()" onblur="updateKarteField('${k.id}','farm',this.value)" onkeydown="if(event.key==='Enter')this.blur()" title="農場名" style="width:8em"> / <input type="text" class="karte-title-edit" value="${esc(k.cow)}" onclick="event.stopPropagation()" oninput="halfInput(this,event)" onblur="updateKarteField('${k.id}','cow',this.value)" onkeydown="if(event.key==='Enter')this.blur()" title="牛番号" style="width:5em">】<span class="karte-dist" onclick="event.stopPropagation()" title="この農場の往診距離。d-karte出力の距離欄に使われます">距離<input type="number" min="0" step="0.1" inputmode="decimal" id="kdist-${k.id}" value="${(FARM_DIST[k.farm]!=null&&FARM_DIST[k.farm]!=='')?FARM_DIST[k.farm]:''}" placeholder="—" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter')this.blur()" onblur="setFarmDistFromKarte('${k.id}',this.value)">km</span></span>
+      <span class="karte-title" style="display:inline-flex;align-items:center;gap:4px">【<input type="text" class="karte-title-edit" value="${esc(k.farm)}" onclick="event.stopPropagation()" onblur="updateKarteField('${k.id}','farm',this.value)" onkeydown="if(event.key==='Enter')this.blur()" title="農場名" style="width:8em"> / <input type="text" class="karte-title-edit" value="${esc(k.cow)}" onclick="event.stopPropagation()" oninput="halfInput(this,event)" onblur="updateKarteField('${k.id}','cow',this.value)" onkeydown="if(event.key==='Enter')this.blur()" title="牛番号" style="width:5em">】<span class="karte-dist" onclick="event.stopPropagation()" title="電子カルテ側のカルテ番号。d-karte出力キューで使います">No<input type="text" inputmode="numeric" id="kdkno-${k.id}" value="${esc(dkNoOf(k))}" placeholder="—" style="width:5em" onclick="event.stopPropagation()" oninput="halfInput(this,event)" onkeydown="if(event.key==='Enter')this.blur()" onblur="setDkNo('${k.id}',this.value)"></span><span class="karte-dist" onclick="event.stopPropagation()" title="この農場の往診距離。d-karte出力の距離欄に使われます">距離<input type="number" min="0" step="0.1" inputmode="decimal" id="kdist-${k.id}" value="${(FARM_DIST[k.farm]!=null&&FARM_DIST[k.farm]!=='')?FARM_DIST[k.farm]:''}" placeholder="—" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter')this.blur()" onblur="setFarmDistFromKarte('${k.id}',this.value)">km</span></span>
       <div style="display:flex;gap:8px;align-items:center">
         ${(()=>{const stage=k.closed?2:k.finished?1:0;const bc=stage===2?'badge-closed':stage===1?'badge-unclosed':'badge-active';const bt=stage===2?'確定済':stage===1?'電子未入力':'診療中';return`<span class="karte-badge ${bc}">${bt}</span>`+(k.origUnconfirmed?'<span class="karte-badge" style="color:#1a4b8a;border-color:#1a4b8a">もともと未確定</span>':'')+(k.confirmKind==='restore'?'<span class="karte-badge" style="color:#8a4b00;border-color:#e07800">復元</span>':'')+(!k.closed?`<button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();toggleFinished('${k.id}')">${k.finished?'診療中に戻す':'終診にする'}</button>`:'');})()}
         <button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();duplicateKarte('${k.id}')" title="このカルテ全体を複製して編集">⧉ カルテ複製</button>
@@ -6530,7 +6766,8 @@ function filteredKartes() {
   const isSearching = !!(farmF || cowF || MONTH_FILTER.size);
   let list = [...KARTES];
   if(farmF) list = list.filter(k=>k.farm===farmF);
-  if(cowF) list = list.filter(k=>toHalfWidth(k.cow||'').toLowerCase().includes(cowF));
+  // 牛番号でもカルテ番号でも引けるようにする
+  if(cowF) list = list.filter(k=>toHalfWidth(k.cow||'').toLowerCase().includes(cowF) || dkNoOf(k).toLowerCase().includes(cowF));
   if(MONTH_FILTER.size) list = list.filter(k=>_karteMonths(k).some(m=>MONTH_FILTER.has(m)));
   if(!isSearching) list = list.filter(k=>!k.archived);
   // 状態で絞り込み（診療中 = 未終診、電子未入力 = 終診済みだが金額未入力）
