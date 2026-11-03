@@ -221,6 +221,7 @@ input[type=checkbox]{width:auto;margin:0}
 .dkq-row{display:grid;grid-template-columns:5.6em 1fr 5.4em 92px;gap:8px;align-items:center;padding:7px 9px;border-bottom:1px solid var(--border);font-size:12px}
 .dkq-row:last-child{border-bottom:none}
 .dkq-row.dkq-done{opacity:.5}
+.dkq-row.dkq-lack{background:#fff4f4}
 .dkq-row.dkq-next{background:#fff8e8;outline:2px solid #e07800;outline-offset:-2px}
 .dkq-no input{width:100%;text-align:center;padding:4px 2px;font-size:13px;font-weight:700;font-family:'JetBrains Mono',monospace;border:1px solid var(--border2);border-radius:4px}
 .dkq-no input.dkq-empty{border-color:#c00;background:#fff4f4}
@@ -401,7 +402,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v17.4</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v17.5</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -1040,10 +1041,11 @@ input[type=checkbox]{width:auto;margin:0}
         <option value="farm">農場順</option>
       </select>
       <select id="dkq-fmt" onchange="renderDkQueue()" style="width:auto;flex:none" title="コピーする形式">
-        <option value="content">診療内容だけ</option>
+        <option value="dk9">連続入力用（9項目・カルテ番号つき）</option>
         <option value="line">d-karte 7項目</option>
-        <option value="nocontent">カルテ番号＋診療内容</option>
+        <option value="content">診療内容だけ</option>
       </select>
+      <input type="text" id="dkq-vet" placeholder="獣医師コード" title="空欄なら d-karte 側の選択をそのまま使います" style="width:7.5em;flex:none" oninput="halfInput(this,event)" onchange="dkqSaveVet(this.value)">
       <span id="dkq-count" style="font-size:12px;color:var(--text3);margin-left:auto"></span>
     </div>
     <div class="dkq-help" id="dkq-help"></div>
@@ -5038,29 +5040,39 @@ function dkqRows() {
   });
   return out;
 }
+function dkqVet(){ return toHalfWidth(localStorage.getItem('cm_dkvet')||'').trim(); }
+function dkqSaveVet(v){ try { localStorage.setItem('cm_dkvet', toHalfWidth(v||'').trim()); } catch(e){} renderDkQueue(); }
 // コピーする文字列（形式を選べる）
+// 連続入力用は Tampermonkey 側の9項目形式に合わせる:
+//   カルテ番号｜獣医師コード｜日付｜時間｜往診元｜距離｜体温｜症状｜診療内容
 function dkqText(x) {
   const fmt = document.getElementById('dkq-fmt').value;
+  if(fmt==='dk9') return dkNoOf(x.k) + '｜' + dkqVet() + '｜' + toKarteLine(x.k, x.r);
   if(fmt==='line') return toKarteLine(x.k, x.r);
-  const c = String(x.r.content||'').trim();
-  if(fmt==='nocontent') return dkNoOf(x.k) + '｜' + c;      // カルテ番号＋診療内容
-  return c;
+  return String(x.r.content||'').trim();
 }
+// 連続入力用はカルテ番号が必須（番号が無い行はスクリプト側で弾かれる）
+function dkqNeedsNo(){ return document.getElementById('dkq-fmt').value === 'dk9'; }
 let _dkqRows = [];
 function renderDkQueue() {
   const el = document.getElementById('dkq-list'); if(!el) return;
   _dkqRows = dkqRows();
   const noNo = _dkqRows.filter(x=>!dkNoOf(x.k)).length;
   document.getElementById('dkq-count').textContent = `${_dkqRows.length}件`;
-  document.getElementById('dkq-help').innerHTML =
-    `コピーを押すと<b>出力済みになり、次の行が目印になります</b>。番号の欄はその場で入力・修正できます。`
-    + (noNo ? `<br><span style="color:#c00;font-weight:700">カルテ番号が未登録: ${noNo}件</span>（番号の欄に入れると次回から並び順に入ります）` : '');
+  const vetEl = document.getElementById('dkq-vet'); if(vetEl && vetEl.value !== dkqVet()) vetEl.value = dkqVet();
+  document.getElementById('dkq-help').innerHTML = (dkqNeedsNo()
+    ? `<b>d-karte のカルテ検索画面</b>を開き、「🐄 カルテ連続入力」のキュー欄に貼り付けて <b>▶ 開始</b> を押すと、1日分が自動で入力されます。<br>
+       下の「📋 表示中すべてをまとめてコピー」で1回で渡せます。獣医師コードは空欄なら d-karte 側の選択をそのまま使います。`
+    : `コピーを押すと<b>出力済みになり、次の行が目印になります</b>。番号の欄はその場で入力・修正できます。`)
+    + (noNo ? `<br><span style="color:#c00;font-weight:700">カルテ番号が未登録: ${noNo}件</span>`
+        + (dkqNeedsNo() ? `（連続入力には番号が必要なため、まとめてコピーからは除きます）` : `（番号の欄に入れると次回から並び順に入ります）`) : '');
   if(!_dkqRows.length) { el.innerHTML = '<div class="tpl-empty">出力する診療内容がありません</div>'; return; }
   const nextIdx = _dkqRows.findIndex(x=>!x.r.karteExported);
   el.innerHTML = _dkqRows.map((x,n)=>{
     const no = dkNoOf(x.k);
     const d = (x.r.date||'').slice(5).replace('-','/');
-    return `<div class="dkq-row ${x.r.karteExported?'dkq-done':''} ${n===nextIdx?'dkq-next':''}" id="dkq-r-${n}">
+    const lack = dkqNeedsNo() && !no;
+    return `<div class="dkq-row ${x.r.karteExported?'dkq-done':''} ${n===nextIdx?'dkq-next':''} ${lack?'dkq-lack':''}" id="dkq-r-${n}">
       <span class="dkq-no"><input type="text" inputmode="numeric" value="${esc(no)}" placeholder="番号" class="${no?'':'dkq-empty'}"
              oninput="halfInput(this,event)" onkeydown="dkqNoKeydown(this,${n},event)" onblur="dkqSetNo(${n},this.value)"></span>
       <span>
@@ -5089,6 +5101,7 @@ function dkqNoKeydown(el, n, event) {
 }
 async function dkqCopy(n) {
   const x = _dkqRows[n]; if(!x) return;
+  if(dkqNeedsNo() && !dkNoOf(x.k)) return toast('この行はカルテ番号が未登録です。番号を入れてください','error');
   const txt = dkqText(x);
   if(!txt.trim()) return toast('コピーする内容がありません','error');
   const ok = await copyToClipboard(txt);
@@ -5113,15 +5126,27 @@ function dkqToggleDone(n) {
 }
 async function dkqCopyAll() {
   if(!_dkqRows.length) return toast('コピーするものがありません','error');
-  const txt = _dkqRows.map(dkqText).join('\n');
+  // 連続入力用はカルテ番号が無い行を除く（スクリプト側が弾いて止まるため）
+  const use = dkqNeedsNo() ? _dkqRows.filter(x=>dkNoOf(x.k)) : _dkqRows;
+  const skipped = _dkqRows.length - use.length;
+  if(!use.length) return toast('カルテ番号が登録された行がありません','error');
+  const txt = use.map(dkqText).join('\n');
   const ok = await copyToClipboard(txt);
   if(!ok) return showCopyFallback(txt);
   const now = new Date().toISOString();
   let n=0;
-  _dkqRows.forEach(x=>{ if(!x.r.karteExported){ x.r.karteExported=true; x.r.karteExportedAt=now; touchKarte(x.k); n++; } });
+  use.forEach(x=>{ if(!x.r.karteExported){ x.r.karteExported=true; x.r.karteExportedAt=now; touchKarte(x.k); n++; } });
   saveToStorage(); renderDkQueue();
-  logSave('karte', `d-karte出力キューから${_dkqRows.length}件をまとめてコピー`);
-  toast(`${_dkqRows.length}行をコピーしました（${n}件を出力済みに）`,'success');
+  logSave('karte', `d-karte出力キューから${use.length}件をまとめてコピー`);
+  showReport('📋 まとめてコピーしました',
+    `${use.length}行をコピーしました（${n}件を出力済みにしました）\n`+
+    (skipped ? `カルテ番号が未登録の ${skipped}件 は除いています\n` : '')+
+    `\n【このあとの手順】\n`+
+    `① d-karte の「カルテ検索」画面を開く\n`+
+    `② 右の「🐄 カルテ連続入力」の下側のキュー欄に貼り付ける\n`+
+    `③ 「▶ 開始」を押す\n\n`+
+    `1件ずつ検索→入力→登録→閉じる、が自動で進みます。\n`+
+    `途中で止まった場合は、その画面に理由が出ます。`);
 }
 
 // ===== d-karte のカルテ番号（牛番号とは別の番号） =====
