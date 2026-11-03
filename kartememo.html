@@ -215,7 +215,19 @@ input[type=checkbox]{width:auto;margin:0}
 .rsel-fill{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:#8a4b00;cursor:pointer}
 .rsel-fill input{width:auto;margin:0}
 /* d-karte 出力キュー */
+.dn-hdr{display:grid;grid-template-columns:7em 6em 1fr 28px;gap:6px;font-size:10px;font-weight:700;color:var(--text3);padding-bottom:4px;border-bottom:1px solid var(--border)}
+.dn-row{display:grid;grid-template-columns:7em 6em 1fr 28px;gap:6px;align-items:center;padding:3px 0}
+.dn-row input{padding:5px 6px;font-size:13px;font-family:'JetBrains Mono',monospace;border:1px solid var(--border2);border-radius:4px;width:100%}
+.dn-row.dn-bad input:first-child{border-color:#c00;background:#fff4f4}
+.dn-row.dn-warn input:first-child{border-color:#e07800;background:#fff8e8}
+.dn-info{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dkq-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.dkq-find{display:flex;gap:6px;align-items:center;padding:8px 0;flex-wrap:wrap}
+.dkq-found{display:none;border:1px solid var(--border2);border-radius:6px;max-height:200px;overflow-y:auto;margin-bottom:6px}
+.dkq-f-row{display:flex;gap:8px;align-items:center;padding:7px 9px;border-bottom:1px solid var(--border);font-size:12px;cursor:pointer}
+.dkq-f-row:last-child{border-bottom:none}
+.dkq-f-row:hover{background:var(--surface)}
+.dkq-f-empty{padding:8px 9px;font-size:12px;color:var(--text3)}
 .dkq-help{font-size:11px;color:var(--text2);padding:8px 0}
 .dkq-list{max-height:52vh;overflow-y:auto;border:1px solid var(--border);border-radius:7px}
 .dkq-row{display:grid;grid-template-columns:5.6em 1fr 5.4em 92px;gap:8px;align-items:center;padding:7px 9px;border-bottom:1px solid var(--border);font-size:12px}
@@ -402,7 +414,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v17.5</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v17.6</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -522,7 +534,6 @@ input[type=checkbox]{width:auto;margin:0}
     <button class="btn btn-ghost btn-sm" id="monthFilterBtn" onclick="toggleMonthFilter()">📅 月で絞る</button>
     <span id="karte-count" style="font-size:12px;color:var(--text3);margin-left:auto"></span>
     <button class="btn btn-ghost btn-sm" onclick="openDkQueue()" title="未出力の診療内容を一覧にして、順に貼り付けていけます">📤 d-karte出力</button>
-    <button class="btn btn-ghost btn-sm" onclick="openMultiKarte()" title="いま一覧に出ているカルテの診療内容・症状をまとめて入れます">📚 まとめて編集</button>
     <button class="btn btn-primary btn-sm" onclick="openNewKarteModal()">＋ 新規カルテ</button>
   </div>
   <div id="monthFilterPanel" class="month-filter" style="display:none">
@@ -1048,6 +1059,12 @@ input[type=checkbox]{width:auto;margin:0}
       <input type="text" id="dkq-vet" placeholder="獣医師コード" title="空欄なら d-karte 側の選択をそのまま使います" style="width:7.5em;flex:none" oninput="halfInput(this,event)" onchange="dkqSaveVet(this.value)">
       <span id="dkq-count" style="font-size:12px;color:var(--text3);margin-left:auto"></span>
     </div>
+    <div class="dkq-find">
+      <input type="text" id="dkq-q" placeholder="🔍 牛番号・カルテ番号・農場名で探す" oninput="halfInput(this,event);renderDkqFind()" onkeydown="dkqFindKeydown(event)" style="flex:1;min-width:0">
+      <button class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="dkqFillAllNew()">未出力をすべて入れる</button>
+      <button class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="dkqClearSel()">キューを空に</button>
+    </div>
+    <div id="dkq-found" class="dkq-found"></div>
     <div class="dkq-help" id="dkq-help"></div>
     <div id="dkq-list" class="dkq-list"></div>
     <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
@@ -1067,47 +1084,25 @@ input[type=checkbox]{width:auto;margin:0}
       <b>牛番号 カルテ番号</b>　（例: <code>A1024　1057</code>）<br>
       同じ牛番号が複数の農場にある場合は <b>農場名 牛番号 カルテ番号</b> の3列にしてください。
     </p>
-    <textarea id="dkno-text" style="min-height:160px;font-family:'JetBrains Mono',monospace;font-size:12px" placeholder="A1024&#9;1057&#10;B205&#9;1103"></textarea>
+    <textarea id="dkno-text" style="min-height:120px;font-family:'JetBrains Mono',monospace;font-size:12px" placeholder="A1024&#9;1057&#10;B205&#9;1103"></textarea>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn btn-primary btn-sm" onclick="applyDkNoBulk()">貼り付けた内容を登録</button>
+    </div>
     <div id="dkno-result" style="font-size:12px;margin-top:8px"></div>
-    <div style="display:flex;gap:8px;margin-top:12px">
-      <button class="btn btn-primary" onclick="applyDkNoBulk()">登録する</button>
-      <button class="btn btn-ghost" onclick="closeDkNoBulk()">閉じる</button>
-    </div>
-  </div>
-</div>
 
-<!-- ===== 複数カルテまとめて編集モーダル ===== -->
-<div id="multiKarteModal" class="modal-overlay" style="display:none">
-  <div class="modal-box">
-    <div class="modal-title">📚 複数カルテまとめて編集</div>
-    <div id="mk-target" style="font-size:13px;color:var(--text2);margin-bottom:10px;font-weight:600"></div>
-
-    <label>どの診療日に入れるか</label>
-    <select id="mk-scope" onchange="mkPreview()" style="width:100%">
-      <option value="empty">その項目が空の診療日だけ</option>
-      <option value="all">すべての診療日</option>
-      <option value="last">いちばん新しい診療日だけ</option>
-    </select>
-
-    <label style="margin-top:10px">入れ方</label>
-    <select id="mk-mode" onchange="mkPreview()" style="width:100%">
-      <option value="fill">空のときだけ入れる（既にある内容は変えない）</option>
-      <option value="replace">置き換える（既にある内容を上書き）</option>
-      <option value="append">末尾に付け足す</option>
-    </select>
-
-    <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
-      <div class="bedit-note" style="margin-bottom:8px">入力した項目だけが反映されます</div>
-      <label>💊 診療内容</label>
-      <input type="text" id="mk-content" placeholder="例: iv/アンピ（↓でパターン）" style="width:100%" oninput="tplSuggestInput(this,'karte');mkPreview()" onkeydown="tplSuggestKeydown(this,'karte',event)" onfocus="tplSuggestInput(this,'karte')" onblur="tplSuggestBlur()">
-      <label style="margin-top:8px">🩺 症状</label>
-      <input type="text" id="mk-symptom" placeholder="例: 軟便（↓でパターン）" style="width:100%" oninput="tplSuggestInput(this,'symptom');mkPreview()" onkeydown="tplSuggestKeydown(this,'symptom',event)" onfocus="tplSuggestInput(this,'symptom')" onblur="tplSuggestBlur()">
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+      <label>1頭ずつ入力して登録</label>
+      <p class="input-hint" style="margin-bottom:6px">牛番号を入れると農場が出ます。カルテ番号を入れて <b>Enter</b> で次の行へ進みます。</p>
+      <div class="dn-hdr"><span>牛番号</span><span>カルテ番号</span><span>該当するカルテ</span><span></span></div>
+      <div id="dkno-rows"></div>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" onclick="dnAddRow(true)">＋ 行を追加</button>
+        <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="dnApplyRows()">入力した分を登録</button>
+      </div>
     </div>
 
-    <div id="mk-preview" style="margin-top:12px;font-size:12px;color:var(--text2);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px"></div>
-    <div style="display:flex;gap:8px;margin-top:16px">
-      <button class="btn btn-primary" onclick="mkApply()">まとめて反映</button>
-      <button class="btn btn-ghost" onclick="closeMultiKarte()">キャンセル</button>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn btn-ghost" style="margin-left:auto" onclick="closeDkNoBulk()">閉じる</button>
     </div>
   </div>
 </div>
@@ -1327,6 +1322,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadJsonbinSettings();
   loadStorageSettings();
   loadReqCount();
+  loadDkqSel();
   // 前回実測した圧縮率を引き継ぐ（最初の送信でも正しい大きさで判定するため）
   try { const zr = parseFloat(localStorage.getItem('cm_zratio'));
         if(_zSupported && zr > 0 && zr <= 1) _zRatio = zr; } catch(e){}
@@ -5009,21 +5005,92 @@ function dkbDeleteTemplate() {
 
 // ===== d-karte 出力キュー =====
 // カルテを1つずつ開いてコピーしていた流れを、1画面で済ませる
-function openDkQueue(){ renderDkQueue(); document.getElementById('dkQueueModal').style.display='flex'; }
+function openDkQueue(){ renderDkQueue(); document.getElementById('dkQueueModal').style.display='flex';
+  setTimeout(()=>{ const q=document.getElementById('dkq-q'); if(q) q.focus(); }, 50); }
 function closeDkQueue(){ document.getElementById('dkQueueModal').style.display='none'; }
 document.getElementById('dkQueueModal').addEventListener('click', e => { if(e.target===document.getElementById('dkQueueModal')) closeDkQueue(); });
-// キューに並べる行（カルテ×診療日）
+// キューに入れた行（カルテID＋診療日の位置）。端末に残す
+let DKQ_SEL = [];
+function loadDkqSel(){ try { const a=JSON.parse(localStorage.getItem('cm_dkqsel')||'[]'); if(Array.isArray(a)) DKQ_SEL=a; } catch(e){} }
+function saveDkqSel(){ try { localStorage.setItem('cm_dkqsel', JSON.stringify(DKQ_SEL)); } catch(e){} }
+function dkqHas(id,i){ return DKQ_SEL.some(x=>x.id===id && x.i===i); }
+function dkqAdd(id,i){ if(!dkqHas(id,i)) DKQ_SEL.push({id,i}); }
+// 牛番号・カルテ番号・農場名でカルテを探す
+function renderDkqFind() {
+  const el = document.getElementById('dkq-found'); if(!el) return;
+  const q = toHalfWidth((document.getElementById('dkq-q').value||'')).trim().toLowerCase();
+  if(!q) { el.innerHTML=''; el.style.display='none'; return; }
+  const hit = KARTES.filter(k=>!k.archived && (
+      toHalfWidth(k.cow||'').toLowerCase().includes(q) ||
+      dkNoOf(k).toLowerCase().includes(q) ||
+      String(k.farm||'').toLowerCase().includes(q)
+    )).slice(0,12);
+  el.style.display='';
+  if(!hit.length) { el.innerHTML='<div class="dkq-f-empty">見つかりません</div>'; return; }
+  el.innerHTML = hit.map(k=>{
+    const recs = (k.records||[]).filter(r=>(r.content||'').trim());
+    const newN = recs.filter(r=>!r.karteExported).length;
+    return `<div class="dkq-f-row" onclick="dkqAddKarte('${k.id}')">
+      <span style="font-weight:700;font-family:'JetBrains Mono',monospace;width:4.5em">${esc(dkNoOf(k)||'—')}</span>
+      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(k.farm)} / ${esc(k.cow)}</span>
+      <span style="color:var(--text3);font-size:11px;white-space:nowrap">診療${recs.length}件${newN?`・未出力${newN}`:'・未出力なし'}</span>
+      <span style="color:#1a4b8a;font-weight:700">＋入れる</span>
+    </div>`;
+  }).join('');
+}
+// Enter で先頭の候補を入れる
+function dkqFindKeydown(ev) {
+  if(ev.key !== 'Enter') return;
+  ev.preventDefault();
+  const first = document.querySelector('#dkq-found .dkq-f-row');
+  if(first) first.click();
+}
+// 1頭まとめてキューに入れる（未出力のみ。無ければ全部）
+function dkqAddKarte(id) {
+  const k = KARTES.find(x=>x.id===id); if(!k) return;
+  const recs = (k.records||[]).map((r,i)=>({r,i})).filter(x=>(x.r.content||'').trim());
+  if(!recs.length) return toast('診療内容が入っていません','error');
+  let use = recs.filter(x=>!x.r.karteExported);
+  if(!use.length) use = recs;                       // すべて出力済みなら全部入れる
+  let n=0;
+  use.forEach(x=>{ if(!dkqHas(id,x.i)) { dkqAdd(id,x.i); n++; } });
+  saveDkqSel();
+  document.getElementById('dkq-q').value=''; renderDkqFind();
+  renderDkQueue();
+  toast(n ? `【${k.farm} / ${k.cow}】${n}件を入れました` : 'すでに入っています', n?'success':'');
+  document.getElementById('dkq-q').focus();
+}
+function dkqFillAllNew() {
+  let n=0;
+  KARTES.forEach(k=>{ if(k.archived) return;
+    (k.records||[]).forEach((r,i)=>{
+      if(!(r.content||'').trim() || r.karteExported) return;
+      if(!dkqHas(k.id,i)) { dkqAdd(k.id,i); n++; }
+    });
+  });
+  saveDkqSel(); renderDkQueue();
+  toast(n ? `未出力 ${n}件を入れました` : '未出力はありません', n?'success':'');
+}
+function dkqClearSel() {
+  if(!DKQ_SEL.length) return toast('キューは空です');
+  if(!confirm(`キューの ${DKQ_SEL.length}件 を空にしますか？（カルテは変わりません）`)) return;
+  DKQ_SEL = []; saveDkqSel(); renderDkQueue();
+}
+function dkqRemove(n) {
+  const x = _dkqRows[n]; if(!x) return;
+  DKQ_SEL = DKQ_SEL.filter(y=>!(y.id===x.k.id && y.i===x.i));
+  saveDkqSel(); renderDkQueue();
+}
+// キューに並べる行
 function dkqRows() {
   const onlyNew = document.getElementById('dkq-onlynew').checked;
   const sort = document.getElementById('dkq-sort').value;
   const out = [];
-  KARTES.forEach(k=>{
-    if(k.archived) return;
-    (k.records||[]).forEach((r,i)=>{
-      if(!(r.content||'').trim()) return;          // 診療内容が無い行は出さない
-      if(onlyNew && r.karteExported) return;
-      out.push({k, r, i});
-    });
+  DKQ_SEL.forEach(sel=>{
+    const k = KARTES.find(x=>x.id===sel.id); if(!k) return;
+    const r = (k.records||[])[sel.i]; if(!r || !(r.content||'').trim()) return;
+    if(onlyNew && r.karteExported) return;
+    out.push({k, r, i:sel.i});
   });
   const no = x => dkNoOf(x.k);
   out.sort((a,b)=>{
@@ -5066,7 +5133,12 @@ function renderDkQueue() {
     : `コピーを押すと<b>出力済みになり、次の行が目印になります</b>。番号の欄はその場で入力・修正できます。`)
     + (noNo ? `<br><span style="color:#c00;font-weight:700">カルテ番号が未登録: ${noNo}件</span>`
         + (dkqNeedsNo() ? `（連続入力には番号が必要なため、まとめてコピーからは除きます）` : `（番号の欄に入れると次回から並び順に入ります）`) : '');
-  if(!_dkqRows.length) { el.innerHTML = '<div class="tpl-empty">出力する診療内容がありません</div>'; return; }
+  if(!_dkqRows.length) {
+    el.innerHTML = DKQ_SEL.length
+      ? '<div class="tpl-empty">キューの行はすべて出力済みです（「未出力のみ」のチェックを外すと表示されます）</div>'
+      : '<div class="tpl-empty">上の欄で牛番号・カルテ番号を探して入れるか、<br>「未出力をすべて入れる」を押してください</div>';
+    return;
+  }
   const nextIdx = _dkqRows.findIndex(x=>!x.r.karteExported);
   el.innerHTML = _dkqRows.map((x,n)=>{
     const no = dkNoOf(x.k);
@@ -5083,6 +5155,7 @@ function renderDkQueue() {
       <span style="display:flex;gap:4px">
         <button class="btn btn-primary btn-xs" style="flex:1" onclick="dkqCopy(${n})">📋</button>
         <button class="btn btn-ghost btn-xs" onclick="dkqToggleDone(${n})" title="${x.r.karteExported?'未出力に戻す':'出力済みにする'}">${x.r.karteExported?'↺':'✓'}</button>
+        <button class="tpl-del" onclick="dkqRemove(${n})" title="キューから外す">×</button>
       </span>
     </div>`;
   }).join('');
@@ -5172,7 +5245,68 @@ function setDkNo(karteId, val) {
 function openDkNoBulk() {
   document.getElementById('dkno-text').value = '';
   document.getElementById('dkno-result').innerHTML = '';
+  _dnRows = [{cow:'',no:''},{cow:'',no:''},{cow:'',no:''}];
+  renderDnRows();
   document.getElementById('dkNoBulkModal').style.display = 'flex';
+}
+// 1頭ずつ入力して登録する表
+let _dnRows = [];
+function _dnMatch(cow) {
+  const q = toHalfWidth(String(cow||'')).trim().toLowerCase();
+  if(!q) return [];
+  return KARTES.filter(k=>toHalfWidth(k.cow||'').toLowerCase()===q);
+}
+function renderDnRows() {
+  const el = document.getElementById('dkno-rows'); if(!el) return;
+  el.innerHTML = _dnRows.map((r,i)=>{
+    const m = _dnMatch(r.cow);
+    let info, cls='';
+    if(!String(r.cow||'').trim()) { info='<span style="color:var(--text3)">—</span>'; }
+    else if(!m.length) { info='<span style="color:#c00">見つかりません</span>'; cls='dn-bad'; }
+    else if(m.length>1) { info='<span style="color:#8a4b00">'+m.map(k=>esc(k.farm)).join('／')+'（複数）</span>'; cls='dn-warn'; }
+    else { info='<span style="color:#1a8a4a">'+esc(m[0].farm)+(dkNoOf(m[0])?'（現在 '+esc(dkNoOf(m[0]))+'）':'')+'</span>'; }
+    return `<div class="dn-row ${cls}">
+      <input type="text" value="${esc(r.cow)}" placeholder="牛番号" oninput="halfInput(this,event);dnSet(${i},'cow',this.value)" onkeydown="dnKey(${i},0,event)">
+      <input type="text" inputmode="numeric" value="${esc(r.no)}" placeholder="番号" oninput="halfInput(this,event);dnSet(${i},'no',this.value)" onkeydown="dnKey(${i},1,event)">
+      <span class="dn-info">${info}</span>
+      <button class="tpl-del" onclick="dnDel(${i})" title="この行を消す">×</button>
+    </div>`;
+  }).join('');
+}
+function dnSet(i, f, v) { if(_dnRows[i]) { _dnRows[i][f] = v; if(f==='cow') renderDnRows(); } }
+function dnDel(i) { _dnRows.splice(i,1); if(!_dnRows.length) _dnRows.push({cow:'',no:''}); renderDnRows(); }
+function dnAddRow(focus) {
+  _dnRows.push({cow:'',no:''});
+  renderDnRows();
+  if(focus) { const rows=document.querySelectorAll('#dkno-rows .dn-row input'); const el=rows[(_dnRows.length-1)*2]; if(el) el.focus(); }
+}
+// 牛番号でEnter→カルテ番号へ。カルテ番号でEnter→次の行（無ければ足す）
+function dnKey(i, col, event) {
+  if(event.key !== 'Enter') return;
+  event.preventDefault();
+  const inputs = document.querySelectorAll('#dkno-rows .dn-row input');
+  if(col === 0) { const n = inputs[i*2+1]; if(n) n.focus(); return; }
+  if(i === _dnRows.length-1) dnAddRow(true);
+  else { const n = inputs[(i+1)*2]; if(n) { n.focus(); n.select(); } }
+}
+function dnApplyRows() {
+  let done=0; const miss=[], amb=[];
+  _dnRows.forEach(r=>{
+    const cow = String(r.cow||'').trim(), no = toHalfWidth(String(r.no||'')).trim();
+    if(!cow || !no) return;
+    const m = _dnMatch(cow);
+    if(!m.length) { miss.push(cow); return; }
+    if(m.length>1) { amb.push(cow); return; }
+    if(dkNoOf(m[0]) !== no) { m[0].dkNo = no; touchKarte(m[0]); done++; }
+  });
+  if(done) { saveToStorage(); logSave('karte', `カルテ番号を${done}件登録（1頭ずつ入力）`); renderKarteList(); }
+  const el = document.getElementById('dkno-result');
+  el.innerHTML = `<div style="font-weight:700">登録: ${done}件</div>`
+    + (amb.length ? `<div style="color:#8a4b00">複数の農場にある牛番号のため登録しませんでした: ${amb.map(esc).join(', ')}<br><span style="font-size:11px">上の貼り付け欄で「農場名 牛番号 カルテ番号」の3列で登録してください。</span></div>` : '')
+    + (miss.length ? `<div style="color:#c00">見つからない牛番号: ${miss.map(esc).join(', ')}</div>` : '');
+  if(done) { _dnRows = _dnRows.filter(r=>!String(r.no||'').trim() || !_dnMatch(r.cow).length);
+             if(!_dnRows.length) _dnRows=[{cow:'',no:''}];
+             renderDnRows(); toast(`${done}件のカルテ番号を登録しました`,'success'); }
 }
 function closeDkNoBulk(){ document.getElementById('dkNoBulkModal').style.display='none'; }
 function applyDkNoBulk() {
@@ -5328,104 +5462,6 @@ document.addEventListener('keydown', e => {
   if(RSEL.karteId!==activeKarteId || !RSEL.set.size) rselToggleAll(activeKarteId);
   if(RSEL.set.size) rselEdit();
 });
-
-// ===== 複数カルテまとめて編集 =====
-// 1つのカルテ内の「複数日まとめて編集」とは別に、一覧に出ている
-// 複数のカルテに対して診療内容・症状をまとめて入れる
-function openMultiKarte() {
-  const list = filteredKartes();
-  if(!list.length) return toast('対象のカルテがありません','error');
-  document.getElementById('mk-target').textContent =
-    `いま一覧に出ている ${list.length}件 のカルテが対象です（絞り込みを変えると対象も変わります）`;
-  ['mk-content','mk-symptom'].forEach(id=>document.getElementById(id).value='');
-
-  document.getElementById('mk-scope').value='empty';
-  document.getElementById('mk-mode').value='fill';
-  mkPreview();
-  document.getElementById('multiKarteModal').style.display='flex';
-}
-function closeMultiKarte(){ document.getElementById('multiKarteModal').style.display='none'; }
-document.getElementById('multiKarteModal').addEventListener('click', e => { if(e.target===document.getElementById('multiKarteModal')) closeMultiKarte(); });
-// 対象の診療記録を選ぶ
-function _mkTargets(k, field) {
-  const scope = document.getElementById('mk-scope').value;
-  const recs = k.records||[];
-  if(scope==='last') {
-    // 日付がいちばん新しい記録（日付なしは対象外）
-    let best=-1, bd='';
-    recs.forEach((r,i)=>{ const d=r.date||''; if(d && d>=bd){ bd=d; best=i; } });
-    return best>=0 ? [best] : [];
-  }
-  if(scope==='empty') return recs.map((r,i)=>i).filter(i=>!String(recs[i][field]||'').trim());
-  return recs.map((r,i)=>i);
-}
-// 何件に反映されるかを数える（実際には書き換えない）
-function _mkCount() {
-  const mode = document.getElementById('mk-mode').value;
-  // 入力がある項目だけを対象にする（項目を選ぶ工程は無くした）
-  const fields = [];
-  const cv = document.getElementById('mk-content').value.trim();
-  const sv = document.getElementById('mk-symptom').value.trim();
-  if(cv) fields.push(['content', cv]);
-  if(sv) fields.push(['symptom', sv]);
-  const list = filteredKartes();
-  let kartes=0, recs=0, skipped=0;
-  list.forEach(k=>{
-    let touched=0;
-    fields.forEach(([f,v])=>{
-      if(!v) return;
-      _mkTargets(k,f).forEach(i=>{
-        const cur = String((k.records[i]||{})[f]||'').trim();
-        if(mode==='fill' && cur) { skipped++; return; }      // 既にある内容は変えない
-        if(mode==='replace' && cur===v) return;              // 変化なし
-        touched++;
-      });
-    });
-    if(touched){ kartes++; recs+=touched; }
-  });
-  return {kartes, recs, skipped, fields, mode};
-}
-function mkPreview() {
-  const el = document.getElementById('mk-preview'); if(!el) return;
-  const {kartes, recs, skipped, fields, mode} = _mkCount();
-  if(!fields.length) { el.innerHTML='<span style="color:var(--text3)">診療内容か症状を入力してください</span>'; return; }
-  if(!recs) { el.innerHTML='<span style="color:#c00">反映される診療日がありません（条件を見直してください）</span>'; return; }
-  const names = fields.filter(([,v])=>v).map(([f])=>f==='content'?'診療内容':'症状').join('・');
-  el.innerHTML = `<b>${kartes}件のカルテ・${recs}件の診療日</b>の${names}を${mode==='replace'?'置き換え':mode==='append'?'付け足し':'入力'}します`
-    + (skipped?`<br><span style="color:var(--text3)">既に内容がある ${skipped}件 は変えません</span>`:'');
-}
-function mkApply() {
-  const {kartes, recs, fields, mode} = _mkCount();
-  if(!recs) return toast('反映される診療日がありません','error');
-  const names = fields.filter(([,v])=>v).map(([f])=>f==='content'?'診療内容':'症状').join('・');
-  if(!confirm(`${kartes}件のカルテ・${recs}件の診療日の${names}を${mode==='replace'?'置き換え':mode==='append'?'付け足し':'入力'}します。\n\n元に戻せないので、先に 💾 JSONバックアップを取っておくと安心です。\n\nよろしいですか？`)) return;
-  const list = filteredKartes();
-  let doneK=0, doneR=0;
-  list.forEach(k=>{
-    let touched=0;
-    fields.forEach(([f,v])=>{
-      if(!v) return;
-      _mkTargets(k,f).forEach(i=>{
-        const r = k.records[i]; if(!r) return;
-        const cur = String(r[f]||'').trim();
-        if(mode==='fill' && cur) return;
-        if(mode==='replace' && cur===v) return;
-        r[f] = (mode==='append' && cur) ? (cur+'/'+v) : v;
-        touched++;
-      });
-    });
-    if(touched){ touchKarte(k); doneK++; doneR+=touched; }
-  });
-  saveToStorage();
-  logSave('karte', `${doneK}件のカルテ・${doneR}件の診療日の${names}をまとめて${mode==='replace'?'置き換え':mode==='append'?'付け足し':'入力'}`);
-  closeMultiKarte();
-  renderKarteList();
-  showReport('✅ まとめて反映しました',
-    `対象: ${doneK}件のカルテ ／ ${doneR}件の診療日\n`+
-    `項目: ${names}\n`+
-    `入れ方: ${mode==='replace'?'置き換え':mode==='append'?'末尾に付け足し':'空のときだけ入力'}\n\n`+
-    `内容が思ったとおりか、カルテ一覧で確認してください。`);
-}
 
 // ===== 複数日まとめて編集 =====
 let _beditKarteId = null;
