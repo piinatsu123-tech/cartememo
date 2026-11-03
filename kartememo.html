@@ -388,7 +388,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v17.2</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v17.3</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -2230,6 +2230,7 @@ function copyDiagnostics() {
     `保存先: ${usingGitHub()?'GitHub（非公開Gist '+ghGistId()+'）':(STORAGE==='github'?'GitHub（設定が未完了）':'jsonbin.io')}`,
     `保存先の読み込み: ${SYNC_LOADED_TARGET===syncTargetKey()?'済み':'⚠️ 未（送信は止まります）'} / 前回読み込み時のカルテ ${CLOUD_SEEN.kartes}件`,
     `保存先の最終更新: ${CLOUD_SAVED_AT ? new Date(CLOUD_SAVED_AT).toLocaleString('ja-JP') : '(不明)'}　※両端末でここが大きく違う場合、別の保存先を見ています`,
+    `最後に取りに行った時刻: ${_lastPull ? new Date(_lastPull).toLocaleTimeString('ja-JP') : '(まだ)'}${_pullBlocked()?' / 今は見送り中: '+_pullBlocked():''}`,
     `読み込みが失敗した理由: ${_loadErrMsg || '(なし)'}`,
     `バージョンの食い違い: ${CLOUD_APP_NOTE || '(なし)'}`,
     `診療内容: ${localRecCount()}件`,
@@ -3550,6 +3551,7 @@ async function cloudAutoLoad() {
     SYNC_LOADED_TARGET = syncTargetKey();   // この保存先は読んだ
     _loadErrMsg = '';
     CLOUD_SAVED_AT = data.savedAt || '';
+    _lastPull = Date.now();
     // 保存した端末のバージョンを見比べる
     const cv = _verNum(data.app), mv = _verNum(appVer());
     if(cv && mv && cv < mv) {
@@ -3718,13 +3720,59 @@ async function cloudAutoLoad() {
   }
 }
 
-// 同期表示をタップしたときの再送信。結果を必ず知らせる
+// ===== 相手が送ったものを自動で取りに行く =====
+// これまで読み込みは起動時だけだったため、画面を開いたままだと
+// 相手が送ったメモがいつまでも出てこなかった
+let _lastPull = 0;
+const PULL_EVERY = 120000;          // 2分ごとに見に行く
+function _pullBlocked() {
+  if(document.hidden) return '画面が裏にある';
+  if(_syncState==='saving' || _syncState==='loading') return '通信中';
+  if(PENDING_CHANGES > 0) return '送るものがある';      // 先に送る
+  if(CLOUD_READ_BLOCKED) return '読み込みを止めている';
+  const el = document.activeElement;
+  if(el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName||'')) return '入力中';
+  // 画面（モーダル）を開いている間は描き直さない
+  const open = [...document.querySelectorAll('.modal-overlay')].some(m=>m.style.display==='flex');
+  if(open) return '別の画面を開いている';
+  return '';
+}
+async function autoPull(force) {
+  if(!usingGitHub() && !((localStorage.getItem('cm_jbk')||'').trim() && (localStorage.getItem('cm_jbid')||'').trim())) return;
+  if(!force) {
+    if(_pullBlocked()) return;
+    if(Date.now() - _lastPull < PULL_EVERY) return;
+  }
+  // 成否に関わらず間隔を守る（失敗しても30秒ごとに繰り返さないように）
+  _lastPull = Date.now();
+  const before = memos.length, beforeK = KARTES.length;
+  await cloudAutoLoad();
+  const dm = memos.length - before, dk = KARTES.length - beforeK;
+  if(dm > 0 || dk > 0) {
+    const parts = [];
+    if(dm > 0) parts.push(`メモ${dm}件`);
+    if(dk > 0) parts.push(`カルテ${dk}件`);
+    toast(`${parts.join('・')}を受け取りました`,'success');
+  }
+}
+setInterval(()=>{ autoPull(false); }, 30000);
+// 画面に戻ってきたらすぐ見に行く
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) autoPull(false); });
+window.addEventListener('focus', ()=>{ autoPull(false); });
+
+// 同期表示をタップしたとき。送るものがあれば送り、無ければ最新を取りに行く
 async function pillSyncNow() {
-  if(_syncState==='saving' || _syncState==='loading') return toast('送信中です…');
-  toast('再送信します…');
-  const ok = await cloudSyncNow();
-  if(ok) toast('同期しました','success');
-  else if(_syncErrMsg) toast('同期に失敗しました: '+_syncErrMsg, 'error');
+  if(_syncState==='saving' || _syncState==='loading') return toast('通信中です…');
+  if(PENDING_CHANGES > 0 || _syncErrMsg) {
+    toast('送信します…');
+    const ok = await cloudSyncNow();
+    if(ok) toast('同期しました','success');
+    else if(_syncErrMsg) toast('同期に失敗しました: '+_syncErrMsg, 'error');
+    return;
+  }
+  toast('最新を取りに行きます…');
+  await autoPull(true);
+  if(!_syncErrMsg) toast('最新の状態です','success');
 }
 let _syncState = 'idle';
 function setSyncStatus(state) {
@@ -3753,7 +3801,7 @@ function updateSyncPill() {
   // 以前は失敗中しか反応せず、送信中や未保存のときは押しても何も起きなかった
   pill.style.cursor = 'pointer';
   pill.onclick = pillSyncNow;
-  pill.title = 'タップで再送信';
+  pill.title = PENDING_CHANGES>0 ? 'タップで今すぐ送信' : 'タップで最新を取得（2分ごとに自動で確認しています）';
   const hhmm = LAST_SYNC_AT ? new Date(LAST_SYNC_AT).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}) : '';
   if(_syncState==='loading')     { pill.className='hdr-pill'; dot.style.background='#999'; st.textContent='読込中…'; }
   else if(_syncState==='saving') { pill.className='hdr-pill'; dot.style.background='#999'; st.textContent='保存中…'; }
