@@ -388,7 +388,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v17.1</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v17.2</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -677,6 +677,7 @@ input[type=checkbox]{width:auto;margin:0}
       <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
         <button class="btn btn-primary btn-sm" onclick="cloudSave()">↑ クラウドに保存</button>
         <button class="btn btn-ghost btn-sm" onclick="cloudLoad()">↓ クラウドから読み込む</button>
+        <button class="btn btn-ghost btn-sm" onclick="checkMemoSync()">🔍 メモの同期を確認</button>
       </div>
       <div id="cloudInfo" style="font-size:11px;color:var(--text3);margin-top:8px"></div>
       <details style="margin-top:10px;border:1px solid var(--border);border-radius:6px">
@@ -704,6 +705,7 @@ input[type=checkbox]{width:auto;margin:0}
         <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
           <button class="btn btn-ghost btn-sm" onclick="cloudSyncNow()">↻ 今すぐ再送信</button>
           <button class="btn btn-ghost btn-sm" onclick="copyDiagnostics()">📋 エラー内容をコピー</button>
+          <button class="btn btn-ghost btn-sm" onclick="checkMemoSync()">🔍 メモの同期を確認</button>
           <button class="btn btn-ghost btn-sm" onclick="allowShrinkOnce()" title="この端末の内容が正しい場合だけ使ってください">⚠️ カルテが減る送信を許可</button>
           <button class="btn btn-ghost btn-sm" onclick="allowForcePush()" title="保存先を読めないまま、この端末の内容で上書きします">⚠️ この端末の内容で上書きする</button>
           <a href="https://github.com/settings/tokens/new?scopes=gist&description=KarteMemo" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" style="text-decoration:none" title="期限切れのときはここから作り直します">🔑 トークンを作り直す</a>
@@ -2134,6 +2136,73 @@ function applyQtyFromText(memoId) {
   logSave('memo', `数量を本文から補正（${m.ownerName||'農場名なし'} ${fix.fixed}件）`);
   renderMemoQueue(); renderResultsList();
   toast(`${fix.fixed}件の数量を直しました`,'success');
+}
+// メモが同期されない原因をその場で突き止める。
+// 手元・送信データ・保存先の3つを突き合わせ、どこで落ちているかを示す
+async function checkMemoSync() {
+  toast('確認中…');
+  const L = [];
+  const fmtT = v => v ? new Date(v).toLocaleString('ja-JP') : '(不明)';
+  L.push(`日時: ${new Date().toLocaleString('ja-JP')}`);
+  L.push(`バージョン: ${appVer()}　保存先: ${usingGitHub()?'GitHub '+ghGistId():(STORAGE==='github'?'GitHub（設定未完了）':'jsonbin')}`);
+  L.push('');
+  // ① 手元のメモ
+  L.push(`【① この端末のメモ】${memos.length}件`);
+  const recent = [...memos].sort((a,b)=>_memoTime(b)-_memoTime(a)).slice(0,5);
+  recent.forEach(m=>L.push(`  ${m.time||'(時刻なし)'}  ${String(m.text||'').slice(0,24)}  [id ${m.id}]`));
+  L.push('');
+  // ② 送信データに載っているか
+  let p = null;
+  try { p = buildCloudPayload(); } catch(e) { L.push(`【② 送信データ】作れません: ${e.message}`); }
+  if(p) {
+    const ids = new Set((p.memos||[]).map(m=>m.id));
+    L.push(`【② 送信データに載るメモ】${(p.memos||[]).length}/${memos.length}件`);
+    const dropped = memos.filter(m=>!ids.has(m.id));
+    if(dropped.length) {
+      L.push(`  ⚠️ 載っていないメモ ${dropped.length}件:`);
+      dropped.slice(0,10).forEach(m=>L.push(`    ${String(m.text||'').slice(0,20)} [id ${m.id}]${isDeleted('memos',m.id)?' ← 削除記録あり':''}`));
+    } else L.push('  すべて載っています');
+    L.push('');
+  }
+  // ③ 保存先に実際に入っているか
+  try {
+    let rec;
+    if(usingGitHub()) rec = JSON.parse((await ghGet()).text);
+    else {
+      const key=(localStorage.getItem('cm_jbk')||'').trim(), binId=(localStorage.getItem('cm_jbid')||'').trim();
+      countRequest();
+      const resp = await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`, {headers:{'X-Master-Key':key}});
+      const r = await resp.json();
+      if(!resp.ok) throw new Error(r.message||'HTTP '+resp.status);
+      rec = r.record;
+    }
+    const d = await _unwireRecord(rec);
+    const cl = Array.isArray(d.memos) ? d.memos : [];
+    L.push(`【③ 保存先に入っているメモ】${cl.length}件`);
+    L.push(`  最終更新: ${fmtT(d.savedAt)}　保存した端末: ${d.app||'(不明)'}`);
+    const clIds = new Set(cl.map(m=>m.id));
+    const mine = memos.filter(m=>!clIds.has(m.id));
+    const theirs = cl.filter(m=>!memos.some(x=>x.id===m.id));
+    L.push('');
+    L.push(`  この端末にしか無いメモ: ${mine.length}件${mine.length?'（まだ送れていません）':''}`);
+    mine.slice(0,10).forEach(m=>L.push(`    ${String(m.text||'').slice(0,20)} [id ${m.id}]`));
+    L.push(`  保存先にしか無いメモ: ${theirs.length}件${theirs.length?'（読み込めば入ります）':''}`);
+    theirs.slice(0,10).forEach(m=>L.push(`    ${String(m.text||'').slice(0,20)} [id ${m.id}]${isDeleted('memos',m.id)?' ← この端末に削除記録あり':''}`));
+    L.push('');
+    // 判定
+    const tomb = theirs.filter(m=>isDeleted('memos', m.id)).length;
+    if(!p) L.push('→ 送信データが作れていません。エラー内容をお知らせください。');
+    else if((p.memos||[]).length < memos.length) L.push('→ 送信データからメモが落ちています。設定の絞り込みが原因です。');
+    else if(mine.length && _syncErrMsg) L.push(`→ 送信が止まっています。原因: ${_syncErrMsg}`);
+    else if(mine.length) L.push('→ まだ送信されていません。右上の同期表示をタップしてから、もう一度この確認を押してください。');
+    else if(tomb) L.push(`→ 保存先のメモ${tomb}件に、この端末の削除記録が当たっています。そのため読み込んでも出てきません。`);
+    else if(theirs.length) L.push('→ 保存先には入っています。「↓ クラウドから読み込む」を押してください。');
+    else L.push('→ 手元と保存先は一致しています。もう一方の端末でもこの確認を押してください。');
+  } catch(e) {
+    L.push(`【③ 保存先】読めません: ${e.message}`);
+    L.push('→ 読み込めないため送信も止まります。トークンとGist IDを確認してください。');
+  }
+  showReport('🔍 メモの同期を確認', L.join('\n'));
 }
 // 問い合わせ用に状況をまとめてコピーできるようにする
 function copyDiagnostics() {
