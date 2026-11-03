@@ -414,7 +414,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v17.6</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v17.7</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -1065,6 +1065,13 @@ input[type=checkbox]{width:auto;margin:0}
       <button class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="dkqClearSel()">キューを空に</button>
     </div>
     <div id="dkq-found" class="dkq-found"></div>
+    <div class="dkq-find" style="padding-top:0">
+      <span style="font-size:12px;font-weight:600;color:var(--text2);flex-shrink:0">カルテ番号</span>
+      <input type="text" inputmode="numeric" id="dkq-from" placeholder="1" style="width:5.5em;flex:none;text-align:right" oninput="halfInput(this,event)" onkeydown="if(event.key==='Enter')document.getElementById('dkq-to').focus()">
+      <span style="color:var(--text3)">〜</span>
+      <input type="text" inputmode="numeric" id="dkq-to" placeholder="10" style="width:5.5em;flex:none;text-align:right" oninput="halfInput(this,event)" onkeydown="if(event.key==='Enter')dkqAddRange()">
+      <button class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="dkqAddRange()">この範囲をまとめて入れる</button>
+    </div>
     <div class="dkq-help" id="dkq-help"></div>
     <div id="dkq-list" class="dkq-list"></div>
     <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
@@ -5059,6 +5066,60 @@ function dkqAddKarte(id) {
   renderDkQueue();
   toast(n ? `【${k.farm} / ${k.cow}】${n}件を入れました` : 'すでに入っています', n?'success':'');
   document.getElementById('dkq-q').focus();
+}
+// カルテ番号の範囲（1番〜10番 など）をまとめてキューに入れる
+function dkqAddRange() {
+  const num = id => { const v = toHalfWidth((document.getElementById(id).value||'')).trim();
+                      return /^\d+$/.test(v) ? parseInt(v,10) : null; };
+  let a = num('dkq-from'), b = num('dkq-to');
+  if(a==null && b==null) return toast('カルテ番号の範囲を入れてください','error');
+  if(a==null) a = b; if(b==null) b = a;
+  if(a > b) { const t=a; a=b; b=t; }                      // 逆に入れても拾う
+  // 範囲に入るカルテを集める（番号が数字のものだけ）
+  const hit = new Map();                                   // 番号 → カルテの配列
+  KARTES.forEach(k=>{
+    if(k.archived) return;
+    const no = dkNoOf(k);
+    if(!/^\d+$/.test(no)) return;
+    const n = parseInt(no,10);
+    if(n < a || n > b) return;
+    if(!hit.has(n)) hit.set(n, []);
+    hit.get(n).push(k);
+  });
+  let addedRecs = 0, addedKartes = 0, noContent = [], allDone = [];
+  [...hit.keys()].sort((x,y)=>x-y).forEach(n=>{
+    hit.get(n).forEach(k=>{
+      const recs = (k.records||[]).map((r,i)=>({r,i})).filter(x=>(x.r.content||'').trim());
+      if(!recs.length) { noContent.push(n+'（'+k.farm+'/'+k.cow+'）'); return; }
+      // 範囲でまとめて入れるときは未出力だけにする。
+      // 出力済みを混ぜると、入れた件数と画面に出る件数が食い違う
+      const use = recs.filter(x=>!x.r.karteExported);
+      if(!use.length) { allDone.push(n+'（'+k.farm+'/'+k.cow+'）'); return; }
+      let n2 = 0;
+      use.forEach(x=>{ if(!dkqHas(k.id,x.i)) { dkqAdd(k.id,x.i); n2++; } });
+      if(n2) { addedRecs += n2; addedKartes++; }
+    });
+  });
+  saveDkqSel(); renderDkQueue();
+  // 範囲のうち、この端末にカルテ番号が無い番号を示す（登録漏れに気づけるように）
+  const missing = [];
+  for(let n=a; n<=b; n++) if(!hit.has(n)) missing.push(n);
+  const lines = [
+    `カルテ番号 ${a} 〜 ${b} の範囲`,
+    ``,
+    `キューに入れた: ${addedKartes}頭 ／ ${addedRecs}件の診療日`,
+  ];
+  if(noContent.length) lines.push(`診療内容が空のため入れなかった: ${noContent.join('、')}`);
+  if(allDone.length) lines.push(`すでに出力済みのため入れなかった: ${allDone.join('、')}`);
+  if(missing.length) {
+    lines.push('');
+    lines.push(`この範囲でカルテ番号が見つからない番号: ${missing.length}件`);
+    lines.push(`  ${missing.slice(0,60).join(', ')}${missing.length>60?' …':''}`);
+    lines.push(`（KarteMemo側に番号が登録されていないか、その番号のカルテがありません。`);
+    lines.push(`　「🔢 カルテ番号をまとめて登録」で登録できます）`);
+  }
+  if(!addedRecs && !missing.length && !noContent.length && !allDone.length) lines.push('', 'すでにすべてキューに入っています。');
+  showReport('📥 範囲でまとめて入れました', lines.join('\n'));
 }
 function dkqFillAllNew() {
   let n=0;
