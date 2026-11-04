@@ -342,6 +342,38 @@ input[type=checkbox]{width:auto;margin:0}
 .bedit-row .bd-date{font-family:'JetBrains Mono',monospace;font-size:15px;color:#111;font-weight:600}
 .bedit-empty{font-size:13px;color:var(--text3);text-align:center;padding:14px}
 .bedit-help{font-size:14px;font-weight:700;color:#111;margin-bottom:10px}
+/* ===== 診療内容をまとめて訂正 ===== */
+#fixContentModal .modal-box{width:580px}
+.fc-sec{margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.fc-sec:last-of-type{border-bottom:none}
+.fc-sec>label{display:block;font-size:13px;font-weight:700;color:#111;margin-bottom:6px}
+.fc-scope,.fc-ops{display:flex;gap:6px;flex-wrap:wrap}
+.fc-tab{border:1px solid var(--border);background:#fff;border-radius:6px;padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2)}
+.fc-tab.on{background:#111;border-color:#111;color:#fff}
+.fc-tab:disabled{opacity:.4;cursor:not-allowed}
+.fc-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px}
+.fc-lbl{font-size:12px;color:var(--text2);font-weight:600;width:4.5em;flex-shrink:0}
+.fc-info{font-size:12px;margin-top:8px;font-weight:600;color:#1a4b8a}
+.fc-inv{max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;background:#fff}
+.fc-iv{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--border);font-size:13px;flex-wrap:wrap}
+.fc-iv:last-child{border-bottom:none}
+.fc-iv-name{font-weight:700;cursor:pointer;color:#1a4b8a;min-width:7em}
+.fc-iv-name:hover{text-decoration:underline}
+.fc-q{border:1px solid var(--border);background:var(--surface);border-radius:12px;padding:2px 9px;font-size:12px;cursor:pointer;font-family:'JetBrains Mono',monospace}
+.fc-q:hover{border-color:#1a4b8a;color:#1a4b8a}
+.fc-q.on{background:#111;border-color:#111;color:#fff}
+.fc-empty{font-size:13px;color:var(--text3);text-align:center;padding:14px}
+.fc-pick{background:#eef4fb;border:1px solid #6fa3ef;border-radius:6px;padding:8px 10px;font-size:13px;margin-top:6px}
+.fc-chk{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text2);margin-top:8px;cursor:pointer}
+.fc-chk input{width:17px;height:17px;accent-color:#111;margin:0;flex-shrink:0}
+.fc-prev{max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;background:#fff;margin-top:6px}
+.fc-pv{padding:8px 10px;border-bottom:1px solid var(--border);font-size:12px}
+.fc-pv:last-child{border-bottom:none}
+.fc-pv-hd{font-weight:700;color:var(--text2);margin-bottom:3px}
+.fc-pv-b{font-family:'JetBrains Mono',monospace;color:#999;text-decoration:line-through;word-break:break-all}
+.fc-pv-a{font-family:'JetBrains Mono',monospace;color:#0a7a3a;font-weight:700;word-break:break-all}
+.fc-note{font-size:12px;color:var(--text3);margin-top:6px;line-height:1.5}
+.fc-warn{background:#fff3cd;border:1px solid #e07800;color:#8a4b00;border-radius:6px;padding:8px 10px;font-size:12px;font-weight:600;margin-top:8px}
 /* 混同しやすい注意品目の強調 */
 .watch-hit{background:#fff3cd!important;border-color:#e07800!important;color:#8a4b00!important;font-weight:700!important}
 .watch-mark{color:#e07800;font-weight:800;margin-left:3px}
@@ -414,7 +446,7 @@ input[type=checkbox]{width:auto;margin:0}
 
 <header>
   <div class="logo">KarteMemo</div>
-  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v17.8</span>
+  <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:4px;align-self:flex-end;padding-bottom:6px">v17.9</span>
   <div class="spacer"></div>
   <div class="hdr-pill" id="syncPill" style="display:none"><div class="dot" id="syncDot"></div><span id="syncStatus"></span></div>
   <button class="hdr-backup" id="backupBtn" onclick="exportData()" title="JSONバックアップをダウンロード">💾 <span id="backupLabel">バックアップ</span></button>
@@ -533,6 +565,7 @@ input[type=checkbox]{width:auto;margin:0}
     </select>
     <button class="btn btn-ghost btn-sm" id="monthFilterBtn" onclick="toggleMonthFilter()">📅 月で絞る</button>
     <span id="karte-count" style="font-size:12px;color:var(--text3);margin-left:auto"></span>
+    <button class="btn btn-ghost btn-sm" onclick="openFixContent(null)" title="薬の量の変更・品目の入れ替え・削除・追加を、複数の診療日やカルテまとめて直せます">🔧 診療内容を訂正</button>
     <button class="btn btn-ghost btn-sm" onclick="openDkQueue()" title="未出力の診療内容を一覧にして、順に貼り付けていけます">📤 d-karte出力</button>
     <button class="btn btn-primary btn-sm" onclick="openNewKarteModal()">＋ 新規カルテ</button>
   </div>
@@ -1101,6 +1134,71 @@ input[type=checkbox]{width:auto;margin:0}
     <div id="bp-result" style="font-size:12px;margin-top:10px"></div>
     <div style="display:flex;gap:8px;margin-top:12px">
       <button class="btn btn-ghost" style="margin-left:auto" onclick="closeBpBulk()">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 診療内容をまとめて訂正 ===== -->
+<div id="fixContentModal" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <div class="modal-title">🔧 診療内容をまとめて訂正</div>
+    <p class="input-hint" style="margin-bottom:10px">
+      あとで見つかった入力ミスを、複数の診療日・複数のカルテまとめて直せます。<br>
+      薬の量を変える／品目を入れ替える／削除する／追加する ができます。<b>直す前に必ず内容を確認できます。</b>
+    </p>
+
+    <div class="fc-sec">
+      <label>① どこを直すか</label>
+      <div class="fc-scope">
+        <button type="button" class="fc-tab" id="fc-sc-sel"   onclick="fcSetScope('sel')">選択中の診療日</button>
+        <button type="button" class="fc-tab" id="fc-sc-karte" onclick="fcSetScope('karte')">このカルテ全部</button>
+        <button type="button" class="fc-tab" id="fc-sc-many"  onclick="fcSetScope('many')">複数カルテ</button>
+      </div>
+      <div id="fc-many-box" style="display:none">
+        <div class="fc-row">
+          <span class="fc-lbl">診療日</span>
+          <input type="date" id="fc-from" onchange="fcRefresh()" style="flex:1;min-width:130px">
+          <span style="color:var(--text3)">〜</span>
+          <input type="date" id="fc-to" onchange="fcRefresh()" style="flex:1;min-width:130px">
+        </div>
+        <div class="fc-row">
+          <span class="fc-lbl">農場</span>
+          <select id="fc-farm" onchange="fcRefresh()" style="flex:1;min-width:0"></select>
+        </div>
+        <div class="fc-row">
+          <span class="fc-lbl">牛番号</span>
+          <input type="text" id="fc-cow" placeholder="一部だけでも可（空欄なら全部）" oninput="halfInput(this,event);fcRefresh()" style="flex:1;min-width:0">
+        </div>
+      </div>
+      <div id="fc-target" class="fc-info"></div>
+    </div>
+
+    <div class="fc-sec">
+      <label>② 直したい品目を押す</label>
+      <div id="fc-inv" class="fc-inv"></div>
+      <div id="fc-picked" class="fc-pick" style="display:none"></div>
+    </div>
+
+    <div class="fc-sec">
+      <label>③ どう直すか</label>
+      <div class="fc-ops">
+        <button type="button" class="fc-tab" id="fc-op-replace" onclick="fcSetOp('replace')">量や品目を変える</button>
+        <button type="button" class="fc-tab" id="fc-op-delete"  onclick="fcSetOp('delete')">削除する</button>
+        <button type="button" class="fc-tab" id="fc-op-add"     onclick="fcSetOp('add')">追加する</button>
+      </div>
+      <div id="fc-form"></div>
+      <label class="fc-chk"><input type="checkbox" id="fc-amt" onchange="fcRefresh()"> 紙カルテ金額も、薬価が変わった分だけ直す</label>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" onclick="fcPreview()">内容を確認する</button>
+      <button class="btn btn-primary btn-sm" id="fc-apply" style="display:none" onclick="fcApply()">この内容で直す</button>
+      <button class="btn btn-ghost btn-sm" id="fc-undo" style="display:none;margin-left:auto" onclick="fcUndo()">↩ 直前の訂正を取り消す</button>
+    </div>
+    <div id="fc-result" style="margin-top:10px"></div>
+
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-ghost" style="margin-left:auto" onclick="closeFixContent()">閉じる</button>
     </div>
   </div>
 </div>
@@ -5380,6 +5478,352 @@ function bpApply() {
     `金額が違うものがあれば、カルテ画面で直してください。`);
 }
 
+// ==================== 診療内容をまとめて訂正 ====================
+// あとで見つかった入力ミスを、複数の診療日・複数のカルテまとめて直す。
+//   診療内容は「略称*量」を / でつないだ列（例: 生食*1000/ビオペア*10/往診）。
+//   量の変更・品目の入れ替え・削除・追加を、同じ仕組みで扱う。
+//   直す前に before→after を全件出し、直したあとは1回だけ取り消せる。
+let FC = { open:false, karteId:null, selIdx:null, scope:'many', op:'replace',
+           name:'', qtyFrom:'', newName:'', newQty:'', addSkip:true, rows:null };
+let _fcInv = [];
+
+function fcSplit(content){ return String(content==null?'':content).split('/').map(s=>s.trim()).filter(Boolean); }
+function fcTok(tok) {
+  const m = String(tok).match(/^(.+?)\*([\d.]+)$/);
+  return m ? { name:m[1].trim(), qty:m[2] } : { name:String(tok).trim(), qty:null };
+}
+function fcJoin(toks){ return toks.map(x=>(x.qty!=null && x.qty!=='') ? x.name+'*'+x.qty : x.name).join('/'); }
+// 薬価マスタで計算した金額。金額も一緒に直すときの「差」を出すために使う
+function fcPriceOf(content) {
+  let s = 0;
+  fcSplit(content).forEach(tok=>{
+    const x = fcTok(tok);
+    const m = MASTER.find(y=>y.name===x.name);
+    if(!m || !(m.price>0)) return;
+    s += m.price * (x.qty==null ? 1 : (parseFloat(x.qty)||0));
+  });
+  return s;
+}
+
+function openFixContent(karteId, selIdx) {
+  FC.karteId = karteId || null;
+  FC.selIdx = (selIdx && selIdx.length) ? [...selIdx] : null;
+  FC.op='replace'; FC.name=''; FC.qtyFrom=''; FC.newName=''; FC.newQty=''; FC.addSkip=true; FC.rows=null;
+  const farms = [...new Set(KARTES.map(k=>k.farm).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'ja'));
+  document.getElementById('fc-farm').innerHTML =
+    '<option value="">すべての農場</option>' + farms.map(f=>`<option value="${esc(f)}">${esc(f)}</option>`).join('');
+  document.getElementById('fc-cow').value = '';
+  document.getElementById('fc-amt').checked = false;
+  // 期間の初期値は、対象になりうる診療日の全体
+  const src = FC.karteId ? KARTES.filter(k=>k.id===FC.karteId) : KARTES;
+  const ds = src.reduce((a,k)=>a.concat(k.records.map(r=>r.date)), []).filter(Boolean).sort();
+  document.getElementById('fc-from').value = ds[0] || '';
+  document.getElementById('fc-to').value = ds[ds.length-1] || '';
+  document.getElementById('fc-result').innerHTML = '';
+  document.getElementById('fc-apply').style.display = 'none';
+  document.getElementById('fixContentModal').style.display = 'flex';
+  FC.open = true;
+  fcSetScope(FC.selIdx ? 'sel' : (FC.karteId ? 'karte' : 'many'));
+}
+function closeFixContent(){ FC.open=false; document.getElementById('fixContentModal').style.display='none'; }
+document.getElementById('fixContentModal').addEventListener('click', e=>{
+  if(e.target===document.getElementById('fixContentModal')) closeFixContent();
+});
+
+function fcSetScope(s) {
+  if(s==='sel' && !FC.selIdx) s = FC.karteId ? 'karte' : 'many';
+  if(s==='karte' && !FC.karteId) s = 'many';
+  FC.scope = s;
+  ['sel','karte','many'].forEach(x=>{
+    const b = document.getElementById('fc-sc-'+x); if(!b) return;
+    b.classList.toggle('on', x===s);
+    b.disabled = (x==='sel' && !FC.selIdx) || (x==='karte' && !FC.karteId);
+  });
+  const selBtn = document.getElementById('fc-sc-sel');
+  if(selBtn) selBtn.textContent = FC.selIdx ? `選択中の診療日（${FC.selIdx.length}件）` : '選択中の診療日';
+  document.getElementById('fc-many-box').style.display = (s==='many') ? '' : 'none';
+  fcRefresh();
+}
+function fcSetOp(op) {
+  FC.op = op;
+  ['replace','delete','add'].forEach(x=>{
+    const b = document.getElementById('fc-op-'+x); if(b) b.classList.toggle('on', x===op);
+  });
+  fcRefresh();
+}
+// プレビューの前提が変わったら、確認済みの内容は捨てる（確認せずに適用できないようにする）
+function fcSet(key, val) {
+  FC[key] = val; FC.rows = null;
+  document.getElementById('fc-apply').style.display = 'none';
+}
+function fcPickAt(i, qi) {
+  const v = _fcInv[i]; if(!v) return;
+  FC.name = v.name;
+  FC.qtyFrom = (qi < 0) ? '' : ((v.qtys[qi]||[''])[0]);
+  FC.newName = v.name;
+  if(FC.op!=='add') FC.newQty = '';
+  FC.rows = null;
+  fcRefresh();
+}
+
+// ① で決めた対象の診療記録
+function fcTargets() {
+  const out = [];
+  if(FC.scope==='sel' || FC.scope==='karte') {
+    const k = KARTES.find(x=>x.id===FC.karteId); if(!k) return out;
+    const idxs = (FC.scope==='sel' && FC.selIdx) ? FC.selIdx : k.records.map((r,i)=>i);
+    idxs.forEach(i=>{ if(k.records[i]) out.push({k, i, r:k.records[i]}); });
+  } else {
+    const gv = id => String((document.getElementById(id)||{}).value||'').trim();
+    const from = gv('fc-from'), to = gv('fc-to'), farm = gv('fc-farm'), cow = gv('fc-cow');
+    KARTES.forEach(k=>{
+      if(farm && k.farm!==farm) return;
+      if(cow && String(k.cow||'').indexOf(cow)<0 && dkNoOf(k)!==cow) return;
+      k.records.forEach((r,i)=>{
+        const d = r.date||'';
+        if(from && (!d || d < from)) return;
+        if(to && (!d || d > to)) return;
+        out.push({k, i, r});
+      });
+    });
+  }
+  out.sort((a,b)=> String(a.k.farm||'').localeCompare(String(b.k.farm||''),'ja')
+                || String(a.k.cow||'').localeCompare(String(b.k.cow||''),'ja')
+                || String(a.r.date||'').localeCompare(String(b.r.date||'')) );
+  return out;
+}
+// 対象に入っている品目と、その量ごとの件数
+function fcInventory(tg) {
+  const map = new Map();
+  tg.forEach(t=>{
+    fcSplit(t.r.content).forEach(tok=>{
+      const x = fcTok(tok);
+      if(!map.has(x.name)) map.set(x.name, new Map());
+      const q = (x.qty==null) ? '' : x.qty;
+      const m = map.get(x.name);
+      m.set(q, (m.get(q)||0)+1);
+    });
+  });
+  return [...map.entries()].map(([name,m])=>({
+    name,
+    qtys: [...m.entries()].sort((a,b)=>(parseFloat(a[0])||0)-(parseFloat(b[0])||0)),
+    total: [...m.values()].reduce((s,v)=>s+v,0)
+  })).sort((a,b)=> b.total-a.total || String(a.name).localeCompare(String(b.name),'ja'));
+}
+function fcRefresh() {
+  if(!FC.open) return;
+  const tg = fcTargets();
+  const heads = new Set(tg.map(t=>t.k.id));
+  document.getElementById('fc-target').textContent =
+    tg.length ? `対象: ${heads.size}頭 / 診療記録 ${tg.length}件` : '⚠ 対象になる診療記録がありません';
+
+  _fcInv = fcInventory(tg);
+  document.getElementById('fc-inv').innerHTML = !_fcInv.length
+    ? '<div class="fc-empty">対象の中に診療内容がありません</div>'
+    : _fcInv.map((v,i)=>{
+        const on = (FC.name===v.name);
+        return `<div class="fc-iv">
+          <span class="fc-iv-name" onclick="fcPickAt(${i},-1)" title="量を問わずこの品目を対象にする">${esc(v.name)}</span>
+          ${v.qtys.map(([q,c],qi)=>`<button type="button" class="fc-q ${on && FC.qtyFrom===q ? 'on' : ''}" onclick="fcPickAt(${i},${qi})">${q===''?'量なし':esc(q)}<span style="opacity:.55"> ×${c}</span></button>`).join('')}
+          <span style="margin-left:auto;font-size:11px;color:var(--text3)">計${v.total}</span>
+        </div>`;
+      }).join('');
+
+  const pk = document.getElementById('fc-picked');
+  if(FC.name) {
+    pk.style.display = '';
+    pk.innerHTML = `直す対象: <b>${esc(FC.name)}</b>`
+      + (FC.qtyFrom!=='' ? `　量 <b>${esc(FC.qtyFrom)}</b> のものだけ` : '　（量は問わない）')
+      + ` <button type="button" class="btn btn-ghost btn-xs" style="margin-left:6px" onclick="FC.name='';FC.qtyFrom='';fcRefresh()">解除</button>`;
+  } else pk.style.display = 'none';
+
+  fcRenderForm();
+  FC.rows = null;
+  document.getElementById('fc-apply').style.display = 'none';
+  fcShowUndo();
+}
+function fcRenderForm() {
+  const f = document.getElementById('fc-form');
+  const need = '<div class="fc-empty">上の②で、直したい品目を押してください</div>';
+  const tgt = FC.name
+    ? `<b>${esc(FC.name)}</b>` + (FC.qtyFrom!=='' ? `（量 ${esc(FC.qtyFrom)}）` : '（量は問わない）')
+    : '';
+  if(FC.op==='replace') {
+    f.innerHTML = !FC.name ? need : `
+      <div class="fc-row" style="font-size:13px">${tgt} を…</div>
+      <div class="fc-row">
+        <span class="fc-lbl">品目</span>
+        <input type="text" list="masterNamesList" placeholder="品目名" value="${esc(FC.newName)}" oninput="fcSet('newName',this.value)" style="flex:1;min-width:0">
+      </div>
+      <div class="fc-row">
+        <span class="fc-lbl">量</span>
+        <input type="text" inputmode="decimal" placeholder="変えないなら空欄" value="${esc(FC.newQty)}" oninput="halfInput(this,event);fcSet('newQty',this.value)" style="flex:1;min-width:0">
+        <span style="font-size:12px;color:var(--text3);flex-shrink:0">に変える</span>
+      </div>
+      <p class="input-hint" style="margin-top:6px">量だけ直すなら「量」に新しい数を入れてください（例: ビオペア 10 → <b>20</b>）。品目名を間違えていたときは「品目」を書き換えます。</p>`;
+  } else if(FC.op==='delete') {
+    f.innerHTML = !FC.name ? need : `
+      <div class="fc-row" style="font-size:13px">${tgt} を <b style="color:#c33">診療内容から削除</b>します</div>
+      <p class="input-hint" style="margin-top:6px">その品目が入っている診療記録だけが変わります。</p>`;
+  } else {
+    f.innerHTML = `
+      <div class="fc-row">
+        <span class="fc-lbl">品目</span>
+        <input type="text" list="masterNamesList" placeholder="追加する品目名" value="${esc(FC.newName)}" oninput="fcSet('newName',this.value)" style="flex:1;min-width:0">
+      </div>
+      <div class="fc-row">
+        <span class="fc-lbl">量</span>
+        <input type="text" inputmode="decimal" placeholder="量（いらなければ空欄）" value="${esc(FC.newQty)}" oninput="halfInput(this,event);fcSet('newQty',this.value)" style="flex:1;min-width:0">
+        <span style="font-size:12px;color:var(--text3);flex-shrink:0">を末尾に足す</span>
+      </div>
+      <label class="fc-chk"><input type="checkbox" ${FC.addSkip?'checked':''} onchange="fcSet('addSkip',this.checked)"> すでにその品目が入っている記録には足さない</label>
+      <p class="input-hint" style="margin-top:6px">①で選んだ<b>すべての診療記録</b>に足します。②で品目を押すと、その名前が入ります。</p>`;
+  }
+}
+
+function fcHit(t) {
+  if(t.name !== FC.name) return false;
+  if(FC.qtyFrom==='') return true;
+  if(t.qty==null) return false;
+  return parseFloat(t.qty) === parseFloat(FC.qtyFrom);
+}
+function fcNewContent(content) {
+  const toks = fcSplit(content).map(fcTok);
+  if(FC.op==='replace') {
+    let n = 0;
+    const out = toks.map(t=>{
+      if(!fcHit(t)) return t;
+      n++;
+      const nn = String(FC.newName||'').trim(), nq = String(FC.newQty==null?'':FC.newQty).trim();
+      return { name: nn || t.name, qty: (nq!=='') ? nq : t.qty };
+    });
+    return { content: fcJoin(out), n };
+  }
+  if(FC.op==='delete') {
+    const out = toks.filter(t=>!fcHit(t));
+    return { content: fcJoin(out), n: toks.length - out.length };
+  }
+  const nm = String(FC.newName||'').trim();
+  if(!nm) return { content: fcJoin(toks), n:0 };
+  if(FC.addSkip && toks.some(t=>t.name===nm)) return { content: fcJoin(toks), n:0 };
+  const q = String(FC.newQty==null?'':FC.newQty).trim();
+  return { content: fcJoin(toks.concat([{ name:nm, qty: q!=='' ? q : null }])), n:1 };
+}
+
+function fcPreview() {
+  const res = document.getElementById('fc-result');
+  const warn = m => { res.innerHTML = `<div class="fc-warn">${esc(m)}</div>`; document.getElementById('fc-apply').style.display='none'; FC.rows=null; };
+  const tg = fcTargets();
+  if(!tg.length) return warn('対象になる診療記録がありません。①を見直してください');
+  if(FC.op!=='add' && !FC.name) return warn('②で、直したい品目を押してください');
+  if(FC.op==='add' && !String(FC.newName||'').trim()) return warn('追加する品目名を入れてください');
+  if(FC.op==='replace') {
+    const nn = String(FC.newName||'').trim(), nq = String(FC.newQty==null?'':FC.newQty).trim();
+    if((!nn || nn===FC.name) && nq==='') return warn('変える内容（品目か量）を入れてください');
+  }
+  const useAmt = document.getElementById('fc-amt').checked;
+  const rows = [];
+  tg.forEach(t=>{
+    const before = String(t.r.content||'');
+    const out = fcNewContent(before);
+    if(!out.n || out.content===before) return;
+    let amtB=null, amtA=null;
+    if(useAmt && Number(t.r.amount)>0) {
+      const d = fcPriceOf(out.content) - fcPriceOf(before);
+      if(d) { amtB = Number(t.r.amount); amtA = floorAmt(amtB + d); }
+    }
+    rows.push({ karteId:t.k.id, i:t.i, farm:t.k.farm, cow:t.k.cow, date:t.r.date,
+                before, after:out.content, amtB, amtA });
+  });
+  FC.rows = rows;
+  if(!rows.length) return warn('変わるものがありませんでした。対象や条件を見直してください');
+  const heads = new Set(rows.map(r=>r.karteId));
+  const amtRows = rows.filter(r=>r.amtA!=null);
+  const amtDelta = amtRows.reduce((s,r)=>s+(r.amtA-r.amtB), 0);
+  res.innerHTML =
+    `<div class="fc-info">変わるもの: ${heads.size}頭 / 診療記録 ${rows.length}件`
+      + (amtRows.length ? `　／　紙カルテ金額 ${amtRows.length}件（合計 ${amtDelta>=0?'+':'−'}¥${Math.abs(amtDelta).toLocaleString()}）` : '')
+      + '</div>'
+    + (useAmt ? '' : '<div class="fc-note">診療内容だけを直します（紙カルテ金額はそのまま）。金額も直すなら上のチェックを入れて、もう一度確認してください。</div>')
+    + '<div class="fc-prev">' + rows.map(r=>`<div class="fc-pv">
+        <div class="fc-pv-hd">${esc(r.farm||'')} / ${esc(r.cow||'')}　${esc(r.date||'（日付なし）')}${
+          r.amtA!=null ? `<span style="color:#1a4b8a">　金額 ¥${r.amtB.toLocaleString()} → ¥${r.amtA.toLocaleString()}</span>` : ''}</div>
+        <div class="fc-pv-b">${esc(r.before)||'（空）'}</div>
+        <div class="fc-pv-a">→ ${esc(r.after)||'（空）'}</div>
+      </div>`).join('') + '</div>';
+  document.getElementById('fc-apply').style.display = '';
+}
+
+function fcOpLabel() {
+  const q = FC.qtyFrom!=='' ? '*'+FC.qtyFrom : '';
+  const nq = String(FC.newQty==null?'':FC.newQty).trim();
+  if(FC.op==='delete') return `${FC.name}${q} を削除`;
+  if(FC.op==='add') return `${String(FC.newName||'').trim()}${nq?'*'+nq:''} を追加`;
+  return `${FC.name}${q} → ${String(FC.newName||'').trim()||FC.name}${nq?'*'+nq:''}`;
+}
+function fcApply() {
+  if(!FC.rows || !FC.rows.length) return toast('先に「内容を確認する」を押してください','error');
+  const rows = FC.rows, label = fcOpLabel();
+  const heads = new Set(rows.map(r=>r.karteId));
+  if(!confirm(`${heads.size}頭 / ${rows.length}件の診療内容を直します。\n【${label}】\n\n`
+    + `直したあとは「↩ 直前の訂正を取り消す」で元に戻せます。\n`
+    + `念のため 💾 JSONバックアップを取っておくと安心です。\n\nよろしいですか？`)) return;
+  const undo = { at:Date.now(), label, rows:[] };
+  let done = 0;
+  rows.forEach(r=>{
+    const k = KARTES.find(x=>x.id===r.karteId); if(!k) return;
+    const rec = k.records[r.i]; if(!rec) return;
+    if(String(rec.content||'') !== r.before) return;   // 確認後に中身が変わっていたら触らない
+    undo.rows.push({ karteId:r.karteId, i:r.i, content:rec.content, amount:rec.amount });
+    rec.content = r.after;
+    if(r.amtA!=null) rec.amount = r.amtA;
+    done++;
+  });
+  if(!done) return toast('直す対象が見つかりませんでした','error');
+  heads.forEach(id=>{ const k = KARTES.find(x=>x.id===id); if(k) recalcPaperTotal(k); });
+  fcSaveUndo(undo);
+  saveToStorage();
+  renderKarteList();
+  logSave('karte', `診療内容をまとめて訂正（${done}件・${label}）`);
+  fcRefresh();
+  showReport('✅ 診療内容を直しました',
+    `直した診療記録: ${done}件（${heads.size}頭）\n内容: ${label}\n\n`
+    + `間違っていたら、この画面の「↩ 直前の訂正を取り消す」で元に戻せます。`);
+}
+
+function fcSaveUndo(u){ try { localStorage.setItem('cm_fcundo', JSON.stringify(u)); } catch(e){} }
+function fcLoadUndo(){ try { const s = localStorage.getItem('cm_fcundo'); return s ? JSON.parse(s) : null; } catch(e){ return null; } }
+function fcShowUndo() {
+  const b = document.getElementById('fc-undo'); if(!b) return;
+  const u = fcLoadUndo();
+  if(!u || !u.rows || !u.rows.length) { b.style.display='none'; return; }
+  const d = new Date(u.at);
+  b.style.display = '';
+  b.textContent = `↩ 直前の訂正を取り消す（${d.getMonth()+1}/${d.getDate()} `
+    + `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}・${u.rows.length}件）`;
+  b.title = u.label || '';
+}
+function fcUndo() {
+  const u = fcLoadUndo();
+  if(!u || !u.rows || !u.rows.length) return toast('取り消せる訂正がありません','error');
+  if(!confirm(`${u.rows.length}件を訂正前の内容に戻します。\n【${u.label||''}】\n\nよろしいですか？`)) return;
+  let done = 0; const heads = new Set();
+  u.rows.forEach(r=>{
+    const k = KARTES.find(x=>x.id===r.karteId); if(!k) return;
+    const rec = k.records[r.i]; if(!rec) return;
+    rec.content = r.content;
+    if(r.amount!=null) rec.amount = r.amount;
+    heads.add(k.id); done++;
+  });
+  heads.forEach(id=>{ const k = KARTES.find(x=>x.id===id); if(k) recalcPaperTotal(k); });
+  try { localStorage.removeItem('cm_fcundo'); } catch(e){}
+  saveToStorage();
+  renderKarteList();
+  logSave('karte', `診療内容の訂正を取り消し（${done}件）`);
+  fcRefresh();
+  toast(`${done}件を訂正前に戻しました`, 'success');
+}
+
 // ===== d-karte のカルテ番号（牛番号とは別の番号） =====
 // 電子カルテ側の番号は牛番号と違うため、毎回頭で変換していた。
 // カルテごとに覚えておけば、その手間がなくなる
@@ -5529,6 +5973,7 @@ function rselPaint() {
     ${n>1 ? `<label class="rsel-fill" onclick="event.stopPropagation()"><input type="checkbox" ${RSEL.fill?'checked':''} onchange="rselSetFill(this.checked)">
         どれかに入力すると${n}件すべてに反映（診療内容・症状・体温・時間）</label>` : ''}
     <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();rselEdit()">✏️ まとめて編集</button>
+    <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();rselFixContent()">🔧 診療内容を訂正</button>
     <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();rselToggleAll('${id}')">すべて選択</button>
     <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="event.stopPropagation();rselClear()">選択を解除</button>`;
 }
@@ -5611,6 +6056,11 @@ function rselEdit() {
   // 選択を引き継いで、いきなり入力の画面にする
   document.querySelectorAll('#bedit-list .bedit-chk').forEach(c=>{ c.checked = sel.has(parseInt(c.dataset.i)); });
   beditGoStep(2);
+}
+// 選んだ診療日の診療内容を、品目ごとにまとめて訂正する
+function rselFixContent() {
+  const id = RSEL.karteId; if(!id || !RSEL.set.size) return;
+  openFixContent(id, [...RSEL.set]);
 }
 // 開いているカルテで Ctrl+E（Macは⌘E）→ 選択中、無ければ全日でまとめて編集
 document.addEventListener('keydown', e => {
@@ -6304,6 +6754,7 @@ function buildKarteCard(k, isDetail) {
         <button class="rec-add-btn" style="margin-top:0;flex:1;min-width:130px" onclick="event.stopPropagation();addKarteRecord('${k.id}')">＋ 診療日を追加</button>
         <button class="rec-add-btn" style="margin-top:0;flex:1;min-width:130px" onclick="event.stopPropagation();openBulkAdd('${k.id}')">📅 複数日まとめて追加</button>
         <button class="rec-add-btn" style="margin-top:0;flex:1;min-width:130px" onclick="event.stopPropagation();openBulkEdit('${k.id}')" title="左端のつまみをドラッグしても選べます（Ctrl+Eで全日）">✏️ 複数日まとめて編集</button>
+        <button class="rec-add-btn" style="margin-top:0;flex:1;min-width:130px" onclick="event.stopPropagation();openFixContent('${k.id}')" title="薬の量の変更・品目の入れ替え・削除・追加">🔧 診療内容を訂正</button>
       </div>
     </div>
     <div class="karte-totals">
